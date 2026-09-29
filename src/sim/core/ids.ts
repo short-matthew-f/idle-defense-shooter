@@ -59,7 +59,11 @@ export type AnomalyId =
   | 'loaded_dice' | 'seventh_shot' | 'mirror_node' | 'pinball' | 'stormglass'
   | 'clockwork_blade' | 'ghost_protocol' | 'rogue_moon'
   | 'cold_iron' | 'heavy_water' | 'overcharged_capacitor' | 'second_opinion'
-  | 'glass_cannon' | 'unstable_isotope' | 'tithe' | 'hungry_core';
+  | 'glass_cannon' | 'unstable_isotope' | 'tithe' | 'hungry_core'
+  // Echo pool (Ascension I) — WP-DATA additions, not individually named in the design
+  | 'afterimage_round' | 'echo_chamber' | 'feedback_loop'
+  // Rot pool (Trial: Pacifist Core) — WP-DATA additions, not individually named in the design
+  | 'rot_bloom' | 'smolder' | 'martyr_plating';
 
 export type EnemyKind =
   // Outskirts
@@ -91,7 +95,10 @@ export type FormationId =
   | 'twin_columns' | 'expanding_flower' | 'comet_tail' | 'concentric_assault' | 'synchronized_burst'
   | 'serpentine' | 'escort' | 'scattered_rain' | 'pincer' | 'artillery_ring' | 'moving_wall'
   | 'delayed_ambush' | 'annular_rush' | 'brute_column' | 'packed_wedge' | 'flank_pair'
-  | 'kamikaze_ring' | 'cluster_drop' | 'staggered_lanes';
+  | 'kamikaze_ring' | 'cluster_drop' | 'staggered_lanes'
+  // Ascension III spatial templates (WP4)
+  | 'double_helix' | 'figure_eight' | 'orbit_lattice' | 'polygon_siege' | 'gate_weave' | 'tidal_ring'
+  | 'spiral_arms' | 'hex_grid' | 'safe_corridor' | 'barrier_maze' | 'mirror_lanes' | 'hazard_bloom';
 
 export type EliteModifier =
   | 'hardened' | 'swift' | 'regenerating' | 'shielded_elite' | 'volatile' | 'phasing'
