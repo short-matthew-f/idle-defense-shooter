@@ -1,0 +1,28 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`generateWave determinism > has a golden summary so cross-engine drift is caught 1`] = `
+{
+  "desc": "Wave 17 · The Outskirts · Radial Ring · 57 enemies, 2 elites",
+  "first": {
+    "angle": 0.2969226542832276,
+    "elite": [],
+    "formationSlot": 0,
+    "hpScale": 1,
+    "kind": "grunt",
+    "lane": 0,
+    "radiusOffset": 0,
+    "tick": 0,
+  },
+  "last": {
+    "angle": 6.056509185864515,
+    "elite": [],
+    "formationSlot": 11,
+    "hpScale": 1,
+    "kind": "swarm",
+    "lane": 11,
+    "radiusOffset": 0,
+    "tick": 1032,
+  },
+  "n": 57,
+}
+`;
