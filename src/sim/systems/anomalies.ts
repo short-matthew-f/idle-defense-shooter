@@ -77,7 +77,7 @@ function sourceFor(src: string): HitInfo['source'] {
 export class AnomaliesSystem implements System {
   readonly id = 'anomalies';
   private lastGen = 0; private cloneGen = 0; private lastEvent = 0;
-  private primaryShots = 0; private missiles = 0; private droneShots = 0; private echoCount = 0;
+  private primaryShots = 0; private missiles = 0; private droneShots = 0;
   // cached per rebuild
   private seventh = 0; private dup = 0; private afterimage = false; private pinball = false; private doubleLaunch = false;
   private relayFire = false; private echoEngine = false; private stormglass = false; private ghost = false; private conscription = false;
@@ -110,7 +110,7 @@ export class AnomaliesSystem implements System {
     this.lastEvent = w.events.nextId;
     this.qHead = this.qTail = this.xHead = this.xTail = 0;
     this.allies = this.clouds = this.fbCount = 0;
-    this.primaryShots = this.missiles = this.droneShots = this.echoCount = 0;
+    this.primaryShots = this.missiles = this.droneShots = 0;
     this.throttle.clear();
     w.signals.bladeDir = 1; w.signals.ghostEdges = 0;
   }
@@ -295,9 +295,15 @@ export class AnomaliesSystem implements System {
   private scanEvents(w: WorldImpl): void {
     const end = w.events.nextId;
     if (!(this.isotope || this.echoChamber || this.feedback || w.stats.hasAnomaly('tithe'))) { this.lastEvent = end; return; }
-    w.events.forEachSince(this.lastEvent, (e: SimEvent) => {
-      if (e.id >= end) return;
-      if (e.type === Ev.Explosion) {
+    this.scanW = w;
+    w.events.forEachRange(this.lastEvent, end, this.onScanEvent);
+    this.lastEvent = end;
+  }
+  /** scanEvents' visitor, allocated once (per-tick closures were GC churn); reads the world from scanW. */
+  private scanW: WorldImpl | null = null;
+  private readonly onScanEvent = (e: SimEvent): void => {
+    const w = this.scanW!;
+    if (e.type === Ev.Explosion) {
         if (this.isotope && e.src !== 'anomaly.unstable_isotope' && w.prng.chance(w.stats.get('anomaly.unstable_isotope.self_chance'))) {
           const ev = this.fire(w, 'anomaly.unstable_isotope', e.id, e.x, e.y);
           // capped per detonation: with Flashpoint-scale explosion volume the uncapped 10% was self-destruction
@@ -313,9 +319,7 @@ export class AnomaliesSystem implements System {
       } else if (e.type === Ev.CoreDrop && e.src === 'boss' && e.a >= 2 && w.stats.hasAnomaly('tithe')) {
         this.fire(w, 'anomaly.tithe', e.id, e.x, e.y);
       }
-    });
-    this.lastEvent = end;
-  }
+  };
 
   private queueExplosion(w: WorldImpl, e: SimEvent): void {
     const next = (this.xTail + 1) % XQ;

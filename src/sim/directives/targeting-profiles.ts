@@ -16,7 +16,7 @@
  * Pickers here are allocation-free and deterministic (ascending pool index, lower index wins ties).
  */
 import type { World } from '../core/world';
-import type { TargetingProfile, WeaponSystemId } from '../core/ids';
+import type { TargetingProfile } from '../core/ids';
 import { EnemyFlag, NO_ENTITY } from '../core/types';
 import { targetable } from '../core/spatial';
 
@@ -24,9 +24,6 @@ export const TARGETING_PROFILES: readonly TargetingProfile[] = [
   'nearest', 'closest_to_tower', 'lowest_hp', 'highest_hp', 'elites', 'support', 'fastest', 'designated',
 ];
 export function isTargetingProfile(p: unknown): p is TargetingProfile { return TARGETING_PROFILES.includes(p as TargetingProfile); }
-
-/** Active profile for a system (default 'nearest'). */
-export function profileFor(w: World, system: WeaponSystemId): TargetingProfile { return w.build.targeting[system] ?? 'nearest'; }
 
 /** Live, targetable, hostile (not an Ally) enemy? */
 export function hostile(w: World, i: number): boolean {

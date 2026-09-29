@@ -1,10 +1,19 @@
 /**
  * Save / load. Live combat is never saved: a run resumes at the start of its checkpoint
  * (wave = checkpoint + 1, phase 'between'). Per-wave tables are stored as 0/1 arrays.
+ *
+ * Versioning: `migrate` upgrades a save one version at a time through MIGRATIONS (append a step for
+ * every SAVE_VERSION bump; tests/core/save.test.ts shows the pattern with a synthetic v2), then fills
+ * defaults and sanitizes fields a corrupted or hand-edited save could break the sim with (unknown
+ * Trial / frame / anomalies, non-finite numbers, a degenerate PRNG state). Valid saves pass unchanged.
  */
 import type { SaveState, RunSave, RunState, BuildState, MetaState } from '../core/types';
+import type { AnomalyId } from '../core/ids';
 import { SAVE_VERSION } from '../core/types';
-import { newMeta, newRun, WAVE_TABLE_SIZE } from '../run/state';
+import { newBuild, newMeta, newRun, WAVE_TABLE_SIZE } from '../run/state';
+import { anomalyDef } from '../core/content';
+import { FRAMES, TRIALS } from '../data/index';
+import { Prng } from '../math/prng';
 
 /** Minimal surface of the Sim the serializer needs (avoids an import cycle). */
 export interface Serializable { world: { run: RunState; build: BuildState; meta: MetaState; prng: { state(): [number, number, number, number] } } }
@@ -39,7 +48,8 @@ export function toRunSave(run: RunState, build: BuildState, prngState: [number, 
     hardpointSlotsOpen: run.hardpointSlotsOpen, attunementSlotsOpen: run.attunementSlotsOpen,
     patrolScrapPerSecond: run.patrolScrapPerSecond, longestChain: run.longestChain,
     build: clone(build), prngState: [...prngState] as [number, number, number, number], spentByTree: { ...run.spentByTree },
-  } as RunSave, runExtras(run));   // WP8: progression extras
+  } as RunSave, runExtras(run),   // WP8: progression extras
+  run.pendingDraft && run.pendingDraft.length ? { pendingDraft: [...run.pendingDraft] } : {});
 }
 
 export function toSave(sim: Serializable): SaveState {
@@ -61,6 +71,7 @@ export function fromRunSave(s: RunSave): { run: RunState; build: BuildState; prn
   run.patrolScrapPerSecond = s.patrolScrapPerSecond; run.longestChain = s.longestChain;
   run.spentByTree = { ...(s.spentByTree ?? {}) };
   Object.assign(run, runExtras(s));   // WP8: progression extras
+  if (Array.isArray(s.pendingDraft) && s.pendingDraft.length) run.pendingDraft = [...s.pendingDraft];
   return { run, build: clone(s.build), prngState: [...s.prngState] as [number, number, number, number] };
 }
 
@@ -70,14 +81,86 @@ export function fromSave(save: SaveState): { meta: MetaState; run: RunState; bui
   return { meta: clone(m.meta), ...r };
 }
 
-/** Bring any older save up to SAVE_VERSION (v1: identity plus defaults for optional fields). */
-export function migrate(save: SaveState): SaveState {
-  const s = clone(save);
-  if (!s.version || s.version < 1) s.version = 1;
+/** One migration step: upgrades a save of version `v` (the table key) to `v + 1`. */
+export type Migration = (save: SaveState) => SaveState;
+/**
+ * MIGRATIONS[v] upgrades a v-save to v+1. Empty while SAVE_VERSION is 1. When bumping SAVE_VERSION to
+ * N, add `MIGRATIONS[N - 1]` (pure: take the old shape, return the new one) and a test next to the
+ * synthetic-v2 test in tests/core/save.test.ts.
+ */
+export const MIGRATIONS: Readonly<Record<number, Migration>> = {};
+
+/**
+ * Bring any older save up to `target` (default SAVE_VERSION), then fill defaults and sanitize.
+ * Throws a readable Error for input that is not a save at all, or when a migration step is missing.
+ */
+export function migrate(save: SaveState, target: number = SAVE_VERSION, table: Readonly<Record<number, Migration>> = MIGRATIONS): SaveState {
+  if (!isObj(save) || !isObj(save.run) || !isObj(save.meta)) throw new Error('Not a Citadel save (missing run or meta)');
+  let s: SaveState = clone(save as SaveState);
+  if (typeof s.version !== 'number' || !(s.version >= 1)) s.version = 1;
+  s.version = Math.floor(s.version);
+  while (s.version < target) {
+    const step = table[s.version];
+    if (!step) throw new Error(`No save migration from version ${s.version} to ${s.version + 1}`);
+    const from = s.version;
+    s = step(s);
+    s.version = from + 1;
+  }
   s.meta = { ...newMeta(), ...s.meta };
   s.run.spentByTree = s.run.spentByTree ?? {};
   s.trial = s.trial ?? null;
+  sanitize(s);
   return s;
+}
+
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const finiteOr = (v: unknown, d: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+const TRIAL_IDS = new Set<string>(TRIALS.map((t) => t.id));
+const FRAME_IDS = new Set<string>(FRAMES.map((f) => f.id));
+
+/** Repair fields that would make the sim throw or go NaN; valid values are left untouched. */
+function sanitize(s: SaveState): void {
+  const m = s.meta;
+  if (m.activeTrial != null && !TRIAL_IDS.has(m.activeTrial)) { m.activeTrial = null; delete m.parkedRun; }
+  if (!isObj(m.prestigeRanks)) m.prestigeRanks = {};
+  if (!isObj(m.constellation)) m.constellation = {};
+  if (!Array.isArray(m.directives)) m.directives = [];
+  if (!Array.isArray(m.upgradeQueue)) m.upgradeQueue = [];
+  if (!Array.isArray(m.blueprints)) m.blueprints = [];
+  m.echoes = Math.max(0, finiteOr(m.echoes, 0)); m.stars = Math.max(0, finiteOr(m.stars, 0));
+  sanitizeRun(s.run);
+  if (m.parkedRun) { if (isObj(m.parkedRun) && isObj(m.parkedRun.build)) sanitizeRun(m.parkedRun); else delete m.parkedRun; }
+}
+
+function sanitizeRun(r: RunSave): void {
+  r.prestigeSeed = finiteOr(r.prestigeSeed, 1) >>> 0;
+  r.checkpoint = Math.max(0, Math.floor(finiteOr(r.checkpoint, 0) / 5) * 5);
+  r.deepestCleared = Math.max(0, Math.floor(finiteOr(r.deepestCleared, 0)));
+  r.scrap = Math.max(0, finiteOr(r.scrap, 0)); r.cores = Math.max(0, Math.floor(finiteOr(r.cores, 0)));
+  r.threatDial = Math.max(0, Math.floor(finiteOr(r.threatDial, 0)));
+  r.playSeconds = Math.max(0, finiteOr(r.playSeconds, 0));
+  if (r.mode !== 'push' && r.mode !== 'patrol') r.mode = 'push';
+  for (const k of ['firstClears', 'coresDroppedByBoss', 'anomaliesOfferedAt', 'attemptsPerCheckpoint'] as const) if (!Array.isArray(r[k])) r[k] = [];
+  if (!Array.isArray(r.echoRateHistory)) r.echoRateHistory = [];
+  const p = r.prngState;
+  if (!Array.isArray(p) || p.length !== 4 || !p.every((v) => typeof v === 'number' && Number.isFinite(v)) || p.every((v) => (v >>> 0) === 0)) {
+    r.prngState = new Prng(r.prestigeSeed ^ 0x5eed).state();   // an all-zero xoshiro state never leaves zero
+  }
+  if (!isObj(r.build)) r.build = newBuild('standard');
+  const b = r.build, fresh = newBuild(b.frame);
+  if (!FRAME_IDS.has(b.frame)) b.frame = 'standard';
+  if (!isObj(b.ranks)) b.ranks = {};
+  for (const id of Object.keys(b.ranks)) {
+    const v = b.ranks[id];
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) delete b.ranks[id];
+    else if (!Number.isInteger(v)) b.ranks[id] = Math.floor(v);
+  }
+  for (const k of ['hardpoints', 'attunements', 'abilities'] as const) if (!Array.isArray(b[k])) (b as unknown as Record<string, unknown>)[k] = fresh[k];
+  if (!Array.isArray(b.anomalies)) b.anomalies = [];
+  b.anomalies = b.anomalies.filter((a) => typeof a === 'string' && !!anomalyDef(a));
+  if (Array.isArray(r.pendingDraft)) r.pendingDraft = r.pendingDraft.filter((a): a is AnomalyId => typeof a === 'string' && !!anomalyDef(a));
+  for (const k of ['doctrines', 'secondDoctrines', 'targeting'] as const) if (!isObj(b[k])) b[k] = {};
+  b.anomalySockets = Math.max(0, Math.floor(finiteOr(b.anomalySockets, 3)));
 }
 
 function toBase64(str: string): string {

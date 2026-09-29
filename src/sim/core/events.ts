@@ -105,6 +105,15 @@ export class EventLogImpl implements IEventLog {
     return out;
   }
 
+  /**
+   * Visit events with id in [fromId, toId) still buffered, without copying. Events the callback
+   * emits (ids >= toId) are not visited. Pass a long-lived callback (not a per-call closure) from
+   * per-tick code.
+   */
+  forEachRange(fromId: number, toId: number, fn: (e: SimEvent) => void): void {
+    for (let id = Math.max(fromId, this.nextId - this.capacity, 0); id < toId; id++) fn(this.slots[id % this.capacity]);
+  }
+
   /** Visit events with id in [fromId, nextId) without copying. */
   forEachSince(fromId: number, fn: (e: SimEvent) => void): void {
     for (let id = Math.max(fromId, this.nextId - this.capacity, 0); id < this.nextId; id++) fn(this.slots[id % this.capacity]);

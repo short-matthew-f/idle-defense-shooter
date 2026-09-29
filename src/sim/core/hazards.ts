@@ -7,6 +7,7 @@
 import type { WorldImpl } from './world-impl';
 import type { Hazard } from './types';
 import { EnemyFlag, TICK_DT, TOWER_RADIUS } from './types';
+import { segDist2 } from '../math/geom';
 
 const INTANGIBLE = EnemyFlag.Phased | EnemyFlag.Burrowed;
 
@@ -14,14 +15,8 @@ const PULSE_TICKS = 15;
 const PULSE_DT = PULSE_TICKS * TICK_DT;
 const SCRATCH = new Int32Array(1024);
 
-function segDist2(px: number, py: number, h: Hazard): number {
-  const ax = h.x, ay = h.y, bx = h.x2 ?? h.x, by = h.y2 ?? h.y;
-  const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
-  let t = L2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / L2 : 0;
-  if (t < 0) t = 0; else if (t > 1) t = 1;
-  const qx = px - (ax + dx * t), qy = py - (ay + dy * t);
-  return qx * qx + qy * qy;
-}
+/** Squared distance from P to the hazard's capsule axis (a point when x2/y2 are unset). */
+function hazardDist2(px: number, py: number, h: Hazard): number { return segDist2(px, py, h.x, h.y, h.x2 ?? h.x, h.y2 ?? h.y); }
 
 export function updateHazards(w: WorldImpl): void {
   const hz = w.hazards;
@@ -36,7 +31,7 @@ export function updateHazards(w: WorldImpl): void {
       const amt = h.dps * PULSE_DT;
       if (h.owner === 'enemy') {
         const rr = h.radius + TOWER_RADIUS;
-        if (segDist2(0, 0, h) <= rr * rr) w.damageTower(amt, -1, h.cause);
+        if (hazardDist2(0, 0, h) <= rr * rr) w.damageTower(amt, -1, h.cause);
       } else {
         const line = h.x2 !== undefined && h.y2 !== undefined;
         const cx = line ? (h.x + h.x2!) * 0.5 : h.x, cy = line ? (h.y + h.y2!) * 0.5 : h.y;
@@ -48,7 +43,7 @@ export function updateHazards(w: WorldImpl): void {
           const en = SCRATCH[j];
           if (!w.alive(en)) continue;
           if (e.flags[en] & INTANGIBLE) continue;   // Phased / Burrowed enemies are intangible
-          if (line) { const rr = h.radius + e.radius[en]; if (segDist2(e.x[en], e.y[en], h) > rr * rr) continue; }
+          if (line) { const rr = h.radius + e.radius[en]; if (hazardDist2(e.x[en], e.y[en], h) > rr * rr) continue; }
           w.damage(en, amt, { source: 'hazard', srcTag: tag, element: h.element ?? null, cause: h.cause });
         }
       }

@@ -30,7 +30,7 @@
  *     graft_primary, graft_secondary
  */
 import type { AbilityId, BossId } from '../core/ids';
-import { Shape, TICK_RATE } from '../core/types';
+import { Shape } from '../core/types';
 import { PI } from '../math/lut';
 import type { BossDef } from './schema';
 
@@ -359,5 +359,3 @@ export function graftSources(w: number): [BossId, BossId] {
   return [BOSSES[a].id, BOSSES[b].id];
 }
 
-/** Seconds → ticks helper for boss scripts. */
-export const bossTicks = (s: number): number => Math.round(s * TICK_RATE);

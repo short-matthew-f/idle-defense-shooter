@@ -18,6 +18,7 @@ import { Prng } from '../math/prng';
 import { atan2 } from '../math/lut';
 import { createEnemyPool, createProjectilePool, allocEnemy, allocProjectile, freeEnemy, freeProjectile as poolFreeProjectile, compactEnemies, compactProjectiles } from './pools';
 import { SpatialHash } from './spatial';
+import { ScratchStack } from './scratch';
 import { EventLogImpl, StateBit, STATUS_INDEX } from './events';
 import { StatResolver } from './stats';
 import { selectTarget } from './targeting';
@@ -56,8 +57,8 @@ export class WorldImpl implements World {
   private hookHit: System[] = []; private hookKill: System[] = []; private hookStatus: System[] = []; private hookTower: System[] = [];
   private hookDepth = 0;
   private hitStack: HitInfo[] = [];
-  private queryStack: Int32Array[] = [];
-  private queryDepth = 0;
+  /** Explosion query buffers (nested explosions re-enter through hooks). */
+  private explodeScratch = new ScratchStack(1024);
   private enemyGen = 1;
   private projGen = 1;
   private pendingEnemyFrees = 0;
@@ -238,7 +239,6 @@ export class WorldImpl implements World {
     e.hp[enemy] -= toHp;
     h.damage = dmg;
     e.lastHitTick[enemy] = this.run.tick;
-    e.lastCause[enemy] = opts.cause;
     if (!opts.silent) h.eventId = this.emitC(Ev.Hit, opts.srcTag, enemy, dmg, this.stateBits(enemy), h.x, h.y, opts.cause);
     // Damage share counts effective damage (HP and shield actually removed), not overkill: an 8,000-damage
     // blast on a 50-HP enemy contributed 50. Hit events still carry the full dealt damage.
@@ -502,6 +502,9 @@ export class WorldImpl implements World {
     return i;
   }
 
+  /** Generation serial of the most recent spawn (0 before any): gens only grow, so `gen > mark` = spawned since. */
+  lastSpawnGen(): number { return this.enemyGen - 1; }
+
   despawnEnemy(enemy: number): void {
     if (!this.alive(enemy)) return;
     freeEnemy(this.enemies, enemy);
@@ -510,9 +513,7 @@ export class WorldImpl implements World {
 
   explode(x: number, y: number, radius: number, damage: number, opts: { source: HitInfo['source']; srcTag: string; element?: ElementId | null; cause: number; falloff?: boolean; maxHpCap?: number }): void {
     const id = this.emit(Ev.Explosion, opts.srcTag, radius, damage, x, y, opts.cause);
-    const d = this.queryDepth++;
-    while (this.queryStack.length <= d) this.queryStack.push(new Int32Array(1024));
-    const buf = this.queryStack[d];
+    const buf = this.explodeScratch.push();
     const n = this.spatial.queryRadius(x, y, radius, buf);
     const e = this.enemies, falloff = opts.falloff !== false;
     for (let k = 0; k < n; k++) {
@@ -524,7 +525,7 @@ export class WorldImpl implements World {
       if (opts.maxHpCap !== undefined) { const c = opts.maxHpCap * e.maxHp[i]; if (amt > c) amt = c; }   // per-target cap (Flashpoint)
       this.damage(i, amt, { source: opts.source, srcTag: opts.srcTag, element: opts.element ?? null, cause: id, x, y });
     }
-    this.queryDepth--;
+    this.explodeScratch.pop();
   }
 
   addHazard(h: Hazard): void {
@@ -573,6 +574,16 @@ export class WorldImpl implements World {
     t.hp = Math.min(t.maxHp, t.hp + amount);
     if (before + amount > t.maxHp) this.healOverflow += before + amount - t.maxHp;   // WP2: Fortress Keep
     if (t.hp > before) this.emit(Ev.Heal, 'bastion', 0, t.hp - before, 0, 0, cause);
+  }
+  healEnemy(enemy: number, amount: number, srcTag: string, cause: number, silent = false): number {
+    const e = this.enemies;
+    if (!this.alive(enemy) || !(amount > 0)) return 0;
+    const room = e.maxHp[enemy] - e.hp[enemy];
+    const amt = amount < room ? amount : room;
+    if (amt <= 0) return 0;
+    e.hp[enemy] += amt;
+    if (!silent) this.emit(Ev.Heal, srcTag, enemy, amt, e.x[enemy], e.y[enemy], cause);
+    return amt;
   }
   gainCE(amount: number): void {
     const t = this.tower;

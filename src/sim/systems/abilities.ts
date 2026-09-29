@@ -64,8 +64,8 @@ const MISSILE_DAMAGE_MUL = 3, MISSILE_BLAST = 26, MISSILE_SPEED = 360, MISSILE_L
 const MAX_ZONES = 8;
 const FX_RING = 16;
 
-/** Is the named Trial running? `world.trial` is added by WP8; absent ⇒ false. */
-export function trialActive(w: World, id: string): boolean { return (w as unknown as { trial?: unknown }).trial === id; }
+/** Is the named Trial running (world.trial)? */
+export function trialActive(w: World, id: string): boolean { return w.trial === id; }
 
 /** Tactical slots available: 2; +1 with prestige.third_tactical_slot; +1 with the Command capstone. */
 export function abilitySlotCount(w: World): number {
@@ -110,7 +110,7 @@ export class AbilitiesSystem implements System {
   private cdMul = 1; private ceRegen = 0; private relayTicks = 0;
   private odTicks = 0; private odFactor = 1;
   private markIdx = NO_ENTITY; private markGen = 0;
-  private surgeTicks = 0; private surgeTag = 0; private missileTag = 0;
+  private surgeTicks = 0; private surgeTag = 0;
   /** Boss phase bookkeeping (gen → last seen bossPhase) for the +15 CE per phase change. */
   private bossGen = new Uint32Array(4); private bossSeen = new Uint8Array(4); private bossN = 0;
   private nextGen = new Uint32Array(4); private nextSeen = new Uint8Array(4);
@@ -122,7 +122,6 @@ export class AbilitiesSystem implements System {
   init(w: World): void {
     this.rebuild(w);
     this.surgeTag = w.tagId('ability.drone_surge');
-    this.missileTag = w.tagId('ability.missile_storm');
     this.reset(w);
   }
   rebuild(w: World): void {

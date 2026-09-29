@@ -11,7 +11,7 @@
  *  - linkages / infusions / fusions: 3 ranks, stat-style pricing
  */
 import type {
-  AbilityId, AnomalyId, AnomalyRarity, BossId, DoctrineId, ElementId, EliteModifier, EnemyKind,
+  AbilityId, AnomalyId, AnomalyRarity, BossId, DoctrineId, ElementId, EnemyKind,
   FormationId, FrameId, FusionId, HardpointId, NodeId, SectorId, TreeId, TriadId, TrialId, WeaponSystemId,
 } from '../core/ids';
 

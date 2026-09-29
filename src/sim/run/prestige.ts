@@ -25,7 +25,7 @@ import type { RunMachine } from './machine';
 import type { WorldImpl } from '../core/world-impl';
 import type { World } from '../core/world';
 import type { System } from '../core/system';
-import type { Blueprint, BuildState, Command, MetaState, RunState } from '../core/types';
+import type { Blueprint, BuildState, Command, MetaState, RunState, SimEvent } from '../core/types';
 import type { AnomalyId, DoctrineId, FrameId, HardpointId, TreeId } from '../core/ids';
 import { Ev } from '../core/types';
 import { newBuild, newRun, newTower } from './state';
@@ -247,22 +247,28 @@ export class ProgressionSystem implements System {
   }
   rebuild(): void { /* reads stats lazily */ }
 
+  /** update()'s event visitor, allocated once (a per-tick closure was GC churn); reads scanW. */
+  private scanW: WorldImpl | null = null;
+  private scanRun: RunState | null = null;
+  private codexNew = false;
+  private readonly onScanEvent = (e: SimEvent): void => {
+    const w = this.scanW!;
+    if (scanCodexEvent(w, e)) this.codexNew = true;
+    if (e.type === Ev.Checkpoint) this.onCheckpoint(w, e.a, e.id);
+    else if (e.type === Ev.WaveClear && e.a === 100) {
+      const r = w.meta.records, run = this.scanRun!;
+      if (r.fastestWave100Seconds === null || run.playSeconds < r.fastestWave100Seconds) r.fastestWave100Seconds = run.playSeconds;
+    }
+  };
+
   update(world: World): void {
     const w = world as WorldImpl, run = w.run;
     // 1. new events: Codex, checkpoints, records
     const end = w.events.nextId;
-    let codexNew = false;
-    w.events.forEachSince(this.lastEvent, (e) => {
-      if (e.id >= end) return;
-      if (scanCodexEvent(w, e)) codexNew = true;
-      if (e.type === Ev.Checkpoint) this.onCheckpoint(w, e.a, e.id);
-      else if (e.type === Ev.WaveClear && e.a === 100) {
-        const r = w.meta.records;
-        if (r.fastestWave100Seconds === null || run.playSeconds < r.fastestWave100Seconds) r.fastestWave100Seconds = run.playSeconds;
-      }
-    });
+    this.scanW = w; this.scanRun = run; this.codexNew = false;
+    w.events.forEachRange(this.lastEvent, end, this.onScanEvent);
     this.lastEvent = end;
-    if (codexNew) w.rebuildStats();
+    if (this.codexNew) w.rebuildStats();
     // 2. Forecast
     trackScrap(w);
     if (run.tick > 0 && run.tick % SAMPLE_EVERY_TICKS === 0) sampleForecast(w);
@@ -282,15 +288,17 @@ export class ProgressionSystem implements System {
     }
     // 5. blueprint plan
     if (run.tick % 30 === 0) autoMountPlanned(w);
-    // 6. Singularity Core: enemies +50% HP
+    // 6. Singularity Core: enemies +50% HP (applied the tick after they spawn; see CODE-HEALTH.md).
+    //    Without the frame there is nothing to scale: skip the per-tick pool scan and just advance the mark.
+    const boost = w.stats.frameFlag('enemy_hp_plus_50');
+    if (!boost) { this.lastEnemyGen = Math.max(this.lastEnemyGen, w.lastSpawnGen()); return; }
     const e = w.enemies;
     let g = this.lastEnemyGen;
-    const boost = w.stats.frameFlag('enemy_hp_plus_50');
     for (let i = 0; i < e.count; i++) {
       const gi = e.gen[i];
       if (gi <= this.lastEnemyGen) continue;
       if (gi > g) g = gi;
-      if (boost) { e.hp[i] *= 1.5; e.maxHp[i] *= 1.5; e.shield[i] *= 1.5; e.maxShield[i] *= 1.5; }
+      e.hp[i] *= 1.5; e.maxHp[i] *= 1.5; e.shield[i] *= 1.5; e.maxShield[i] *= 1.5;   // lint-allow causality: spawn-time scaling
     }
     this.lastEnemyGen = g;
   }

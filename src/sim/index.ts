@@ -108,7 +108,7 @@ export class Sim implements ISim {
     for (let k = 0; k < es.length; k++) es[k].lastError = null;
     let err = applyCommand(this.machine, c);
     for (let k = 0; err === null && k < es.length; k++) err = es[k].lastError;
-    if (err !== null) { this.lastErr = err; this.lastErrCmd = c.type; }
+    if (err !== null) { this.lastErr = err; this.lastErrCmd = typeof c === 'object' && c !== null && typeof c.type === 'string' ? c.type : null; }
   }
 
   /**

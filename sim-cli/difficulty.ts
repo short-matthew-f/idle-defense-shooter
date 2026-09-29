@@ -32,8 +32,6 @@ import type { FormationId } from '../src/sim/core/ids';
 import { NO_ENTITY, TICK_RATE } from '../src/sim/core/types';
 import { generateWave } from '../src/sim/enemies/generator';
 import { FORMATIONS, FORMATION_BY_ID, ARCHETYPES, medianDifficulty, type Archetype } from '../src/sim/data/formations';
-import { ENEMY_BY_KIND } from '../src/sim/data/enemies';
-import { scrapPerKill } from '../src/sim/economy/curves';
 import { Climber, instrument, newSim } from './runner';
 import { median, round, tagSystem } from './metrics';
 
@@ -62,26 +60,6 @@ export const QUICK_DIFF: DiffOptions = { bands: [0, 2], archetypes: ['ballistics
 
 export function probeWave(band: number): number { return 10 * band + 7; }
 
-const budgetCache = new Map<number, number>();
-/**
- * Reference Scrap budget at wave w (reported only; builds come from agent climbs): first-clear Scrap of waves 1..w (×3, from the generator's spawns for
- * seed 1) × BUDGET_MUL. The multiplier accounts for repeat-clear income from failed attempts; it is
- * calibrated to the idle Generalist, whose total spend on first reaching a wave is ≈ 6× the
- * first-clear sum.
- */
-export const BUDGET_MUL = 6;
-export function scrapBudget(w: number): number {
-  const c = budgetCache.get(w);
-  if (c !== undefined) return c;
-  let s = 0;
-  for (let v = 1; v <= w; v++) {
-    const def = generateWave(1, v, 0, 0);
-    for (const sp of def.spawns) s += scrapPerKill(v, ENEMY_BY_KIND[sp.kind]?.scrapMul ?? 1) * 3;
-  }
-  s *= BUDGET_MUL;
-  budgetCache.set(w, s);
-  return s;
-}
 
 /** Waves of `template` at wave w: up to n WaveDefs from different seeds (equal-budget normalized). */
 const waveCache = new Map<string, { seed: number; def: WaveDef }[]>();
@@ -241,13 +219,6 @@ export function difficultyJobs(opts: DiffOptions, snaps: ArchetypeSnapshots[]): 
   return out;
 }
 
-/** Sequential convenience. */
-export function measureDifficulty(opts: DiffOptions): DifficultyResult {
-  const t0 = performance.now();
-  const snaps = opts.archetypes.map((a) => archetypeClimb(a, opts.bands));
-  const jobs = difficultyJobs(opts, snaps).map((job) => ({ job, res: runDiffJob(job) }));
-  return aggregateDifficulty(opts, jobs, (performance.now() - t0) / 1000);
-}
 
 export function difficultyMarkdown(d: DifficultyResult): string {
   const archs = d.config.archetypes;

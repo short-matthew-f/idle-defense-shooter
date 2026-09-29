@@ -19,6 +19,7 @@ import type { World } from '../core/world';
 import type { HitInfo } from '../core/system';
 import { EnemyFlag, Ev, MAX_ENEMIES } from '../core/types';
 import { targetable } from '../core/spatial';
+import { ScratchStack } from '../core/scratch';
 
 export const ARC_DECAY = 0.9;
 const MAX_LINKS = 64;
@@ -33,14 +34,9 @@ export function weaponIndex(source: HitInfo['source']): number {
   }
 }
 
-export class QueryStack {
-  private bufs: Int32Array[] = [];
-  private d = 0;
-  push(): Int32Array {
-    if (this.d >= this.bufs.length) this.bufs.push(new Int32Array(MAX_ENEMIES));
-    return this.bufs[this.d++];
-  }
-  pop(): void { if (this.d > 0) this.d--; }
+/** MAX_ENEMIES-sized ScratchStack (core/scratch.ts): element queries are never truncated. */
+export class QueryStack extends ScratchStack {
+  constructor() { super(MAX_ENEMIES); }
 }
 
 /** Remaining poison damage an enemy would still take (dps per stack × stacks × seconds left). */

@@ -4,6 +4,7 @@ import { Ev, EnemyFlag, ProjKind } from '../../src/sim/core/types';
 import { cos, sin } from '../../src/sim/math/lut';
 import type { ElementsSystem } from '../../src/sim/systems/elements';
 import { quietSim, setup, plugin, events, ticks, grunt } from './wp2-helpers';
+import { expectWithinBudget } from '../core/perf-budget';
 
 const ALL = ['fire', 'lightning', 'poison', 'frost'] as const;
 
@@ -151,7 +152,6 @@ describe('Elements: doctrines', () => {
   it('Storm: Ball Lightning zaps enemies near it; Supercell starts a storm after enough arcs', () => {
     const sim = setup(quietSim(), { elements: ['lightning'], doctrines: { lightning: 'storm' },
       ranks: { 'lightning.storm.ball_lightning': 2, 'lightning.supercell': 1 }, overrides: { 'lightning.arc_chance': 1, 'lightning.supercell.arcs': 4 } });
-    const w = sim.world;
     for (let k = 0; k < 12; k++) grunt(sim, cos(k * 0.52) * 60, sin(k * 0.52) * 60);
     ticks(sim, 300);
     expect(events(sim, (e) => e.type === Ev.Hit && e.src === 'lightning.ball').length).toBeGreaterThan(0);
@@ -336,6 +336,6 @@ describe('Elements: determinism and performance', () => {
     const ms = performance.now() - t0;
     expect(w.enemies.count).toBeGreaterThan(700);
     expect(w.events.nextId).toBeGreaterThan(100_000);                      // the build really is busy
-    expect(ms).toBeLessThan(4000);
+    expectWithinBudget(ms, 4000);
   });
 });

@@ -18,6 +18,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
+      # typecheck + architecture lint (scripts/lint.mjs: determinism / causality / boundary rules) + tests.
+      # GitHub sets CI=true, which skips the wall-clock perf budgets (tests/core/perf-budget.ts).
       - run: npm run check
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3

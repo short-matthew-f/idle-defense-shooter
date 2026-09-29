@@ -25,7 +25,6 @@
  */
 import type { System, InstanceWriter } from '../core/system';
 import type { World } from '../core/world';
-import type { ElementId } from '../core/ids';
 import { EnemyFlag, Ev, MAX_ENEMIES, MAX_LASER_NODES, ProjFlag, Shape, TICK_DT } from '../core/types';
 import { cos, sin } from '../math/lut';
 import { frameDef } from '../core/content';

@@ -93,7 +93,16 @@ export function ipow(base: number, n: number): number {
  * Use this for all economy curves (1.13^w, 1.11^w, 1.15^r, 1.2^(D-20) ...).
  */
 const growthCache = new Map<number, Float64Array>();
+/** Largest exponent served from the table; beyond it growth() uses ipow (never reached in play). */
+export const GROWTH_TABLE_MAX = 1 << 16;
 export function growth(g: number, n: number): number {
+  if (!(n > -GROWTH_TABLE_MAX && n < GROWTH_TABLE_MAX)) {
+    // huge / non-finite n (e.g. ranks from a corrupted save): `n | 0` would wrap and allocate a table of
+    // up to 2^31 entries. Keep the old NaN → 1 behaviour and compute large powers directly.
+    if (Number.isNaN(n)) return 1;
+    if (!Number.isFinite(n)) return n > 0 ? (g > 1 ? Infinity : g === 1 ? 1 : 0) : (g > 1 ? 0 : g === 1 ? 1 : Infinity);
+    return ipow(g, Math.trunc(n) > 0 ? Math.min(Math.trunc(n), 0x7fffffff) : Math.max(Math.trunc(n), -0x7fffffff));
+  }
   n = n | 0;
   if (n < 0) return 1 / growth(g, -n);
   let table = growthCache.get(g);

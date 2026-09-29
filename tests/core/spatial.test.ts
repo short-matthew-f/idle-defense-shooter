@@ -52,4 +52,42 @@ describe('spatial hash', () => {
       if (best >= 0) { ex[0] = best; const second = h.nearest(x, y, rad, ex, 1); expect(second).not.toBe(best); }
     }
   });
+
+  it('ring-search nearest equals brute force: sparse/dense layouts, grid ties, intangibles, exclusions, off-grid points and enemies', () => {
+    const INTANG = EnemyFlag.Dead | EnemyFlag.Phased | EnemyFlag.Burrowed | EnemyFlag.Ally;
+    for (const [n, span, seed] of [[5, 700, 1], [40, 600, 2], [300, 900, 3], [1400, 700, 4], [60, 1500, 5]] as const) {
+      const p = createEnemyPool(n);
+      const r = new Prng(seed);
+      for (let i = 0; i < n; i++) {
+        const k = allocEnemy(p, i + 1);
+        // snap a third of the enemies to a 48-unit lattice so exact distance ties and cell-boundary positions occur
+        const snap = i % 3 === 0;
+        p.x[k] = snap ? Math.round(r.range(-span, span) / 48) * 48 - 1056 % 48 : r.range(-span, span);
+        p.y[k] = snap ? Math.round(r.range(-span, span) / 48) * 48 : r.range(-span, span);
+        p.radius[k] = r.range(3, 40);
+        if (i % 11 === 0) p.flags[k] |= EnemyFlag.Phased;
+        if (i % 13 === 0) p.flags[k] |= EnemyFlag.Dead;
+      }
+      const h = new SpatialHash(p);
+      h.rebuild();
+      const excl = new Int32Array(8);
+      for (let q = 0; q < 400; q++) {
+        const x = q % 7 === 0 ? r.range(-1400, 1400) : Math.round(r.range(-600, 600));
+        const y = q % 7 === 0 ? r.range(-1400, 1400) : Math.round(r.range(-600, 600));
+        const maxR = r.range(0, 700);
+        const ex = q % 4 === 0 ? Math.min(8, 1 + (q % 5)) : 0;
+        for (let k = 0; k < ex; k++) excl[k] = r.int(0, n - 1);
+        let best = -1, bestD = Infinity;
+        for (let i = 0; i < p.count; i++) {
+          if (p.flags[i] & INTANG) continue;
+          let skip = false; for (let k = 0; k < ex; k++) if (excl[k] === i) skip = true;
+          if (skip) continue;
+          const dx = p.x[i] - x, dy = p.y[i] - y, rr = maxR + p.radius[i], d = dx * dx + dy * dy;
+          if (d > rr * rr) continue;
+          if (d < bestD || (d === bestD && i < best)) { best = i; bestD = d; }
+        }
+        expect(h.nearest(x, y, maxR, excl, ex)).toBe(best);
+      }
+    }
+  });
 });

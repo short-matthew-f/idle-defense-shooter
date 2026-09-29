@@ -1,8 +1,9 @@
 /**
  * Status ticking (fixed phase: after spawns, before enemy movement — see Sim.step).
  *  - Durations count down every tick; a status loses all stacks when its duration expires.
- *  - speedMul = 0 while frozen or staggered (bosses: stagger only interrupts, see steering), else 1 − 0.12·chill (half effect on Immovable), min 0.1.
- *    Other systems (Time Field, Containment) may multiply enemies.speedMul further after this runs.
+ *  - speedMul = 0 while frozen or staggered (bosses: stagger only interrupts, see steering), else 1 − 0.12·chill (half effect on Immovable), min 0.1;
+ *    then × (1 − fieldSlow), which area effects (Time Field, Containment, boss Deep Freeze window) raised last tick; fieldSlow is cleared.
+ *    Only the AI's speed auras multiply speedMul after this (see EnemyPool.speedMul for the full rule).
  *  - DoTs deal damage in 4 Hz pulses through World.damage (silent: no Hit event; kills still emit Kill):
  *      burn   burnDps × stacks   (fire, ignores armor)
  *      poison poisonDps × stacks (poison, ignores armor)

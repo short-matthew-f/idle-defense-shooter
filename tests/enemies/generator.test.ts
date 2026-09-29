@@ -20,6 +20,10 @@ describe('generateWave determinism', () => {
     for (const w of [3, 8, 17, 33, 64]) if (JSON.stringify(generateWave(1, w, 0, 0)) !== JSON.stringify(generateWave(2, w, 0, 0))) differ++;
     expect(differ).toBe(5);
   });
+  // Golden snapshot: it fails on ANY change to rosters, formations, budgets or the generator's PRNG draw
+  // order, not only on cross-engine drift. When such a change is intended, review the diff and refresh it
+  // with `npx vitest run -u tests/enemies/generator.test.ts` (cross-engine PRNG drift is caught separately
+  // by the tests/math.test.ts golden values, which should never need updating).
   it('has a golden summary so cross-engine drift is caught', () => {
     const d = generateWave(0xC17ADE1, 17, 0, 0);
     expect({ desc: describeWave(d), n: d.spawns.length, first: d.spawns[0], last: d.spawns[d.spawns.length - 1] }).toMatchSnapshot();

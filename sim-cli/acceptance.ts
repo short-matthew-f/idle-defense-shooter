@@ -42,7 +42,7 @@ import type { AcceptRow, OfflineResult, PrestigeChainResult, RunConfig, RunResul
 import type { Job } from './jobs';
 import { runJobs } from './pool';
 import { aggregateDifficulty, difficultyJobs, FULL_DIFF, QUICK_DIFF, type ArchetypeSnapshots, type DiffJobResult, type DifficultyResult } from './difficulty';
-import { attemptsUpTo, checkpointMinutes, checkpointOdds, counterRate, depthAt, gameRecommendation, mean, median, NON_DAMAGE_TREES, pct, round, spendVsEffect, timeToWave } from './metrics';
+import { attemptsUpTo, checkpointMinutes, checkpointOdds, depthAt, gameRecommendation, mean, median, NON_DAMAGE_TREES, pct, round, spendVsEffect, timeToWave } from './metrics';
 import { HARDPOINT_AGENTS } from './agents/index';
 
 export type Mode = 'quick' | 'full';
@@ -126,7 +126,7 @@ export async function gather(opts: AcceptOptions): Promise<AcceptData> {
   const p = plan(mode, seeds, hours);
   // Longest jobs first so the pool drains evenly.
   const weight = (x: Plan): number => (x.job.kind === 'chain' ? 4 : x.job.kind === 'diffclimb' ? 3 : x.key.startsWith('optimizer') ? 5 : x.key.startsWith('anomaly') ? 2 : 1);
-  const order = p.map((x, i) => i).sort((a, b) => weight(p[b]) - weight(p[a]) || a - b);
+  const order = p.map((_, i) => i).sort((a, b) => weight(p[b]) - weight(p[a]) || a - b);
   const t0 = performance.now();
   log(`acceptance ${mode}: ${p.length} jobs, seeds ${seeds.join(',')}, ${hours} sim-h per climb, ${opts.parallel ?? 'auto'} parallel`);
   const res = await runJobs(order.map((i) => p[i].job), opts.parallel, (i, _r, done) => {
@@ -393,8 +393,3 @@ export async function runAcceptance(opts: AcceptOptions): Promise<AcceptReport> 
   return { rows: evaluate(data), data };
 }
 
-/** Counter success over a set of runs (report helper). */
-export function counterSummary(runs: RunResult[]): string {
-  const r = runs.map(counterRate).filter(Number.isFinite);
-  return r.length ? pct(median(r)) : 'n/a (no tells)';
-}

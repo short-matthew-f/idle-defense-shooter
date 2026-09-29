@@ -6,7 +6,8 @@ import type { Command } from '../core/types';
 import { EnemyFlag, Ev, NO_ENTITY } from '../core/types';
 import type { WorldImpl } from '../core/world-impl';
 import type { RunMachine } from './machine';
-import { purchase, chooseDoctrine, spendKey } from '../economy/shop';
+import { purchase, spendKey } from '../economy/shop';
+import { validateCommand } from './validate';
 import { allNodes } from '../core/content';
 import { CORE_COSTS, REFIT_REFUND, offlineScrap } from '../economy/curves';
 import { buyPrestigeNode, chooseDoctrineCmd, commandGuard, doPrestige, saveBlueprint, setThreatDial } from './prestige';   // WP8
@@ -15,9 +16,17 @@ import { ascend, buyStar } from '../economy/ascension';                         
 import { abilitySlotCount, secondDesignatorAllowed, trialActive } from '../systems/abilities';   // WP9
 import { allowedSpeed } from '../economy/prestige';
 
-/** Apply one command. Returns an error string (also stored in machine.lastError) or null. */
+/**
+ * Apply one command. Returns an error string (also stored in machine.lastError) or null.
+ * Malformed commands (corrupted saves, devtools, UI bugs) are rejected by shape validation first, and
+ * a handler that still throws is reported as an error instead of aborting the tick.
+ */
 export function applyCommand(m: RunMachine, cmd: Command): string | null {
-  const err = commandGuard(m.w, cmd) ?? dispatch(m, cmd);   // WP8: Trial mount rules
+  let err = validateCommand(cmd);
+  if (err === null) {
+    try { err = commandGuard(m.w, cmd) ?? dispatch(m, cmd); }   // WP8: Trial mount rules
+    catch (e) { err = `Command ${cmd.type} failed: ${e instanceof Error ? e.message : String(e)}`; }
+  }
   m.lastError = err;
   return err;
 }

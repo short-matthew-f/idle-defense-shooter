@@ -26,14 +26,11 @@ import type { TrialId } from '../core/ids';
 import { TRIALS } from '../data/index';
 import { combineSeed } from '../math/prng';
 import { toRunSave, fromRunSave } from '../save/serialize';
-import { prank, trialHas, type TrialRule } from '../economy/prestige';
+import { prank, trialHas } from '../economy/prestige';
 import { installRun, startFresh } from './prestige';
 
 export const SWARM_COUNT = 5;
 export const SWARM_HP = 0.2;
-
-/** Is `rule` in force for the running Trial? */
-export function trialRule(w: WorldImpl, rule: TrialRule): boolean { return trialHas(w.trial, rule); }
 
 export function startTrial(m: RunMachine, id: TrialId): string | null {
   const w = m.w, meta = w.meta;

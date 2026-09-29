@@ -18,12 +18,11 @@ import type { AnomalyId, DoctrineId, ElementId, HardpointId, TreeId } from '../.
 import type { Prng } from '../../src/sim/math/prng';
 import { applyCommand } from '../../src/sim/run/commands';
 import { buildShop, spendKey } from '../../src/sim/economy/shop';
-import { anomalyDef, nodeInfo, treeDef, type NodeInfo } from '../../src/sim/core/content';
+import { anomalyDef, nodeInfo, treeDef } from '../../src/sim/core/content';
 import type { PolicyId } from '../types';
 
 export const ALL_HARDPOINTS: HardpointId[] = ['ordnance', 'drones', 'blade', 'laser', 'gravitics'];
 export const ALL_ELEMENTS: ElementId[] = ['fire', 'lightning', 'poison', 'frost'];
-export const ALL_TREES: TreeId[] = ['ballistics', 'bastion', 'reactor', 'fire', 'lightning', 'poison', 'frost', 'ordnance', 'drones', 'blade', 'laser', 'gravitics'];
 
 export interface AgentCtx {
   sim: Sim;
@@ -66,7 +65,6 @@ export function entryKey(e: ShopEntry): string {
   if (info.group === 'fusion' || info.group === 'triad') return 'fusion';
   return spendKey(info);
 }
-export function entryInfo(e: ShopEntry): NodeInfo | undefined { return nodeInfo(e.node); }
 export function entryTags(e: ShopEntry): readonly string[] { return nodeInfo(e.node)?.def.tags ?? []; }
 
 export function affordable(w: WorldImpl, e: ShopEntry): boolean {

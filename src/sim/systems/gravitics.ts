@@ -37,7 +37,7 @@ export class GraviticsSystem implements System {
   private on = false;
   private wellsN = 1; private pull = 120; private R = 90; private duration = 180; private cooldown = 480;
   private massDriver = false; private mdFrac = 0.1; private mdBoss = 0.05;
-  private collapse = false; private implosion = 1; private baseDmg = 30; private perCaptive = 0.15; private yieldMul = 1; private chain = false; private chainN = 2;
+  private collapse = false; private implosion = 1; private baseDmg = 30; private perCaptive = 0.15; private chain = false; private chainN = 2;
   private lensing = false; private lensBonus = 0; private focal = false;
   private drift = 0; private driftStop = 50; private riptide = 1; private orbitLock = false; private orbitTicks = 120;
   private eventLoop = 0;
@@ -73,7 +73,7 @@ export class GraviticsSystem implements System {
     // Doctrine multiplies that by implosion × yield.
     this.implosion = this.collapse ? s.get('gravitics.collapse.implosion') * s.get('gravitics.collapse.yield') : 1;
     this.baseDmg = s.get('gravitics.damage');
-    this.perCaptive = s.get('gravitics.collapse.per_captive'); this.yieldMul = s.get('gravitics.collapse.yield');
+    this.perCaptive = s.get('gravitics.collapse.per_captive');
     this.chain = this.collapse && s.has('gravitics.collapse.chain_collapse');
     this.chainN = Math.max(0, Math.min(4, Math.floor(s.get('gravitics.collapse.chain_collapse.count'))));
     this.lensing = s.doctrineStrength('gravitics', 'lensing') > 0 && s.has('gravitics.lensing.bend');
@@ -326,7 +326,7 @@ export class GraviticsSystem implements System {
     remapArray(this.stamp, remap, oldCount, n, -1);
   }
 
-  render(w: World, out: InstanceWriter): void {
+  render(_w: World, out: InstanceWriter): void {
     if (!this.on) return;
     for (let k = 0; k < MAX_WELLS; k++) {
       if (!this.act[k]) continue;

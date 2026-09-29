@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Ev, ProjFlag, ProjKind } from '../../src/sim/core/types';
-import { hpSim, rankTree, ticks, share, evs, fxCount, setRanks, combatTick } from './hardpoint-helpers';
+import { hpSim, rankTree, ticks, share, evs, fxCount, combatTick } from './hardpoint-helpers';
 
 function cluster(sim: ReturnType<typeof hpSim>, x: number, y: number, n: number, kind = 'grunt', hpScale = 1e5): number[] {
   const out: number[] = [];

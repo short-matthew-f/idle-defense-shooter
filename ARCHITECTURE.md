@@ -8,24 +8,26 @@ contributor (human or agent) follows so parallel work integrates cleanly.
 
 ```
 src/sim/          Pure TypeScript simulation. NO DOM, NO Math.random/Date/performance.
-  math/           Prng (xoshiro128**), LUT trig, ipow/growth/exp/log/pow    [owner: architect]
+  math/           Prng (xoshiro128**), LUT trig, ipow/growth/exp/log/pow, geom.ts (segment tests) [owner: architect]
   core/           ids.ts, types.ts, schema (data/schema.ts), system.ts, world.ts,
-                  pools, spatial hash, event log, stat resolver, Sim class  [WP1]
+                  pools, spatial hash, event log, stat resolver, scratch.ts (query scratch stacks) [WP1]
   data/           ALL content as data (trees, nodes, doctrines, fusions, linkages,
                   infusions, anomalies, abilities, frames, enemies, bosses,
                   formations, sectors, trials, prestige, constellation)     [WP-DATA, WP4]
   systems/        One file per combat system implementing core/system.ts    [WP1, WP2, WP3, WP9]
   enemies/        Wave generator, formation scripts, enemy AI, boss scripts  [WP4, WP5]
   economy/        Curves, costs, Scrap/Cores/Echoes/Stars, Forecast          [WP1, WP8]
-  run/            Attempt/wave/checkpoint state machine, Push/Patrol, Prestige/Ascension [WP1, WP8]
+  run/            Attempt/wave/checkpoint state machine, Push/Patrol, Prestige/Ascension,
+                  commands.ts (dispatch) + validate.ts (Command shape validation)  [WP1, WP8]
   directives/     Directive engine, Targeting Profiles, Upgrade Queue        [WP9]
-  save/           Serialization, migrations                                  [WP1, WP7]
+  save/           Serialization, MIGRATIONS table, save sanitization         [WP1, WP7]
   index.ts        `export class Sim implements ISim`                          [WP1]
 src/worker/       Web Worker wrapper around Sim (protocol in core/types.ts ToWorker/FromWorker) [WP1]
 src/render/       WebGL2 instanced renderer, particles, bloom, readability rules [WP6]
 src/ui/           DOM panels: HUD, shop, Forecast, Inspector, Codex, Directives, settings [WP7]
 src/app/          main.ts glue: worker, render loop, input, IndexedDB saves, PWA, offline [WP6 skeleton, WP7]
 sim-cli/          Headless Node runner: agents, acceptance tests, Difficulty Multiplier tables [WP10]
+scripts/          lint.mjs (architecture lint, `npm run lint`), gen-icons.mjs
 tests/            Vitest. Determinism hash tests are mandatory for every system.
 ```
 
@@ -41,7 +43,8 @@ Path aliases: `@sim/*`, `@render/*`, `@ui/*`, `@app/*`.
    `Prng` owned by the World or the wave generator. Entity iteration is by pool index, ascending.
 2. **Everything has a cause.** Any damage, status, spawn, explosion, or ability goes through
    `World` methods that take a `cause` event id and emit an event. Never mutate `enemies.hp`
-   directly outside `World.damage`. The kill chain (Inspector, Codex) depends on this.
+   directly outside `World` (`damage`, `healEnemy`, `killEnemy`; spawn-time setup such as Clump merges
+   is marked `lint-allow causality`). The kill chain (Inspector, Codex) depends on this.
 3. **Content is data.** Numbers and names live in `src/sim/data/*.ts` conforming to
    `data/schema.ts`. Systems check `world.stats.has('tree.node')`, `rank(...)`, `get('tree.stat')`.
    The shop, agents and Codex read the same data. Node ids: `${tree}.${node}`;
@@ -55,29 +58,76 @@ Path aliases: `@sim/*`, `@render/*`, `@ui/*`, `@app/*`.
    buffers are preallocated. `uiState()` may allocate (≤10 Hz). `snapshot()` reuses buffers.
 6. **Budgets.** ≤1500 enemies, ≤4000 projectiles. Past the enemy cap, merge swarms into Clumps.
 7. **Tests.** Each work package ships Vitest tests and a determinism test: run the same seed twice
-   (fresh Sim each time) and compare `events.hash()` after N ticks.
-8. **No DOM in sim, no sim internals in UI.** UI sends `Command`s and reads `UiState`.
+   (fresh Sim each time) and compare `events.hash()` after N ticks. No module-level mutable state that
+   outlives a tick (tests/core/determinism-extended.test.ts steps two Sims interleaved to catch it).
+8. **No DOM in sim, no sim internals in UI.** UI sends `Command`s and reads `UiState`. Commands are
+   untrusted input: `run/validate.ts` rejects malformed ones with an error, never an exception.
+
+`npm run lint` (`scripts/lint.mjs`, part of `npm run check` and CI) enforces the grep-able parts of rules
+1, 2, 4 and 8: banned Math/Date/performance/`**`/comparator-less `sort` in `src/sim` (outside `math/`),
+enemy/tower HP writes outside their owners, ui/render/app imports or DOM globals in the sim, systems
+importing systems, and warns on files over 700 lines. A line opts out with `lint-allow <rule>: <reason>`.
 9. **Commit style.** Conventional, imperative subject; body says what and why.
 
-## Tick order (World.step)
+## Tick order (Sim.step, src/sim/index.ts)
 
 ```
-apply queued Commands
-run state machine (between → combat → wave_clear/dead ...)
-spawn scheduled enemies for this tick
-statuses tick (burn/poison DoT, chill/shock/bleed durations)   [elements system]
-enemy AI + movement + contact damage + enemy abilities          [enemies/ai]
-rebuild spatial hash
-SYSTEM_ORDER: primary → ordnance → drones → blade → laser → gravitics → elements/fusions →
-              linkages → anomalies → bastion → reactor → abilities/CE → directives
-projectiles move/collide/expire
-hazards tick
-tower regen/shield recharge; death check
-wave clear check; checkpoint; economy; drafts
-events → hash; snapshot dirty
+ 1  player Commands (validated, run/commands.ts), then Directive/Autocast commands queued last tick
+ 2  run machine preTick: between → startWave (generateWave), wave_clear → draft / next wave,
+    draft auto-pick after 30 s, dead → new attempt                               [run/machine.ts]
+ 3  spawn scheduled enemies (past the enemy cap grunts/swarms merge into a Clump)
+ 4  statuses (core StatusesSystem): durations, speedMul (see "Movement speed"), DoT pulses
+ 5  enemy AI (enemies/ai.ts): elite init, speed auras, behaviors, boss movement, separation
+    (behaviors rebuild the spatial hash lazily, once, if they query it)
+ 6  rebuild spatial hash
+ 7  SYSTEM_ORDER plugins (systems/index.ts), in this order:
+      bosses → ballistics → ordnance → drones → blade → laser → gravitics → elements → fusions →
+      linkages → infusions → anomalies → progression (run/prestige.ts) → bastion → reactor →
+      abilities → directives
+ 8  projectiles move / collide / expire                                          [core/projectiles.ts]
+ 9  hazards (4 Hz pulses)                                                         [core/hazards.ts]
+10  tower upkeep (core TowerSystem): invulnerability, regen, shield recharge, TowerDeath event
+11  run machine postTick: death → dead; wave clear → first-clear, checkpoint, slots, draft, onWaveEnd
+12  endTick: compact pools, repair cached indices, System.onCompact
+13  advance clocks (tick, attemptTick, waveTick, playSeconds, Patrol rate)
 ```
+
+Hooks (`onHit`, `onKill`, `onStatusApply`, `onTowerHit`, `damageMul`, `onCommand`, `onCompact`) run over
+`[statuses, ...SYSTEM_ORDER, tower]` in that order. Economy (Scrap, CE, Cores) is paid inside
+`World.finishKill`; the Codex, Forecast samples and Trial tiers are bookkept by the progression system.
+
+## Cross-system channels (additive contract members, one rule each)
+
+Systems never import each other; they talk through `World`, hooks and events, plus these channels.
+Each has exactly one writer rule. Full inventory and consolidation plan: `docs/reviews/CODE-HEALTH.md`.
+
+| Channel | Writers → readers | Timing / rule |
+| --- | --- | --- |
+| `EnemyPool.speedMul` | statuses → every mover | Recomputed each tick (see "Movement speed"); plugins never write it |
+| `EnemyPool.fieldSlow` | Time Field, Containment, boss Deep Freeze window → statuses | `max()` into it; consumed and cleared next tick |
+| `World.dynamicSpeedMul` / `dynamicPowerMul` / `towerArmorMul` | abilities (Overdrive), bastion, reactor → weapons, `World.damage`, `damageTower` | Composed: divide out your previous factor, multiply in the new one |
+| `World.shared` (SharedGeometry) | hardpoints publish geometry → linkages, infusions (same tick); linkages write `bladeSpeedMul`, `laserWidthMul`, `laserPulseRateMul`, `droneBoost` → hardpoints (next tick) | Each section rewritten every tick by its owner |
+| `World.signals` (ProgressionSignals) | anomalies → blade, laser (next tick) | Rewritten every tick |
+| `World.damageModifier` | bosses (single owner) → `World.damage` | Pre-armor, also applies to true damage |
+| `System.damageMul` | elements, fusions, reactor, anomalies → `World.damage` | Non-true damage, after power multipliers |
+| `World.bossTell` | bosses → directives, ui-state | Live tell window |
+| `World.enqueueCommand` | directives, autocast, abilities → next tick's command phase | Same dispatch as player commands |
+| `World.healOverflow` | `healTower` → bastion (Fortress Keep) | Drained each tick |
+
+### Movement speed
+
+`speedMul` is the single slow channel. The statuses system sets it every tick, before the AI, to
+`base × (1 − fieldSlow)`, where `base` is 0 while frozen or staggered (bosses: stagger interrupts only),
+else `1 − min(slowCap, slowPerStack × chill)` (half on Immovable). It then clears `fieldSlow`. Only the
+AI's auras multiply it afterwards (commanding ×1.2, boss haste ×1.5, boss accelerate ×1.6). To slow
+enemies, apply chill / freeze / stagger or raise `fieldSlow`; `bossSlowUntil` and `freezeLockUntil` are
+timers, not slows.
 
 ## Economy constants (design §17) — implement in `economy/curves.ts`
+
+These are the design's starting shapes. The tuned constants (e.g. EnemyHP base 7 and growth 1.14, Scrap
+growth 1.10, 1 CE per ordinary kill) live in `economy/curves.ts` / `world-impl.ts`; `docs/BALANCE.md`
+records every change from the values below.
 
 ```
 EnemyHP(w)      = 10 * 1.13^w * k * 1.6^A          (Threat Dial: * (1 + 0.12*T))

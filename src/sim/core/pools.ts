@@ -36,7 +36,7 @@ export function createEnemyPool(cap: number): EnemyPool {
     markedT: new Uint16Array(cap), frozenT: new Uint16Array(cap), staggerT: new Uint16Array(cap),
     aiA: new Float32Array(cap), aiB: new Float32Array(cap), aiI: new Int32Array(cap),
     fx: new Float32Array(cap), fy: new Float32Array(cap),
-    lastCause: new Int32Array(cap), clumpCount: new Uint16Array(cap),
+    clumpCount: new Uint16Array(cap),
     spawnIdx: new Int32Array(cap), formT: new Float32Array(cap), speedMul: new Float32Array(cap),
     attackT: new Uint16Array(cap), spawnEv: new Int32Array(cap), scrapMul: new Float32Array(cap), contact: new Float32Array(cap),
     burnCause: new Int32Array(cap), poisonCause: new Int32Array(cap), bleedCause: new Int32Array(cap),
@@ -66,38 +66,57 @@ export function createProjectilePool(cap: number): ProjectilePool {
   };
 }
 
-/** Typed-array fields of a pool (everything except count/capacity), listed once for copy/reset. */
-type ArrayFields<T> = { [K in keyof T]: T[K] extends ArrayLike<number> ? K : never }[keyof T];
-function arrayKeys<T extends object>(pool: T): ArrayFields<T>[] {
-  const keys: ArrayFields<T>[] = [];
-  for (const k of Object.keys(pool) as (keyof T)[]) {
-    const v = pool[k] as unknown;
-    if (ArrayBuffer.isView(v)) keys.push(k as ArrayFields<T>);
+/**
+ * Typed-array fields of a pool (everything except count/capacity), grouped by array type so the
+ * per-slot copy/zero loops stay monomorphic (a single mixed list made every element access
+ * megamorphic: copy/zero were ~8% of a headless run). Order inside a group follows the pool literal
+ * above, which is deterministic; copy/zero are order-independent anyway.
+ */
+interface SlotArrays { f32: Float32Array[]; i32: Int32Array[]; u32: Uint32Array[]; u16: Uint16Array[]; u8: Uint8Array[]; i8: Int8Array[] }
+function slotArrays(pool: object): SlotArrays {
+  const g: SlotArrays = { f32: [], i32: [], u32: [], u16: [], u8: [], i8: [] };
+  for (const v of Object.values(pool) as unknown[]) {
+    if (v instanceof Float32Array) g.f32.push(v);
+    else if (v instanceof Int32Array) g.i32.push(v);
+    else if (v instanceof Uint32Array) g.u32.push(v);
+    else if (v instanceof Uint16Array) g.u16.push(v);
+    else if (v instanceof Uint8Array) g.u8.push(v);
+    else if (v instanceof Int8Array) g.i8.push(v);
+    else if (ArrayBuffer.isView(v)) throw new Error('pools: unsupported typed array field');
   }
-  return keys;   // insertion order of the literal above: deterministic
+  return g;
 }
-type NumArr = { [i: number]: number };
-function copySlot(arrays: NumArr[], from: number, to: number): void {
-  for (let k = 0; k < arrays.length; k++) arrays[k][to] = arrays[k][from];
+function copySlot(g: SlotArrays, from: number, to: number): void {
+  const { f32, i32, u32, u16, u8, i8 } = g;
+  for (let k = 0; k < f32.length; k++) f32[k][to] = f32[k][from];
+  for (let k = 0; k < i32.length; k++) i32[k][to] = i32[k][from];
+  for (let k = 0; k < u32.length; k++) u32[k][to] = u32[k][from];
+  for (let k = 0; k < u16.length; k++) u16[k][to] = u16[k][from];
+  for (let k = 0; k < u8.length; k++) u8[k][to] = u8[k][from];
+  for (let k = 0; k < i8.length; k++) i8[k][to] = i8[k][from];
 }
-function zeroSlot(arrays: NumArr[], i: number): void {
-  for (let k = 0; k < arrays.length; k++) arrays[k][i] = 0;
+function zeroSlot(g: SlotArrays, i: number): void {
+  const { f32, i32, u32, u16, u8, i8 } = g;
+  for (let k = 0; k < f32.length; k++) f32[k][i] = 0;
+  for (let k = 0; k < i32.length; k++) i32[k][i] = 0;
+  for (let k = 0; k < u32.length; k++) u32[k][i] = 0;
+  for (let k = 0; k < u16.length; k++) u16[k][i] = 0;
+  for (let k = 0; k < u8.length; k++) u8[k][i] = 0;
+  for (let k = 0; k < i8.length; k++) i8[k][i] = 0;
 }
 
-let enemyArraysCache = new WeakMap<EnemyPool, NumArr[]>();
-let projArraysCache = new WeakMap<ProjectilePool, NumArr[]>();
-function enemyArrays(p: EnemyPool): NumArr[] {
+const enemyArraysCache = new WeakMap<EnemyPool, SlotArrays>();
+const projArraysCache = new WeakMap<ProjectilePool, SlotArrays>();
+function enemyArrays(p: EnemyPool): SlotArrays {
   let a = enemyArraysCache.get(p);
-  if (!a) { a = arrayKeys(p).map((k) => p[k] as unknown as NumArr); enemyArraysCache.set(p, a); }
+  if (!a) { a = slotArrays(p); enemyArraysCache.set(p, a); }
   return a;
 }
-function projArrays(p: ProjectilePool): NumArr[] {
+function projArrays(p: ProjectilePool): SlotArrays {
   let a = projArraysCache.get(p);
-  if (!a) { a = arrayKeys(p).map((k) => p[k] as unknown as NumArr); projArraysCache.set(p, a); }
+  if (!a) { a = slotArrays(p); projArraysCache.set(p, a); }
   return a;
 }
-/** For tests: drop cached array lists (pools are normally long-lived). */
-export function resetPoolCaches(): void { enemyArraysCache = new WeakMap(); projArraysCache = new WeakMap(); }
 
 /** Allocate an enemy slot at index `count` with every field zeroed; returns NO_ENTITY when full. */
 export function allocEnemy(p: EnemyPool, gen: number): number {
@@ -109,7 +128,7 @@ export function allocEnemy(p: EnemyPool, gen: number): number {
   p.spawnIdx[i] = -1;
   p.speedMul[i] = 1;
   p.clumpCount[i] = 1;
-  p.lastCause[i] = -1; p.spawnEv[i] = -1; p.burnCause[i] = -1; p.poisonCause[i] = -1; p.bleedCause[i] = -1;
+  p.spawnEv[i] = -1; p.burnCause[i] = -1; p.poisonCause[i] = -1; p.bleedCause[i] = -1;
   p.aiI[i] = -1;
   return i;
 }
@@ -173,6 +192,3 @@ export function compactProjectiles(p: ProjectilePool, remap: Int32Array): number
   return removed;
 }
 
-/** Remove everything (attempt restart). */
-export function clearEnemies(p: EnemyPool): void { p.count = 0; }
-export function clearProjectiles(p: ProjectilePool): void { p.count = 0; }

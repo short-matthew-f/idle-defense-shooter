@@ -109,16 +109,9 @@ export function towerBlast(w: World, x: number, y: number, radius: number, dmg: 
   if (x * x + y * y <= rr * rr) w.damageTower(dmg, shooter, id);
 }
 
-/** Heal an enemy (no World heal primitive exists for enemies): emits Ev.Heal (a = enemy, b = amount). */
+/** Heal an enemy through World.healEnemy (emits Ev.Heal: a = enemy, b = amount). Kept as the bosses' import point. */
 export function healEnemy(w: World, j: number, amount: number, src: string, cause: number): number {
-  const e = w.enemies;
-  if (!w.alive(j) || !(amount > 0)) return 0;
-  const room = e.maxHp[j] - e.hp[j];
-  const amt = amount < room ? amount : room;
-  if (amt <= 0) return 0;
-  e.hp[j] += amt;
-  w.emit(Ev.Heal, src, j, amt, e.x[j], e.y[j], cause);
-  return amt;
+  return w.healEnemy(j, amount, src, cause);
 }
 
 /** Add shield to an enemy, raising its cap to at least `capFrac` of max HP. */
@@ -137,21 +130,5 @@ export function stripStatuses(w: World, j: number): void {
   e.staticStacks[j] = 0; e.staticT[j] = 0;
 }
 
-/** Distance from point (px,py) to segment (ax,ay)→(bx,by). */
-export function segDist(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
-  const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
-  let t = L2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / L2 : 0;
-  if (t < 0) t = 0; else if (t > 1) t = 1;
-  const qx = px - (ax + dx * t), qy = py - (ay + dy * t);
-  return Math.sqrt(qx * qx + qy * qy);
-}
-
-/** Do segments p0→p1 and q0→q1 intersect (inclusive)? */
-export function segmentsCross(p0x: number, p0y: number, p1x: number, p1y: number, q0x: number, q0y: number, q1x: number, q1y: number): boolean {
-  const d1x = p1x - p0x, d1y = p1y - p0y, d2x = q1x - q0x, d2y = q1y - q0y;
-  const den = d1x * d2y - d1y * d2x;
-  if (den === 0) return false;
-  const ex = q0x - p0x, ey = q0y - p0y;
-  const t = (ex * d2y - ey * d2x) / den, u = (ex * d1y - ey * d1x) / den;
-  return t >= 0 && t <= 1 && u >= 0 && u <= 1;
-}
+/** Segment helpers live in math/geom.ts (shared with hardpoints and hazards). */
+export { segDist, segmentsCross } from '../../math/geom';

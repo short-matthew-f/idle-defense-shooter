@@ -7,6 +7,7 @@ import { treeDef } from '../../src/sim/core/content';
 import { LINK_IDS } from '../../src/sim/systems/linkages';
 import { hpSim, ring, setRanks, combatTick, share } from './hardpoint-helpers';
 import { cos, sin } from '../../src/sim/math/lut';
+import { expectWithinBudget } from '../core/perf-budget';
 
 /** Step until an Ev.Linkage with `src` appears; returns the tick count used (or -1). */
 function untilLink(sim: Sim, src: string, max: number): number {
@@ -174,6 +175,6 @@ describe('Hardpoints: determinism and performance', () => {
     const ms = performance.now() - t0;
     expect(w.enemies.count).toBeGreaterThan(600);
     for (const tag of ['drones', 'blade', 'laser', 'gravitics']) expect(share(sim, tag)).toBeGreaterThan(0);
-    expect(ms).toBeLessThan(5000);
+    expectWithinBudget(ms, 5000);
   }, 60_000);
 });

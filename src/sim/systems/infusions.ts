@@ -22,7 +22,7 @@
 import type { System, InstanceWriter, HitInfo } from '../core/system';
 import type { World } from '../core/world';
 import type { WorldImpl } from '../core/world-impl';
-import type { ElementId, HardpointId, StatusId } from '../core/ids';
+import type { HardpointId, StatusId } from '../core/ids';
 import { EnemyFlag, Ev, MAX_ENEMIES, ProjKind, Shape } from '../core/types';
 import { cos, sin } from '../math/lut';
 import { frameDef } from '../core/content';

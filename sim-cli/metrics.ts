@@ -4,7 +4,6 @@
  * recommendation, Counter success, depth-at-time.
  */
 import type { RunResult } from './types';
-import { echoesFor } from '../src/sim/economy/curves';
 
 export function median(v: number[]): number {
   if (v.length === 0) return NaN;
@@ -124,11 +123,6 @@ export function recommendation(r: RunResult): { wave: number; seconds: number; s
   return { wave: NaN, seconds: NaN, source: 'none' };
 }
 
-/** Echo rate (Echoes/hour) the player would realize by Prestiging at play-second `t`. */
-export function echoRateAt(r: RunResult, t: number): number {
-  const d = depthAt(r, t);
-  return t > 0 ? echoesFor(d, r.config.threatDial ?? 0) / (t / 3600) : 0;
-}
 
 /** Counter success: Counters scored / boss tells seen. */
 export function counterRate(r: RunResult): number { return r.tells > 0 ? r.counters / r.tells : NaN; }

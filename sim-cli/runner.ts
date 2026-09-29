@@ -94,7 +94,6 @@ export class Climber {
   private anomalies: string[] = [];
   private casts = 0; private tells = 0; private counters = 0; private bossCounters = 0;
   private eventMark = 0;
-  private startTick = 0;
   private playSeconds = 0;
   private lastCpAt = 0;
   private fightWave = 0;
@@ -231,7 +230,6 @@ export class Climber {
     const maxSec = cfg.maxSimSeconds ?? DEFAULTS.maxSimSeconds;
     const wallSec = (cfg.wallMinutes ?? DEFAULTS.wallMinutes) * 60;
     const maxTicks = Math.round(maxSec * TICK_RATE);
-    this.startTick = w.run.tick;
     this.eventMark = sim.events.nextId;
     this.earnMark = w.scrapEarned; this.spendMark = totalSpent(w);
     const t0 = performance.now();

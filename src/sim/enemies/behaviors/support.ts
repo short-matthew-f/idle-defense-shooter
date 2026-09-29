@@ -51,10 +51,7 @@ export function healerTick(w: World, i: number): void {
   for (let k = 0; k < n; k++) {
     const j = SCR[k];
     if (j === i || (e.flags[j] & (EnemyFlag.Dead | EnemyFlag.Boss | EnemyFlag.Ally))) continue;
-    const room = e.maxHp[j] - e.hp[j];
-    if (room <= 0) continue;
-    const amt = Math.min(room, e.maxHp[j] * 0.02);
-    e.hp[j] += amt; total += amt;
+    total += w.healEnemy(j, e.maxHp[j] * 0.02, 'healer', e.spawnEv[i], true);   // one aggregate Heal event below
   }
   if (total > 0) w.emit(Ev.Heal, 'healer', i, total, e.x[i], e.y[i], e.spawnEv[i]);
 }

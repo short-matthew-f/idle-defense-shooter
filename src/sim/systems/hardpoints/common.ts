@@ -21,6 +21,9 @@ import type { ElementId, HardpointId } from '../../core/ids';
 import { EnemyFlag, NO_ENTITY, ProjFlag, ProjKind, TOWER_RADIUS } from '../../core/types';
 import { ELITE_LIST, enemyDefByIndex } from '../../core/content';
 import { atan2, cos, sin, growth } from '../../math/lut';
+import { segDist2 } from '../../math/geom';
+import { ScratchStack } from '../../core/scratch';
+export { segDist2, segParam } from '../../math/geom';
 
 export const HB_SEEK = 1 << 0;
 export const HB_RETARGET_SHIFT = 1;
@@ -46,9 +49,16 @@ export function elementAt(idx: number): ElementId | null { return idx > 0 ? ELEM
 
 /** Element carried by a hardpoint's hits: the first infused element (fire → lightning → poison → frost) with rank ≥ 1. */
 export function infusedElement(s: DerivedStats, sys: HardpointId): ElementId | null {
-  for (let k = 0; k < 4; k++) if (s.has(`infuse.${sys}.${ELEMENTS[k]}`)) return ELEMENTS[k];
+  const ids = INFUSE_IDS[sys];
+  for (let k = 0; k < 4; k++) if (s.has(ids[k])) return ELEMENTS[k];
   return null;
 }
+/** Interned `infuse.${system}.${element}` node ids (infusedElement runs per launch/hit: no string building). */
+const INFUSE_IDS: Record<HardpointId, readonly string[]> = (() => {
+  const r = {} as Record<HardpointId, readonly string[]>;
+  for (const sys of ['ordnance', 'drones', 'blade', 'laser', 'gravitics'] as const) r[sys] = ELEMENTS.map((el) => `infuse.${sys}.${el}`);
+  return r;
+})();
 
 /** Common global speed factors for hardpoint cadence. */
 export function globalRate(w: World): number {
@@ -99,37 +109,7 @@ export function jammedAt(w: World, x: number, y: number): boolean {
   return false;
 }
 
-/** Squared distance from point P to segment AB. */
-export function segDist2(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
-  const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
-  let t = L2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / L2 : 0;
-  if (t < 0) t = 0; else if (t > 1) t = 1;
-  const qx = px - (ax + dx * t), qy = py - (ay + dy * t);
-  return qx * qx + qy * qy;
-}
-/** Parameter t ∈ [0,1] of P's projection on AB. */
-export function segParam(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
-  const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
-  let t = L2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / L2 : 0;
-  if (t < 0) t = 0; else if (t > 1) t = 1;
-  return t;
-}
-
-/**
- * Depth-indexed scratch buffers so nested hooks (damage → onHit → query → damage ...) never clobber
- * an outer loop's query results. push() before a query, pop() after the loop.
- */
-export class ScratchStack {
-  private bufs: Int32Array[] = [];
-  private depth = 0;
-  constructor(private size = 1024, levels = 4) { for (let i = 0; i < levels; i++) this.bufs.push(new Int32Array(size)); }
-  push(): Int32Array {
-    const d = this.depth++;
-    while (this.bufs.length <= d) this.bufs.push(new Int32Array(this.size));   // warm-up growth only
-    return this.bufs[d];
-  }
-  pop(): void { if (this.depth > 0) this.depth--; }
-}
+/** Shared hardpoint query scratch (see core/scratch.ts). */
 export const SCRATCH = new ScratchStack(1024, 8);
 
 /**

@@ -129,7 +129,7 @@ const TRIAL_RULES: Record<TrialId, readonly TrialRule[]> = {
 };
 
 export function trialHas(trial: TrialId | null | undefined, rule: TrialRule): boolean {
-  return !!trial && TRIAL_RULES[trial].includes(rule);
+  return !!trial && (TRIAL_RULES[trial]?.includes(rule) ?? false);   // unknown ids (corrupt saves) have no rules
 }
 
 /** Frames granted by Trial rewards (first tier). */

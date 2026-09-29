@@ -61,7 +61,7 @@ export function eliteTick(w: World, i: number): void {
   const e = w.enemies;
   const m = e.eliteMods[i];
   if ((m & MOD.regenerating) && e.hp[i] < e.maxHp[i] && (e.lastHitTick[i] < 0 || w.tick - e.lastHitTick[i] >= TICK_RATE)) {
-    e.hp[i] = Math.min(e.maxHp[i], e.hp[i] + e.maxHp[i] * 0.015 / TICK_RATE);
+    w.healEnemy(i, e.maxHp[i] * 0.015 / TICK_RATE, 'elite.regenerating', e.spawnEv[i], true);   // per-tick regen: silent
   }
 }
 

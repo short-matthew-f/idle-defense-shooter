@@ -1,12 +1,11 @@
 /** UiState builder (allocates; call ≤ 10 Hz). */
 import type { UiState } from './types';
-import type { AbilityId } from './ids';
 import { EnemyFlag, Ev, TICK_RATE } from './types';
 import type { WorldImpl } from './world-impl';
 import type { RunMachine } from '../run/machine';
 import { buildShop } from '../economy/shop';
 import { abilityUi } from '../systems/abilities';
-import { abilityDef, bossDef, bossDefByIndex } from './content';
+import { bossDef, bossDefByIndex } from './content';
 import { SECTORS } from '../data/index';
 import { computeForecast } from '../economy/forecast';   // WP8
 import { codexHints } from '../economy/codex';           // WP8

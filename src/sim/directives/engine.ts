@@ -26,8 +26,7 @@
  *   enemy_present enemy        kind present ('elite' = any elite, 'boss' = any boss)
  *   ce_at_least ce             tower.ce ≥ ce
  *   wave_is boss|ordinary      current wave kind
- *   forecast_recommends        a probe registered with setForecastProbe (tests/tools), else WP8's
- *                              economy/forecast.ts forecastRecommends, else world.forecast?.recommended
+ *   forecast_recommends        economy/forecast.ts forecastRecommends (tests may override with setForecastProbe)
  * Actions: cast at largest_group | nearest_threat | boss | tower; designate highest_threat | healer |
  * warden | weak_point | nearest_kamikaze; targeting (set_targeting); mode (set_mode); prestige
  * (Autonomy + meta.settings.autoPrestige; `{type:'prestige', frame: build.frame}`, WP8 implements it).
@@ -43,7 +42,7 @@ import { abilityCost, findAbilities, type AbilitiesSystem } from '../systems/abi
 import { GroupFinder, findBoss, hostile, isTargetingProfile, nearestWith, pickDesignation } from './targeting-profiles';
 import { Autocast } from './autocast';
 import { runUpgradeQueue, sanitizeRules } from './upgrade-queue';
-import * as forecastModule from '../economy/forecast';   // WP8; read by optional shape below
+import { forecastRecommends as economyForecastRecommends } from '../economy/forecast';   // WP8
 
 export const MAX_DIRECTIVES = 12;
 const COOLDOWN_TICKS = TICK_RATE;           // per-Directive minimum interval
@@ -53,22 +52,20 @@ const QUEUE_COMBAT_TICKS = 2 * TICK_RATE;
 const DEFAULT_GROUP_R = 100;
 
 type ForecastProbe = (w: World) => boolean;
-const wp8Forecast = (forecastModule as unknown as Record<string, unknown>).forecastRecommends;
 let forecastProbe: ForecastProbe | null = null;
-/** WP8 hook: register the Forecast's "Prestige now" recommendation for the forecast_recommends condition. */
+/** Test hook: override the forecast_recommends condition (null restores the economy Forecast). Module-global: tests only. */
 export function setForecastProbe(fn: ForecastProbe | null): void { forecastProbe = fn; }
 export function forecastRecommends(w: World): boolean {
   try {
     if (forecastProbe) return !!forecastProbe(w);
-    if (typeof wp8Forecast === 'function') return !!(wp8Forecast as ForecastProbe)(w);
-    return (w as unknown as { forecast?: { recommended?: boolean } | null }).forecast?.recommended === true;
+    return economyForecastRecommends(w as WorldImpl);
   } catch { return false; }
 }
 
-/** Adept condition source (WP5 world.bossTell); tolerant of its absence. */
+/** Adept condition source: a live boss tell (world.bossTell, written by enemies/bosses.ts). */
 export function bossTellActive(w: World): boolean {
-  const bt = (w as unknown as { bossTell?: { ticksLeft?: number; ability?: unknown } | null }).bossTell;
-  return !!bt && (bt.ticksLeft ?? 0) > 0 && bt.ability != null;
+  const bt = w.bossTell;
+  return bt.ticksLeft > 0 && bt.ability != null;
 }
 
 /** Number of Directive slots currently usable (0 when Directives are locked). */

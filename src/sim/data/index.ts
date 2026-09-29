@@ -2,7 +2,7 @@
  * Content registry. Data work packages fill these arrays; systems, the shop
  * and the simulator agents read only from here.
  */
-import type { TreeDef, FrameDef, FusionDef, TriadDef, LinkageDef, InfusionDef, AnomalyDef, AbilityDef, EnemyDef, BossDef, FormationDef, SectorDef, TrialDef, PrestigeNodeDef, StarNodeDef } from './schema';
+import type { TreeDef, FrameDef, FusionDef, TriadDef, LinkageDef, InfusionDef, AnomalyDef, AbilityDef, TrialDef, PrestigeNodeDef, StarNodeDef } from './schema';
 import { CHASSIS_TREES } from './chassis';
 import { ELEMENT_TREES } from './elements';
 import { HARDPOINT_TREES } from './hardpoints';

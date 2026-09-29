@@ -163,11 +163,11 @@ export class RunMachine {
       c = w.spawnEnemy('clump', x, y, { cause: -1 });
       if (c < 0) return;
       this.clumpIndex = c; this.clumpGen = e.gen[c];
-      e.hp[c] = e.maxHp[c] = unitHp; e.clumpCount[c] = 1;
+      e.hp[c] = e.maxHp[c] = unitHp; e.clumpCount[c] = 1;   // lint-allow causality: spawn-time (new Clump)
       e.scrapMul[c] = def.scrapMul; e.contact[c] = def.contactDamage; e.speed[c] = def.speed; e.shield[c] = e.maxShield[c] = 0;
       return;
     }
-    e.hp[c] += unitHp; e.maxHp[c] += unitHp;
+    e.hp[c] += unitHp; e.maxHp[c] += unitHp;   // lint-allow causality: a spawn merged into the Clump
     if (e.clumpCount[c] < 65535) e.clumpCount[c]++;
     e.radius[c] = Math.min(40, 12 + Math.sqrt(e.clumpCount[c]) * 2);
   }

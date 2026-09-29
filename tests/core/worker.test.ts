@@ -60,4 +60,28 @@ describe('sim worker', () => {
     expect(of('error').length).toBe(0);
     expect(of('ui').length).toBeGreaterThan(0);
   });
+
+  it('answers every inspector request, even when nothing matches (SimClient pairs replies in order)', () => {
+    posted.length = 0;
+    send({ t: 'inspector', enemyIndex: 9999, gen: 123456 });
+    send({ t: 'inspector', enemyIndex: -1, gen: 0 });
+    const replies = of('inspector');
+    expect(replies.length).toBe(2);
+    expect(replies[0].chain).toEqual([]);
+  });
+
+  it('a save the sim cannot load posts `init: ...` and leaves the worker idle; a later init recovers', () => {
+    posted.length = 0;
+    send({ t: 'init', save: { version: 1 } as never });
+    const errs = of('error');
+    expect(errs.length).toBe(1);
+    expect(errs[0].message).toMatch(/^init: Not a Citadel save/);
+    expect(of('ready').length).toBe(0);
+    send({ t: 'tick_budget', ticks: 5 });   // idle: no crash, nothing posted
+    send({ t: 'inspector', enemyIndex: 0, gen: 0 });
+    expect(of('inspector').length).toBe(1);
+    send({ t: 'init', save: null, seedOverride: 2 });
+    expect(of('ready').length).toBe(1);
+  });
 });
+

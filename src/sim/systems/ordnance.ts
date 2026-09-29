@@ -387,7 +387,7 @@ export class OrdnanceSystem implements System {
     remapArray(this.koOwned, remap, oldCount, w.enemies.count, 0);
   }
 
-  render(w: World, out: InstanceWriter): void {
+  render(_w: World, out: InstanceWriter): void {
     if (!this.on) return;
     for (let j = 0; j < this.sN; j++) {
       const f = this.st[j] / Math.max(1, this.sT[j]);

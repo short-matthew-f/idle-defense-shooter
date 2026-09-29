@@ -12,7 +12,7 @@
  */
 import type {
   AbilityId, AnomalyId, BossId, DoctrineId, ElementId, EliteModifier, EnemyKind, FormationId,
-  FrameId, HardpointId, NodeId, StatusId, TargetingProfile, TreeId, TrialId, WeaponSystemId,
+  FrameId, HardpointId, NodeId, TargetingProfile, TreeId, TrialId, WeaponSystemId,
 } from './ids';
 
 export const TICK_RATE = 60;
@@ -71,8 +71,6 @@ export interface EnemyPool {
   aiA: Float32Array; aiB: Float32Array; aiI: Int32Array;
   /** Formation slot: target position the formation script wants this enemy at. */
   fx: Float32Array; fy: Float32Array;
-  /** Damage bookkeeping for Salvage / Codex: last cause event id. */
-  lastCause: Int32Array;
   /** Count merged into this entity when kind === clump. */
   clumpCount: Uint16Array;
   // --- WP1 additions ------------------------------------------------------
@@ -80,7 +78,14 @@ export interface EnemyPool {
   spawnIdx: Int32Array;
   /** Formation progress in ticks (advances by speedMul each tick; chill slows the script itself). */
   formT: Float32Array;
-  /** Movement multiplier written by the statuses system each tick (chill/frozen/stagger); others may multiply it further. */
+  /**
+   * Movement multiplier: THE slow channel every mover reads (steering, behaviors, boss controllers; targeting 'fastest').
+   * Rule (code-health pass; see ARCHITECTURE.md "Movement speed"): the statuses system RECOMPUTES it every tick, before
+   * the AI, as base × (1 − fieldSlow), where base = 0 if frozenT > 0 or staggerT > 0 (non-boss), else
+   * 1 − min(slowCap, slowPerStack × chill) (half effect on Immovable), and then clears fieldSlow. Only the AI's speed
+   * auras (commanding elites ×1.2, boss haste ×1.5, boss accelerate ×1.6) multiply it afterwards, in the same tick.
+   * Never write it from a plugin: to slow enemies, raise `fieldSlow` (area effects) or apply chill/freeze/stagger.
+   */
   speedMul: Float32Array;
   /** Ticks until this enemy may attack again (contact / ranged). */
   attackT: Uint16Array;
@@ -98,12 +103,19 @@ export interface EnemyPool {
   bleedDps: Float32Array;
   /** 'static' status stacks (Lightning Chain doctrine). */
   staticStacks: Uint8Array; staticT: Uint16Array;
-  /** WP9 addition: fraction of movement removed NEXT tick by area fields (Time Field; 0 = none). Plugins write max(); statuses consumes and clears it. */
+  /**
+   * WP9 addition: fraction of movement removed NEXT tick by area fields: the only slow input plugins write.
+   * Writers use max() (Time Field, Containment Field, the boss Deep Freeze window driven by `bossSlowUntil`);
+   * statuses folds it into speedMul and clears it (see speedMul).
+   */
   fieldSlow: Float32Array;
   // --- WP2 additions (elements, fusions, reactor) ---------------------------
   /** Cryotoxin: poison damage banked while frozen; released ×fusion.cryotoxin on thaw. */
   bankedPoison: Float32Array;
-  /** Tick-stamped lockouts: Deep Freeze (5 s), Thermal Shock (1 s), Flashpoint re-eruption, boss Deep Freeze slow window. */
+  /**
+   * Tick-stamped lockouts: Deep Freeze (5 s), Thermal Shock (1 s), Flashpoint re-eruption, and the boss Deep Freeze
+   * slow window (`bossSlowUntil` is a timer, not a slow: while it runs the elements system raises fieldSlow).
+   */
   freezeLockUntil: Int32Array; thermalUntil: Int32Array; flashUntil: Int32Array; bossSlowUntil: Int32Array;
   /** Synchronization: start tick of the current combo window and the bitmask of weapon systems (SYSTEM_ORDER_IDS index) that hit in it. */
   comboStart: Int32Array; comboMask: Uint8Array;
@@ -495,6 +507,8 @@ export interface RunSave {
   /** WP8 additions (see RunState). */
   plannedHardpoints?: HardpointId[]; plannedAttunements?: ElementId[]; plannedDoctrines?: Partial<Record<TreeId, DoctrineId>>;
   minThreatDial?: number; discountTree?: TreeId | null; checkpointSeconds?: number[];
+  /** Code-health addition: an Anomaly draft offered but not yet picked (restored on load; it was lost before). */
+  pendingDraft?: AnomalyId[];
 }
 
 // ---------------------------------------------------------------------------

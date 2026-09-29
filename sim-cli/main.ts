@@ -5,7 +5,7 @@
  *   npm run sim -- --agents all --policy idle --seeds 1,2 --hours 4 --report --jobs 4
  *   npm run sim -- --agent generalist --chain 3 --report          (Prestige chain)
  *   npm run sim -- --difficulty [--quick]                           (Difficulty Multiplier grid)
- *   npm run sim -- --profile                                        (ticks/second)
+ *   npm run sim -- --profile                                        (ticks/second, incl. a ~900-enemy dense case)
  *
  * Options: --stop-wave W, --dial T, --wall-minutes M, --force-anomaly ID, --doctrine tree.doctrine,
  *          --stop-at-recommendation, --out DIR, --jobs N (parallel processes; default = cores).
@@ -23,6 +23,9 @@ import { aggregateDifficulty, difficultyJobs, difficultyMarkdown, FULL_DIFF, QUI
 import { runAttempt } from './runner';
 import { Sim } from '../src/sim/index';
 import { round } from './metrics';
+import { allNodes } from '../src/sim/core/content';
+import { TAU, cos, sin } from '../src/sim/math/lut';
+import { ARENA_RADIUS } from '../src/sim/core/types';
 
 async function main(): Promise<void> {
   const a = parseArgs(process.argv.slice(2));
@@ -68,7 +71,7 @@ async function main(): Promise<void> {
     jobs.push(chainN ? { kind: 'chain', cfg, n: chainN } : { kind: 'attempt', cfg });
   }
   const t0 = performance.now();
-  const res = await runJobs(jobs, jobsN, (i, r, done) => {
+  const res = await runJobs(jobs, jobsN, (_i, r, done) => {
     const x = r as RunResult | PrestigeChainResult;
     const first = 'runs' in x ? x.runs[x.runs.length - 1] : x;
     console.error(`  [${done}/${jobs.length}] ${'runs' in x ? x.name : first.name}: deepest ${first?.deepestCleared}, attempts ${first?.attempts}, ${first?.stopReason}, ${Math.round(first?.ticksPerSecond ?? 0)} ticks/s`);
@@ -105,8 +108,42 @@ function profile(): void {
   let ticks = 0, maxE = 0;
   t0 = performance.now();
   while (ticks < 60 * 90) { s.step(); ticks++; if (w.enemies.count > maxE) maxE = w.enemies.count; }
-  rows.push(`dense combat (wave 60 swarm, primary only, unkillable tower): ${Math.round(ticks / ((performance.now() - t0) / 1000))} ticks/s, up to ${maxE} enemies`);
+  rows.push(`wave 60, primary only, unkillable tower: ${Math.round(ticks / ((performance.now() - t0) / 1000))} ticks/s, up to ${maxE} enemies`);
+  rows.push(denseProfile());
   console.log(rows.join('\n'));
+}
+
+/**
+ * Near the enemy budget: four hardpoints + three elements (every tree/linkage/infusion/fusion node at
+ * rank 3), wave 60, and the field topped up to ~900 mixed enemies (×30 HP) every half second.
+ * This is the load the Web Worker must sustain at ×8 speed (480 ticks/s).
+ */
+function denseProfile(ticks = 60 * 90): string {
+  const s = new Sim(null, 5);
+  const w = s.world, b = w.build;
+  b.hardpoints = ['ordnance', 'drones', 'laser', 'gravitics'];
+  b.attunements = ['fire', 'lightning', 'poison'];
+  w.run.hardpointSlotsOpen = 4; w.run.attunementSlotsOpen = 3;
+  for (const info of allNodes()) {
+    if (info.group !== 'tree' && info.group !== 'link' && info.group !== 'infuse' && info.group !== 'fusion') continue;
+    if (info.doctrine || info.exotic) continue;
+    b.ranks[info.def.id] = Math.min(info.def.maxRank, 3);
+  }
+  w.stats.override('bastion.max_hp', 1e12);
+  w.rebuildStats(); w.tower.hp = w.tower.maxHp;
+  w.run.checkpoint = 59; s.machine.startAttempt(false);
+  const kinds = ['grunt', 'swarm', 'runner', 'brute', 'shielded', 'healer', 'warden', 'splitter', 'phase', 'jammer'] as const;
+  let maxE = 0;
+  const t0 = performance.now();
+  for (let t = 0; t < ticks; t++) {
+    if (t % 30 === 0 && w.run.phase === 'combat' && w.enemies.count < 900) {
+      for (let k = 0; k < 60; k++) { const a = w.prng.next() * TAU; w.spawnEnemy(kinds[k % kinds.length], cos(a) * ARENA_RADIUS, sin(a) * ARENA_RADIUS, { hpScale: 30, cause: -1 }); }
+    }
+    s.step();
+    if (w.enemies.count > maxE) maxE = w.enemies.count;
+  }
+  const ms = performance.now() - t0;
+  return `dense (4 hardpoints + 3 elements, wave 60, ~900 enemies): ${Math.round(ticks / (ms / 1000))} ticks/s (${(ms / ticks).toFixed(2)} ms/tick), up to ${maxE} enemies, ${w.events.nextId} events`;
 }
 
 main().catch((e) => { console.error(e); process.exit(2); });

@@ -80,6 +80,13 @@ export interface World {
   addHazard(h: Hazard): void;
   damageTower(amount: number, enemy: number, cause: number): void;
   healTower(amount: number, cause: number): void;
+  /**
+   * Integration addition (code-health pass): restore an enemy's HP, capped at max HP. Emits Ev.Heal
+   * (a = enemy, b = amount healed) with `cause` unless `silent` (per-tick regeneration, or callers
+   * that emit one aggregate Heal event). Returns the HP actually restored. The only sanctioned way to
+   * raise enemy HP after spawn (ARCHITECTURE.md rule 2).
+   */
+  healEnemy(enemy: number, amount: number, srcTag: string, cause: number, silent?: boolean): number;
   gainCE(amount: number): void;
   emit(type: number, src: string, a: number, b: number, x: number, y: number, cause: number, data?: SimEvent['data']): number;
   /** Convenience: is the enemy index live and matching the generation. */

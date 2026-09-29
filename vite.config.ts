@@ -38,5 +38,7 @@ export default defineConfig({
   test: {
     include: ['tests/**/*.test.ts', 'src/**/*.test.ts'],
     environment: 'node',
+    // Many sim tests run minutes of simulated combat; 5 s (the default) flaked under load and coverage.
+    testTimeout: 30_000,
   },
 });

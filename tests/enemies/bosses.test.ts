@@ -9,6 +9,7 @@ import type { AbilityId, BossId } from '../../src/sim/core/ids';
 import { ATTACKS, ATTACK_IDS, TELLS } from '../../src/sim/enemies/bosses/registry';
 import { counterHint, bossCtrlOf } from '../../src/sim/enemies/bosses';
 import { cos, sin } from '../../src/sim/math/lut';
+import { expectWithinBudget } from '../core/perf-budget';
 
 const MINUTES_4 = 4 * 60 * 60;
 
@@ -332,6 +333,6 @@ describe('determinism and performance', () => {
     const ms = performance.now() - t0;
     expect(w.enemies.count).toBeGreaterThan(250);
     expect(sim.machine.boss()).toBeGreaterThanOrEqual(0);
-    expect(ms).toBeLessThan(2000);
+    expectWithinBudget(ms, 2000);
   }, 30_000);
 });

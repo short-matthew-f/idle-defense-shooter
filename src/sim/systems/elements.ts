@@ -106,11 +106,11 @@ export class ElementsSystem implements System {
   private ballCause = new Int32Array(MAX_BALLS); private ballN = 0;
   private ring = new Uint16Array(1); private ringSum = 0; private lastArcs = 0;
   private stormUntil = -1; private stormCause = -1;
-  private tagBallistics = 0; private tagFireball = 0; private tagMeteor = 0; private tagGlacial = 0; private tagSunburst = 0;
+  private tagBallistics = 0; private tagFireball = 0; private tagMeteor = 0; private tagGlacial = 0;
 
   init(w: World): void {
     this.tagBallistics = w.tagId('ballistics'); this.tagFireball = w.tagId(TAG.fireball); this.tagMeteor = w.tagId(TAG.meteor);
-    this.tagGlacial = w.tagId(TAG.glacial); this.tagSunburst = w.tagId(TAG.sunburst);
+    this.tagGlacial = w.tagId(TAG.glacial);
     this.rebuild(w);
     this.reset(w);
   }

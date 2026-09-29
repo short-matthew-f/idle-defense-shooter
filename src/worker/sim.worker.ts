@@ -10,6 +10,8 @@
  *  - Fault tolerance: if step() throws, the worker posts `error` (once per distinct failure), keeps
  *    serving the last good snapshot, and on the next tick budget restarts the checkpoint (after
  *    repeated failures: rebuilds the Sim from the last good save), so one bug never freezes the game.
+ *  - A save the Sim cannot load posts `error` with message `init: ...` and leaves the worker idle (no
+ *    fresh game: that would autosave over the player's save). Every `inspector` request gets a reply.
  */
 import { Sim } from '../sim/index';
 import type { FromWorker, RenderSnapshot, SaveState, SimEvent, ToWorker } from '../sim/core/types';
@@ -140,7 +142,13 @@ function recover(): boolean {
 function handle(msg: ToWorker): void {
   switch (msg.t) {
     case 'init':
-      sim = new Sim(msg.save, msg.seedOverride ?? 1);
+      try { sim = new Sim(msg.save, msg.seedOverride ?? 1); }
+      catch (e) {
+        // A save the sim cannot load (corrupt, or from a newer build): report it as `init: ...` and stay
+        // idle. Never fall back to a fresh game here: the next autosave would overwrite the player's save.
+        sim = null; reported.delete(`init:${e instanceof Error ? e.message : String(e)}`); reportError(e, 'init');
+        break;
+      }
       lastEventId = 0; ticksSinceUi = 0; ticksSinceSave = 0;
       faulted = false; recoveries = 0; goodSave = msg.save; goodMeta = null;
       post({ t: 'ready', ui: sim.uiState() });
@@ -167,13 +175,17 @@ function handle(msg: ToWorker): void {
     case 'want_snapshot': postSnapshot(); break;
     case 'want_save': postSave(); break;
     case 'inspector': {
-      if (!sim) break;
-      const id = sim.findDeathEvent(msg.enemyIndex, msg.gen);
-      const r = id >= 0 ? sim.inspect(id) : { chain: [], sentence: '' };
+      // Always answer: SimClient pairs inspector replies with requests in order, so a missing reply
+      // would hand every later chain to the wrong caller.
+      let r: { chain: SimEvent[]; sentence: string } = { chain: [], sentence: '' };
+      try {
+        const id = sim ? sim.findDeathEvent(msg.enemyIndex, msg.gen) : -1;
+        if (sim && id >= 0) r = sim.inspect(id);
+      } catch (e) { reportError(e, 'inspector'); }
       post({ t: 'inspector', chain: r.chain, sentence: r.sentence });
       break;
     }
-    case 'set_clarity': if (sim) sim.world.meta.settings.clarity = msg.value; break;
+    case 'set_clarity': if (sim && Number.isFinite(msg.value)) sim.world.meta.settings.clarity = msg.value; break;
     case 'return_buffer':
       if (freeInstances.length < 4) freeInstances.push(msg.instances);
       if (freeFx.length < 4) freeFx.push(msg.fx);

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Sim } from '../../src/sim/index';
 import { ProjKind } from '../../src/sim/core/types';
 import { cos, sin } from '../../src/sim/math/lut';
+import { expectWithinBudget } from './perf-budget';
 
 describe('performance smoke', () => {
   it('600 ticks with 800 enemies and 2000 projectiles run under 3 s (smoke test)', () => {
@@ -25,6 +26,6 @@ describe('performance smoke', () => {
     const ms = performance.now() - t0;
     expect(w.enemies.count).toBeGreaterThan(700);
     expect(w.projectiles.count).toBeGreaterThan(1000);
-    expect(ms).toBeLessThan(3000);
+    expectWithinBudget(ms, 3000);
   });
 });
