@@ -113,7 +113,46 @@ export function helpPanel(): HTMLElement {
     h('h3', { class: 'sec-title', text: 'About' }),
     h('p', { class: 'dim small', text: 'Project Citadel: an idle tower-defense game where the tower is the character and each Prestige is a new machine. No dailies, no streaks, nothing decays.' }),
     h('p', { class: 'dim small build-id', text: `Build ${BUILD}` }),
-    h('div', { class: 'row gap wrap' }, button('Replay intro', () => maybeOnboard(true), { class: 'btn' }), updateButton()));
+    h('div', { class: 'row gap wrap' }, button('Replay intro', () => maybeOnboard(true), { class: 'btn' }), updateButton()),
+    h('h3', { class: 'sec-title', text: 'Layout diagnostics' }),
+    diagnostics());
+}
+
+/** Viewport, safe-area and bar measurements as the browser reports them (for layout bug reports). */
+function diagnostics(): HTMLElement {
+  const pre = h('pre', { class: 'diag' });
+  const rect = (sel: string): string => {
+    const e = document.querySelector(sel);
+    if (!e) return `${sel}: none`;
+    const b = e.getBoundingClientRect();
+    return `${sel}: top ${b.top.toFixed(0)} bottom ${b.bottom.toFixed(0)} h ${b.height.toFixed(0)} w ${b.width.toFixed(0)}`;
+  };
+  const refresh = (): void => {
+    const cs = getComputedStyle(document.documentElement);
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;top:0;left:0;visibility:hidden;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)';
+    document.body.appendChild(probe);
+    const ps = getComputedStyle(probe);
+    const sat = ps.paddingTop, sab = ps.paddingBottom;
+    probe.remove();
+    const vv = window.visualViewport;
+    const nav = navigator as Navigator & { standalone?: boolean };
+    pre.textContent = [
+      `build ${BUILD}`,
+      `inner ${innerWidth}×${innerHeight}  outer ${outerWidth}×${outerHeight}  dpr ${devicePixelRatio}`,
+      `screen ${screen.width}×${screen.height}  avail ${screen.availWidth}×${screen.availHeight}`,
+      `visualViewport ${vv ? `${vv.width.toFixed(0)}×${vv.height.toFixed(0)} off ${vv.offsetTop.toFixed(0)} scale ${vv.scale}` : 'n/a'}`,
+      `html client ${document.documentElement.clientWidth}×${document.documentElement.clientHeight}  body h ${document.body.getBoundingClientRect().height.toFixed(0)}`,
+      `safe-area top ${sat} bottom ${sab}  vars --safe-top ${cs.getPropertyValue('--safe-top').trim()} --top-h ${cs.getPropertyValue('--top-h').trim()} --tab-h ${cs.getPropertyValue('--tab-h').trim()}`,
+      `standalone ${String(nav.standalone)}  display-mode ${matchMedia('(display-mode: standalone)').matches ? 'standalone' : 'browser'}`,
+      rect('#app'), rect('#ui'), rect('.topbar'), rect('.wave-num'), rect('.battle-layer'), rect('.tabbar'),
+      `body classes ${document.body.className}`,
+      navigator.userAgent,
+    ].join('\n');
+  };
+  refresh();
+  window.addEventListener('resize', refresh);
+  return h('div', null, pre, h('div', { class: 'row gap wrap' }, button('Refresh', refresh, { class: 'btn' }), button('Copy', () => { void navigator.clipboard?.writeText(pre.textContent ?? ''); }, { class: 'btn' })));
 }
 
 /** "Check for updates": asks the service worker for a newer build and reports what happened. */
