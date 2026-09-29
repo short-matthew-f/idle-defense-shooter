@@ -11,7 +11,7 @@
 /* ---------------------------------------------------------------- tab bar */
 .tabbar {
   position: absolute; z-index: 9; display: flex; align-items: stretch;
-  background: rgba(11, 14, 20, 0.97); backdrop-filter: blur(10px);
+  background: var(--bg);
 }
 .tab-btn {
   position: relative; flex: 1 1 0; min-width: 0; min-height: 56px; padding: 6px 2px 4px; margin: 0;
@@ -105,10 +105,11 @@ body.shell-desktop.panel-closed .battle-layer { right: 0; }
 body.shell-phone:not(.tab-battle) :is(.topbar, .battle-layer), body.shell-rail:not(.tab-battle) :is(.topbar, .battle-layer) { visibility: hidden; }
 
 .arena-top {
-  position: absolute; top: 8px; left: calc(var(--safe-left) + 12px); right: calc(var(--safe-right) + 12px);
+  /* bottom keeps the column clear of the abilities and gives the death card a definite height to scroll within */
+  position: absolute; top: 8px; left: calc(var(--safe-left) + 12px); right: calc(var(--safe-right) + 12px); bottom: 150px;
   display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none;
 }
-body.shell-rail .arena-top { left: 12px; }
+body.shell-rail .arena-top { left: 12px; bottom: 12px; }
 .arena-top > .boss-bar { align-self: stretch; }
 .arena-top > .death-card { align-self: center; }
 

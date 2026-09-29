@@ -27,12 +27,11 @@ html, body {
   -webkit-touch-callout: none;
 }
 
+/* Sized by inset alone: on iOS home-screen apps with a translucent status bar, 100vh/100dvh
+   come up short by the status-bar height, which left a gap under the tab bar. */
 #app {
   position: fixed;
   inset: 0;
-  width: 100vw;
-  height: 100vh;
-  height: 100dvh;
   overflow: hidden;
   background: var(--bg);
 }

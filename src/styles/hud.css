@@ -2,8 +2,10 @@
 .topbar {
   display: flex; flex-direction: column; gap: 6px;
   padding: calc(var(--safe-top) + 6px) calc(var(--safe-right) + 12px) 0 calc(var(--safe-left) + 12px);
-  background: linear-gradient(180deg, rgba(11, 14, 20, 0.96), rgba(11, 14, 20, 0.86));
-  border-bottom: 1px solid var(--line); backdrop-filter: blur(6px);
+  /* Opaque, no backdrop blur: a blur under the status bar smeared the arena glow into a haze and
+     softened the text on iOS. The arena starts below the bar, so nothing is hidden. */
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
 }
 body.shell-rail .topbar { padding-left: 12px; }
 .tb-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
