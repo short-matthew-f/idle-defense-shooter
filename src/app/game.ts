@@ -15,7 +15,7 @@ import { nearestEnemy, tapReach } from './pick';
 import { FieldOverlay } from './overlay';
 import type { Command } from '@sim/core/types';
 import { clearSave, exportToString, importFromString, loadSave, parkSave, storeSave } from './storage';
-import { canInstall, initInstallPrompt, promptInstall } from './pwa';
+import { canInstall, initInstallPrompt, promptInstall, onUpdateReady } from './pwa';
 import { GameUi } from '@ui/index';
 import { prefs, resetPrefs } from '@ui/prefs';
 import { offlineEstimate } from '@ui/format';
@@ -25,6 +25,7 @@ import type { RenderApp } from './main';
 const AUTOSAVE_MS = 30_000;
 const UI_MIN_INTERVAL_MS = 100;
 const AIM_INTERVAL_MS = 50;
+const UPDATE_APPLY_MAX_WAIT_MS = 30_000;
 
 export interface Game {
   client: SimClient; ui: GameUi; readonly paused: boolean; readonly ready: boolean; latestUi(): UiState | null;
@@ -208,6 +209,23 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
     }
   });
   window.addEventListener('pagehide', () => { if (ready) client.requestSave(); });
+  // New version installed: reload at a quiet moment (between waves, or after 30 s at most), after saving.
+  onUpdateReady((apply) => {
+    ui.toast('A new version is ready; it installs between waves.', 'info');
+    const started = Date.now();
+    let applying = false;
+    const tryApply = (): void => {
+      if (applying) return;
+      const phase = latestUi?.run.phase;
+      const quiet = !ready || phase === 'between' || phase === 'dead' || phase === 'wave_clear';
+      if (!quiet && Date.now() - started < UPDATE_APPLY_MAX_WAIT_MS) { window.setTimeout(tryApply, 1000); return; }
+      applying = true;
+      const go = (): void => { void apply(); };
+      if (ready) client.requestSave().then((s) => { s.savedAtMs = Date.now(); return storeSave(s); }).then(go, go);
+      else go();
+    };
+    tryApply();
+  });
   window.setInterval(() => { if (ready && !document.hidden) client.requestSave(); }, AUTOSAVE_MS);
 
   // ---------------------------------------------------------------- input

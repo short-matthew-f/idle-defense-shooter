@@ -1,10 +1,19 @@
 import { defineConfig } from 'vite';
 import { fileURLToPath, URL } from 'node:url';
 import { VitePWA } from 'vite-plugin-pwa';
+import { execSync } from 'node:child_process';
+
+/** Short commit hash plus build date, shown in Help → About so a player can tell which version they run. */
+function buildId(): string {
+  let hash = 'dev';
+  try { hash = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() || 'dev'; } catch { /* no git */ }
+  return `${hash} · ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+}
 
 // Base path: GitHub Pages serves the repo at /idle-defense-shooter/.
 export default defineConfig({
   base: process.env.CITADEL_BASE ?? '/idle-defense-shooter/',
+  define: { __BUILD__: JSON.stringify(buildId()) },
   resolve: {
     alias: {
       '@sim': fileURLToPath(new URL('./src/sim', import.meta.url)),
@@ -17,7 +26,8 @@ export default defineConfig({
   build: { target: 'es2022', sourcemap: true },
   plugins: [
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt': the app decides when to reload (between waves, after a save) instead of mid-combat.
+      registerType: 'prompt',
       includeAssets: ['icons/*.png', 'icons/*.svg'],
       manifest: {
         name: 'Project Citadel',

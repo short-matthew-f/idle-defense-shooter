@@ -4,6 +4,7 @@
  * replay the intro, about.
  */
 import '../styles/settings.css';
+import { BUILD, checkForUpdate } from '@app/pwa';
 import type { UiState } from '@sim/core/types';
 import { button, h } from './dom';
 import { icon } from './icons';
@@ -111,5 +112,20 @@ export function helpPanel(): HTMLElement {
     h('dl', { class: 'keys' }, ...SHORTCUTS.flatMap(([k, d]) => [h('dt', null, h('kbd', { text: k })), h('dd', { text: d })])),
     h('h3', { class: 'sec-title', text: 'About' }),
     h('p', { class: 'dim small', text: 'Project Citadel: an idle tower-defense game where the tower is the character and each Prestige is a new machine. No dailies, no streaks, nothing decays.' }),
-    h('div', { class: 'row gap wrap' }, button('Replay intro', () => maybeOnboard(true), { class: 'btn' })));
+    h('p', { class: 'dim small build-id', text: `Build ${BUILD}` }),
+    h('div', { class: 'row gap wrap' }, button('Replay intro', () => maybeOnboard(true), { class: 'btn' }), updateButton()));
+}
+
+/** "Check for updates": asks the service worker for a newer build and reports what happened. */
+function updateButton(): HTMLElement {
+  const status = h('span', { class: 'dim small' });
+  const btn = button('Check for updates', async () => {
+    btn.disabled = true; status.textContent = 'Checking…';
+    const r = await checkForUpdate();
+    status.textContent = r === 'waiting' || r === 'checking' ? 'Update found: it installs between waves.'
+      : r === 'none' ? 'You have the latest version.'
+      : 'Updates are checked when installed from the home screen or served over https.';
+    btn.disabled = false;
+  }, { class: 'btn' });
+  return h('span', { class: 'row gap' }, btn, status);
 }
