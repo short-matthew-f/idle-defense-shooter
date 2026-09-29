@@ -66,8 +66,10 @@ export function clear(el: Element): void { while (el.firstChild) el.removeChild(
  * Press-and-hold repeat for Buy buttons (gesture rules in hold.ts): mouse fires on press and repeats
  * after 380 ms, speeding up; touch fires on a tap, repeats only after holding still, and never fires
  * when the finger scrolls the list. Keyboard activation (click with detail 0) fires once.
+ * `canRepeat` (checked at each fire) turns the repeat off, e.g. for ×10 / Max bulk buys: a press
+ * then fires exactly once (mouse on press, touch on tap or after holding still).
  */
-export function holdRepeat(btn: HTMLButtonElement, fire: () => void): void {
+export function holdRepeat(btn: HTMLButtonElement, fire: () => void, canRepeat?: () => boolean): void {
   const g = new HoldGesture();
   let timer = 0;
   const clearTimer = (): void => { if (timer) { clearTimeout(timer); timer = 0; } };
@@ -79,7 +81,10 @@ export function holdRepeat(btn: HTMLButtonElement, fire: () => void): void {
     clearTimer();
     if (a.kind === 'stop') { detach(); return; }
     if (a.kind === 'none') return;
-    if (a.kind === 'fire') fire();
+    if (a.kind === 'fire') {
+      fire();
+      if (canRepeat && !canRepeat()) { run(g.stop()); return; }
+    }
     // The button may be re-rendered or removed while held (e.g. a quick-buy chip that became unaffordable):
     // without a pointerup it would repeat forever, so each tick checks it is still connected and enabled.
     timer = window.setTimeout(() => run(g.tick(btn.isConnected && !btn.disabled)), a.next);

@@ -4,7 +4,7 @@ import { damageSourceName, deathHeadline, killerName, topDamageSource, entryValu
 import { tellPrompt } from '../../src/ui/hud';
 
 const entry = (node: string, cost: number, extra: Partial<ShopEntry> = {}): ShopEntry => ({
-  node, tree: node.split('.')[0] as ShopEntry['tree'], name: node, desc: '', rank: 0, maxRank: 10, cost, currency: 'scrap', affordable: false, kind: 'stat', tier: 0, ...extra,
+  node, tree: node.split('.')[0] as ShopEntry['tree'], name: node, desc: '', rank: 0, maxRank: 10, cost, currency: 'scrap', affordable: false, kind: 'stat', tier: 0, nextCosts: [cost], affordableRanks: 0, affordableTotal: 0, ...extra,
 });
 
 function state(shop: ShopEntry[], scrap: number, extra: Partial<AdviceState['run']> = {}, build: Partial<AdviceState['build']> = {}): AdviceState {

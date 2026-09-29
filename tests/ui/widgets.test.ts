@@ -10,7 +10,7 @@ import { layoutStars } from '../../src/ui/constellation';
 import { STAR_NODES } from '../../src/sim/data/index';
 
 const entry = (node: string, cost: number, extra: Partial<ShopEntry> = {}): ShopEntry => ({
-  node, tree: 'ballistics', name: node, desc: '', rank: 0, maxRank: 10, cost, currency: 'scrap', affordable: true, kind: 'stat', tier: 0, ...extra,
+  node, tree: 'ballistics', name: node, desc: '', rank: 0, maxRank: 10, cost, currency: 'scrap', affordable: true, kind: 'stat', tier: 0, nextCosts: [cost], affordableRanks: 0, affordableTotal: 0, ...extra,
 });
 
 describe('UI widgets (pure parts)', () => {

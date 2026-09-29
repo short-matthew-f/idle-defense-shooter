@@ -5,7 +5,8 @@
 //                     IndexedDB save, import the export back (reload restores the run)
 //   phone 390×844     (touch) the five tabs, badges, status strip → Battle, browser Back → Battle,
 //                     More → sub-screen → Back → More → Back → Battle, render pause off Battle, arena share,
-//                     nothing under the tab bar, quick buy by tap on the Upgrades screen
+//                     nothing under the tab bar, quick buy by tap on the Upgrades screen, bulk buy
+//                     (quantity Max + Ballistics "Spend here")
 // Exit code 1 on any failed check.
 //
 // Environment: PLAYWRIGHT_DIR (a directory holding the `playwright` package; default: the global npm root),
@@ -272,6 +273,25 @@ async function phone() {
   const sum = (u) => Object.values(u.ranks).reduce((a, b) => a + b, 0);
   check('phone: quick chip buys by tap', !(await chip.count()) || sum(r1) > sum(r0), { before: sum(r0), after: sum(r1) });
   await page.screenshot({ path: `${OUT}/phone-upgrades.png` });
+
+  // bulk buying: quantity Max, then "Spend here" on Ballistics buys the cheapest ranks there until the Scrap runs out
+  await page.locator('.screen.s-upgrades .qty-opt', { hasText: 'Max' }).tap();
+  await page.locator('.screen.s-upgrades .tree-chip', { hasText: 'Ballistics' }).tap();
+  await page.waitForTimeout(300);
+  const spend = page.locator('.screen.s-upgrades .spend-btn').first();
+  await page.evaluate(() => window.__citadel.game.setFast(8));
+  for (let k = 0; k < 120 && await spend.isDisabled(); k++) await page.waitForTimeout(250);
+  await page.evaluate(() => window.__citadel.game.setFast(1));
+  await page.waitForTimeout(300);
+  const spendLabel = ((await spend.textContent()) ?? '').trim();
+  const b0 = await uiOf(page);
+  const bal = (u) => Object.entries(u.ranks).filter(([k]) => k.startsWith('ballistics.')).reduce((a, [, v]) => a + v, 0);
+  await spend.tap();
+  await page.waitForTimeout(900);
+  const b1 = await uiOf(page);
+  await page.screenshot({ path: `${OUT}/phone-upgrades-spend-max.png` });
+  check('phone: Max + Spend here (Ballistics) spends Scrap and raises ranks', /Max ×\d+/.test(spendLabel) && b1.scrap < b0.scrap && bal(b1) > bal(b0), { spendLabel, scrap: [b0.scrap, b1.scrap], ranks: [bal(b0), bal(b1)] });
+  await page.locator('.screen.s-upgrades .qty-opt').first().tap();   // back to ×1
 
   for (const id of ['build', 'prestige', 'more']) {
     await tab(page, id);

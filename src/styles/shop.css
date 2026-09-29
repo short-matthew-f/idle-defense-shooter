@@ -1,26 +1,71 @@
-/* Upgrades screen: pinned quick buys, category segmented control, tree chips, a roomy scrolling list. */
+/* Upgrades screen: pinned Suggested card, category segmented control, tree chips, a roomy scrolling list. */
 
-/* quick buys: one horizontally scrolling row; the right edge fades so more chips read as "scroll" */
-.quick {
-  flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 40px 10px var(--gutter);
-  overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
-  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent);
-  mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent);
+/* Suggested card: header (chevron + title, Buy all), a first-run explainer, then the chips in one
+   horizontally scrolling row whose right edge fades so more chips read as "scroll" */
+.quick.suggest {
+  flex: none; margin: 8px var(--gutter) 10px; padding: 2px 0 10px; min-width: 0;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px;
 }
-.quick-label { display: none; }
+.quick.suggest.collapsed { padding-bottom: 2px; }
+/* narrow side columns (landscape rail, desktop panel): Buy all wraps under the title instead of squeezing it */
+.sg-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 0 6px 0 2px; min-width: 0; }
+.btn.sg-toggle { flex: 1 0 auto; justify-content: flex-start; gap: 8px; padding: 0 8px; font-size: 15px; font-weight: 700; color: var(--text); }
+.btn.sg-toggle:hover:not(:disabled) { background: transparent; }
+.sg-chev { flex: none; color: var(--text-dim); transition: transform 0.15s; }
+.suggest.collapsed .sg-chev { transform: rotate(-90deg); }
+.sg-count { font-size: 14px; font-weight: 600; color: var(--text-dim); }
+.btn.sg-buyall {
+  flex: none; margin-left: auto; max-width: 100%; min-height: var(--touch); padding: 0 12px; font-size: 14px; gap: 6px;
+  border-color: var(--accent); background: color-mix(in srgb, var(--accent) 20%, var(--bg-3));
+}
+.btn.sg-buyall .price { color: var(--text); font-weight: 700; }
+.sg-explain { margin: 0 12px 8px; font-size: 14px; line-height: 1.35; color: var(--text-dim); }
+.suggest.collapsed .sg-explain, .suggest.collapsed .sg-body { display: none; }
+.sg-body {
+  display: flex; align-items: center; gap: 8px; padding: 0 36px 0 12px; min-width: 0;
+  overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
+}
+.sg-body::-webkit-scrollbar { display: none; }
 .quick-row { display: flex; gap: 8px; flex: none; }
 .quick.empty .quick-row::after { content: 'Nothing affordable yet'; font-size: 14px; color: var(--text-faint); white-space: nowrap; line-height: var(--touch); }
-.chip.quick { border-color: color-mix(in srgb, var(--accent) 60%, var(--line-2)); gap: 8px; padding: 0 14px; }
+.chip.quick { gap: 6px; padding: 0 14px; }
 .chip.quick .price { color: var(--text); font-weight: 700; }
 .qc-name { max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
+.qc-rank { font-size: 14px; font-weight: 500; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.qc-rank:empty { display: none; }
+.qc-count { font-size: 14px; font-weight: 700; color: var(--accent); }
+/* first-run hint: a calm accent outline on the cheapest chip (no pulsing) */
+.quick-row.coach .chip.quick:first-child { border-color: var(--accent); }
 .quick-row.slots:empty { display: none; }
 .btn.chip.slot-chip { border-style: dashed; border-color: var(--accent); color: var(--accent); }
-.quick-coach { flex: none; font-size: 14px; font-weight: 700; color: var(--accent); white-space: nowrap; }
-.quick-row.coach .chip.quick:first-child { animation: pulse 1.6s infinite; --warn: var(--accent); }
 .btn.chip.next-chip { border-style: dashed; color: var(--text-dim); font-weight: 600; }
 .next-chip .qc-next { font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); }
 .next-chip .qc-eta { font-size: 14px; color: var(--text-dim); font-weight: 400; }
 .next-chip .qc-eta:empty { display: none; }
+
+/* toolbar: quantity selector (×1 · ×10 · Max) and the sort toggle */
+.shop-tools { flex: none; display: flex; align-items: center; gap: 8px; padding: 0 var(--gutter) 10px; }
+.qty-label { font-size: 14px; color: var(--text-dim); }
+.qty-seg { display: flex; gap: 2px; padding: 2px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; }
+.qty-opt {
+  min-height: var(--touch); min-width: 52px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent;
+  color: var(--text-dim); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; touch-action: manipulation;
+}
+.qty-opt.on { background: color-mix(in srgb, var(--accent) 24%, var(--bg-4)); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent); }
+.tools-gap { flex: 1; }
+
+/* section head with the per-tree "Spend here" button */
+.sec-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
+.sec-head .sec-title { flex: 1 1 auto; min-width: 0; }
+.btn.spend-btn {
+  flex: none; flex-direction: column; align-items: flex-end; justify-content: center; gap: 0; min-height: 48px; max-width: 190px;
+  margin: 12px 0 6px; padding: 3px 12px; line-height: 1.2; border-color: color-mix(in srgb, var(--accent) 55%, var(--line-2));
+}
+.spend-title { font-size: 14px; font-weight: 700; }
+.spend-line { font-size: 14px; font-weight: 600; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.btn.spend-btn:not(:disabled) .spend-line { color: var(--scrap); }
 
 .shop { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .shop-side { flex: none; display: flex; flex-direction: column; min-width: 0; }
@@ -31,6 +76,7 @@ body.shell-rail .cat-tabs { flex-wrap: wrap; }
 body.shell-rail .cat-tabs .tab { flex: 1 1 30%; }
 body.shell-rail .tree-chips { flex-wrap: wrap; }
 body.shell-rail .shop-sub { align-items: flex-start; }
+body.shell-rail .shop-tools { flex-wrap: wrap; }
 body.shell-rail .shop-body { border-top: 0; }
 .shop-head { flex: none; padding: 0 var(--gutter) 8px; }
 /* the five categories as a segmented control (widths follow the labels so "Hardpoints" fits at 360 px) */
@@ -62,7 +108,11 @@ body.shell-rail .shop-body { border-top: 0; }
 .node.k-mechanic .node-name, .node.t3 .node-name { color: color-mix(in srgb, var(--accent) 70%, var(--text)); }
 .node.maxed .node-name { color: var(--ok); }
 .node.maxed .btn.buy { opacity: 0.7; }
-.btn.buy { min-width: 96px; min-height: 44px; justify-content: flex-end; padding: 0 14px; font-size: 15px; }
+.btn.buy { min-width: 96px; max-width: 132px; min-height: 44px; justify-content: flex-end; padding: 0 14px; font-size: 15px; }
+/* ×10 / Max: the count on a small first line, the price below */
+.btn.buy.bulk { flex-direction: column; align-items: flex-end; justify-content: center; gap: 0; min-height: 48px; padding: 3px 12px; line-height: 1.2; }
+.buy-count { font-size: 14px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+.btn.buy:disabled .buy-count { color: var(--text-dim); }
 .btn.buy:disabled { opacity: 0.62; }
 .node.affordable .btn.buy { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 20%, var(--bg-3)); }
 .shop-section:first-child .sec-title { margin-top: 12px; }

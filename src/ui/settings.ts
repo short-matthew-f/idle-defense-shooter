@@ -20,6 +20,7 @@ export const SHORTCUTS: [string, string][] = [
   ['P', 'Toggle Push / Patrol'],
   ['B', 'Upgrades (phone) · show or hide the side panel (desktop)'],
   ['F', 'Prestige Forecast'],
+  ['Q', 'Buy quantity: ×1 → ×10 → Max (Upgrades)'],
 ];
 
 export const GESTURES: [string, string][] = [

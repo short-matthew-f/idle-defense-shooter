@@ -4,12 +4,16 @@
  * Elements / Hardpoints list attuned / mounted trees plus empty slots (picker → attune /
  * mount_hardpoint). Cross: Fusions, Linkages, Infusions. Cores: Exotics, Refit, Doctrine change.
  * Prices and affordability update in place from `ui.shop`; rows are rebuilt only when the set of
- * visible nodes changes. `quickChips` renders the 3 cheapest affordable buys (combat panel).
+ * visible nodes changes. The Suggested card on top shows the 3 cheapest affordable buys with a
+ * "Buy all" button; the quantity selector (×1 · ×10 · Max, Q) drives every Buy button, the
+ * suggestion chips, Buy all and each tree's "Spend here" (bulk.ts has the pure planning).
  */
 import '../styles/shop.css';
 import type { DoctrineId, ElementId, HardpointId, TreeId } from '@sim/core/ids';
-import type { ShopEntry, UiState } from '@sim/core/types';
+import { Ev, type ShopEntry, type SimEvent, type UiState } from '@sim/core/types';
+import { inBulkTree } from '@sim/economy/bulk';
 import { button, h, holdRepeat, text, disable, show, attr, Keyed, clear } from './dom';
+import { BUY_QTYS, buyLabel, buyLabelText, bulkToast, nextQty, parseQty, planBuyAll, qtyLabel, spendLabel, treeSpend, type BuyLabel, type BuyQty } from './bulk';
 import { icon } from './icons';
 import { fmtDuration, fmtNum, substituteDesc, titleCase } from './format';
 import { nextPurchase, openSlots } from './advice';
@@ -35,8 +39,13 @@ export function cheapestAffordable(shop: readonly ShopEntry[], n = 3): ShopEntry
     .sort((a, b) => a.cost - b.cost || (a.node < b.node ? -1 : 1)).slice(0, n);
 }
 
-function costLabel(e: ShopEntry): HTMLElement {
-  return h('span', { class: `price ${e.currency}` }, icon(e.currency === 'cores' ? 'cores' : 'scrap', 'ico tiny'), fmtNum(e.cost));
+/** Fill a Buy button's two parts: the small count line ("×10", "Max ×7"; hidden for one rank) and the price. */
+function paintBuy(countEl: HTMLElement, price: HTMLElement, l: BuyLabel, currency: ShopEntry['currency']): void {
+  text(countEl, l.count ?? '');
+  show(countEl, !!l.count);
+  const key = `${currency}|${l.price}`;
+  if (price.dataset.v !== key) { price.dataset.v = key; price.replaceChildren(icon(currency === 'cores' ? 'cores' : 'scrap', 'ico tiny'), fmtNum(l.price)); }
+  price.className = `price ${currency}`;
 }
 
 class NodeRow {
@@ -46,23 +55,23 @@ class NodeRow {
   private readonly desc = h('p', { class: 'node-desc' });
   private readonly lock = h('p', { class: 'node-lock' });
   private readonly btn: HTMLButtonElement;
+  private readonly bcount = h('span', { class: 'buy-count' });
   private readonly price = h('span', { class: 'price' });
-  private readonly priceIco = h('span');
-  private readonly priceVal = h('span');
   private lastKey = '';
   entry: ShopEntry;
-  constructor(entry: ShopEntry, send: (id: string) => void) {
+  constructor(entry: ShopEntry, send: (e: ShopEntry, count: number) => void, private readonly qty: () => BuyQty) {
     this.entry = entry;
-    this.price.append(this.priceIco, this.priceVal);
-    this.btn = h('button', { type: 'button', class: 'btn buy' }, this.price);
-    holdRepeat(this.btn, () => send(this.entry.node));
+    this.btn = h('button', { type: 'button', class: 'btn buy' }, this.bcount, this.price);
+    // hold-to-repeat only at ×1; a ×10 / Max press buys once
+    holdRepeat(this.btn, () => { const l = buyLabel(this.entry, this.qty()); if (l.send !== null) send(this.entry, l.send); }, () => this.qty() === 1);
     this.el = h('div', { class: 'node', data: { node: entry.node } },
       h('div', { class: 'node-main' }, h('div', { class: 'node-head' }, this.name, this.rank), this.desc, this.lock), this.btn);
     this.update(entry);
   }
   update(e: ShopEntry): void {
     this.entry = e;
-    const key = `${e.rank}|${e.maxRank}|${e.cost}|${e.affordable}|${e.locked ?? ''}|${e.currency}`;
+    const q = this.qty();
+    const key = `${e.rank}|${e.maxRank}|${e.cost}|${e.affordable}|${e.locked ?? ''}|${e.currency}|${q}|${e.affordableRanks}|${e.affordableTotal}`;
     if (key === this.lastKey) return;
     const first = this.lastKey === '';
     this.lastKey = key;
@@ -80,17 +89,20 @@ class NodeRow {
     this.el.classList.toggle('locked', !!e.locked && !maxed);
     text(this.lock, e.locked && !maxed ? e.locked : '');
     show(this.lock, !!e.locked && !maxed);
-    if (maxed) { this.priceIco.replaceChildren(icon('check', 'ico tiny')); text(this.priceVal, 'Max'); }
-    else { this.priceIco.replaceChildren(icon(e.currency === 'cores' ? 'cores' : 'scrap', 'ico tiny')); text(this.priceVal, fmtNum(e.cost)); }
-    this.price.className = `price ${e.currency}`;
-    disable(this.btn, maxed || !!e.locked || !e.affordable);
-    attr(this.btn, 'aria-label', maxed ? `${e.name}: max rank` : `Buy ${e.name} for ${fmtNum(e.cost)} ${e.currency === 'cores' ? 'Cores' : 'Scrap'}${e.locked ? ` (locked: ${e.locked})` : e.affordable ? '' : ' (not enough)'}`);
-    this.btn.title = e.locked ?? (e.affordable ? 'Hold to buy repeatedly' : `Need ${fmtNum(e.cost)} ${e.currency === 'cores' ? 'Cores' : 'Scrap'}`);
+    const l = buyLabel(e, q);
+    const cur = e.currency === 'cores' ? 'Cores' : 'Scrap';
+    this.btn.classList.toggle('bulk', !!l.count && !maxed);
+    if (maxed) { show(this.bcount, false); this.price.dataset.v = 'max'; this.price.replaceChildren(icon('check', 'ico tiny'), 'Max'); this.price.className = `price ${e.currency}`; }
+    else paintBuy(this.bcount, this.price, l, e.currency);
+    disable(this.btn, maxed || !!e.locked || l.disabled);
+    const what = l.count ? `${l.count.replace('×', '')} ranks of ${e.name}` : e.name;
+    attr(this.btn, 'aria-label', maxed ? `${e.name}: max rank` : `Buy ${what} for ${fmtNum(l.price)} ${cur}${e.locked ? ` (locked: ${e.locked})` : l.disabled ? ' (not enough)' : ''}`);
+    this.btn.title = e.locked ?? (l.disabled ? `Need ${fmtNum(l.price)} ${cur}` : q === 1 ? 'Hold to buy repeatedly' : `Buy ${buyLabelText(l)} ${cur}`);
   }
 }
 
 type Item =
-  | { t: 'head'; text: string; sub?: string }
+  | { t: 'head'; text: string; sub?: string; /** bulk-tree key for a "Spend here" button */ spend?: string }
   | { t: 'node'; e: ShopEntry }
   | { t: 'note'; text: string }
   | { t: 'fork'; tree: TreeId }
@@ -113,14 +125,26 @@ export class Shop {
   private readonly nextEta = h('span', { class: 'qc-eta' });
   private nextTree = '';
   private readonly doneChip: HTMLButtonElement;
-  private readonly coach = h('span', { class: 'quick-coach', text: 'Tap to buy', title: 'Tap to buy one rank; hold to keep buying' });
+  /** First-run explainer (the old "Tap to buy" coach; retires after COACH_BUYS purchases). */
+  private readonly coach = h('p', { class: 'quick-coach sg-explain', text: 'Cheapest upgrades your Scrap buys right now. Tap one to buy it.' });
+  private readonly sgToggle: HTMLButtonElement;
+  private readonly sgCount = h('span', { class: 'sg-count' });
+  private readonly buyAll: HTMLButtonElement;
+  private readonly buyAllText = h('span', { class: 'sg-buyall-text' });
+  private readonly buyAllPrice = h('span', { class: 'price scrap' });
+  private readonly qtyBtns = new Map<BuyQty, HTMLButtonElement>();
+  private readonly qtySeg = h('div', { class: 'qty-seg', attrs: { role: 'radiogroup', 'aria-label': 'Buy quantity (Q)' } });
+  /** The open tree's "Spend here" button (rebuilt with the view, relabelled every update). */
+  private spend: { tree: string; name: string; btn: HTMLButtonElement; line: HTMLSpanElement; key: string } | null = null;
+  /** A bulk buy in flight: its Purchase events are summed into one toast. */
+  private pendingBulk: { where: string | null; until: number; events: SimEvent[]; timer: number } | null = null;
   /** Bring the Upgrades screen forward when a chip, the death card or the Build screen jumps to a tree (GameUi wires it). */
   onReveal: (() => void) | null = null;
   private readonly sortBtn: HTMLButtonElement;
   private readonly catBtns = new Map<Category, { b: HTMLButtonElement; n: HTMLSpanElement }>();
   private treeBtns = new Map<string, { b: HTMLButtonElement; n: HTMLSpanElement }>();
   private readonly rows = new Map<string, NodeRow>();
-  private readonly quickList: Keyed<ShopEntry, { el: HTMLButtonElement; label: HTMLSpanElement; price: HTMLSpanElement; node: string; key: string }>;
+  private readonly quickList: Keyed<ShopEntry, { el: HTMLButtonElement; label: HTMLSpanElement; rank: HTMLSpanElement; count: HTMLSpanElement; price: HTMLSpanElement; entry: ShopEntry; key: string }>;
   private cat: Category;
   private tree: string;
   private chipKey = '';
@@ -148,29 +172,119 @@ export class Shop {
     this.syncSort();
     this.quickList = new Keyed(this.quickRow, (e) => {
       const label = h('span', { class: 'qc-name' });
+      const rank = h('span', { class: 'qc-rank' });
+      const count = h('span', { class: 'qc-count' });
       const price = h('span', { class: 'price scrap' });
-      const row = { el: h('button', { type: 'button', class: 'btn chip quick' }, label, price), label, price, node: e.node, key: '' };
-      holdRepeat(row.el, () => this.ctx.host.send({ type: 'buy', node: row.node }));
+      const row = { el: h('button', { type: 'button', class: 'btn chip quick' }, label, rank, count, price), label, rank, count, price, entry: e, key: '' };
+      holdRepeat(row.el, () => { const l = buyLabel(row.entry, this.qty); if (l.send !== null) this.sendBuy(row.entry, l.send); }, () => this.qty === 1);
       return row;
     }, (r, e) => {
-      r.node = e.node;
-      const key = `${e.rank}|${e.cost}`;
+      r.entry = e;
+      const key = `${e.rank}|${e.cost}|${this.qty}|${e.affordableRanks}|${e.affordableTotal}`;
       if (key === r.key) return;
       r.key = key;
-      text(r.label, e.rank > 0 && e.maxRank > 1 ? `${e.name} ${e.rank + 1}` : e.name);
-      r.price.replaceChildren(icon('scrap', 'ico tiny'), fmtNum(e.cost));
-      attr(r.el, 'aria-label', `Quick buy ${e.name} for ${fmtNum(e.cost)} Scrap`);
+      const l = buyLabel(e, this.qty);
+      text(r.label, e.name);
+      text(r.rank, e.maxRank > 1 ? `rank ${e.rank + 1}` : '');
+      paintBuy(r.count, r.price, l, 'scrap');
+      attr(r.el, 'aria-label', `Buy ${l.count ? `${l.count.replace('×', '')} ranks of ` : ''}${e.name}${e.maxRank > 1 ? ` (rank ${e.rank + 1} of ${e.maxRank})` : ''} for ${fmtNum(l.price)} Scrap`);
     });
     this.nextChip = button([h('span', { class: 'qc-next', text: 'Next' }), this.nextLabel, this.nextPrice, this.nextEta], () => this.jumpTo(this.nextTree), { class: 'btn chip next-chip' });
     this.doneChip = button([icon('forecast', 'ico tiny'), 'All owned: see the Forecast'], () => this.ctx.open('forecast'), { class: 'btn chip next-chip done-chip' });
     this.doneChip.hidden = true;
-    this.quick = h('div', { class: 'quick' }, h('span', { class: 'quick-label', text: 'Quick buys' }), this.coach, this.slotRow, this.quickRow, this.nextChip, this.doneChip);
-    // quick buys, categories and tree chips stay pinned (a side column on a landscape phone); the list scrolls
+    // Suggested card: title + chevron (collapsible, remembered) and Buy all; the chips scroll sideways below
+    this.sgToggle = button([icon('down', 'ico tiny sg-chev'), h('span', { class: 'sg-title', text: 'Suggested' }), this.sgCount], () => {
+      setPref('suggestOpen', !prefs().suggestOpen);
+      this.syncSuggest();
+    }, { class: 'btn ghost sg-toggle' });
+    this.buyAll = button([this.buyAllText, this.buyAllPrice], () => this.doBuyAll(), { class: 'btn sg-buyall' });
+    this.quick = h('div', { class: 'quick suggest' },
+      h('div', { class: 'sg-head' }, this.sgToggle, this.buyAll),
+      this.coach,
+      h('div', { class: 'sg-body' }, this.slotRow, this.quickRow, this.nextChip, this.doneChip));
+    this.syncSuggest();
+    for (const q of BUY_QTYS) {
+      const b = button(qtyLabel(q), () => this.setQty(q), { class: 'qty-opt', label: q === 0 ? 'Buy max' : `Buy ${q} at a time` });
+      b.setAttribute('role', 'radio');
+      this.qtyBtns.set(q, b);
+      this.qtySeg.appendChild(b);
+    }
+    this.syncQty();
+    // suggestions, categories, tree chips and the toolbar stay pinned (a side column on a landscape phone); the list scrolls
     this.el = h('section', { class: 'shop', attrs: { 'aria-label': 'Upgrades' } },
       h('div', { class: 'shop-side' }, this.quick,
         h('div', { class: 'shop-head' }, this.catRow),
-        h('div', { class: 'shop-sub' }, this.treeRow, this.sortBtn)),
+        h('div', { class: 'shop-sub' }, this.treeRow),
+        h('div', { class: 'shop-tools' }, h('span', { class: 'qty-label', text: 'Buy', attrs: { 'aria-hidden': 'true' } }), this.qtySeg, h('span', { class: 'tools-gap' }), this.sortBtn)),
       this.body);
+  }
+
+  // ---------------------------------------------------------------- bulk buying
+  get qty(): BuyQty { return parseQty(prefs().buyQty); }
+
+  /** Set the quantity selector (×1 · ×10 · Max). */
+  setQty(q: BuyQty): void {
+    if (q === this.qty) return;
+    setPref('buyQty', q);
+    this.syncQty();
+    if (this.ui) this.update(this.ui);
+  }
+  /** Q: ×1 → ×10 → Max → ×1. Returns the new quantity. */
+  cycleQty(): BuyQty { const q = nextQty(this.qty); this.setQty(q); return q; }
+
+  private syncQty(): void {
+    const q = this.qty;
+    for (const [v, b] of this.qtyBtns) { b.classList.toggle('on', v === q); attr(b, 'aria-checked', v === q ? 'true' : 'false'); }
+    this.el?.classList.toggle('qty-bulk', q !== 1);
+  }
+
+  private syncSuggest(): void {
+    const open = prefs().suggestOpen;
+    this.quick.classList.toggle('collapsed', !open);
+    attr(this.sgToggle, 'aria-expanded', open ? 'true' : 'false');
+    attr(this.sgToggle, 'aria-label', open ? 'Suggested purchases (collapse)' : 'Suggested purchases (expand)');
+  }
+
+  /** Send one `buy` (count 1 = a single rank, the old command shape; 10; 0 = Max). */
+  private sendBuy(e: ShopEntry, count: number): void {
+    if (count !== 1) this.expectBulk(`of ${e.name}`);
+    this.ctx.host.send(count === 1 ? { type: 'buy', node: e.node } : { type: 'buy', node: e.node, count });
+  }
+
+  private doBuyAll(): void {
+    const ui = this.ui;
+    if (!ui) return;
+    const plan = planBuyAll(cheapestAffordable(ui.shop), ui.run.scrap, this.qty);
+    if (!plan.cmds.length) return;
+    this.expectBulk(null);
+    for (const c of plan.cmds) this.ctx.host.send(c.count === 1 ? { type: 'buy', node: c.node } : { type: 'buy', node: c.node, count: c.count });
+  }
+
+  private doSpend(tree: string, name: string): void {
+    this.expectBulk(`in ${name}`);
+    this.ctx.host.send({ type: 'buy_cheapest', tree: tree as ShopEntry['tree'], count: this.qty });
+  }
+
+  /** The next Purchase events (within ~3 s) belong to a bulk buy: toast one summary. */
+  private expectBulk(where: string | null): void {
+    if (this.pendingBulk?.timer) clearTimeout(this.pendingBulk.timer);
+    this.pendingBulk = { where, until: performance.now() + 3000, events: [], timer: 0 };
+  }
+
+  /** Event batches from the sim (GameUi.onEvents): sum a bulk buy's Purchase events into one toast. */
+  notePurchases(events: readonly SimEvent[]): void {
+    const p = this.pendingBulk;
+    if (!p) return;
+    if (performance.now() > p.until && !p.timer) { this.pendingBulk = null; return; }
+    let any = false;
+    for (const e of events) if (e.type === Ev.Purchase) { p.events.push(e); any = true; }
+    if (!any || p.timer) return;
+    // Buy all sends up to three commands; give them a moment to land in the same summary
+    p.timer = window.setTimeout(() => {
+      if (this.pendingBulk === p) this.pendingBulk = null;
+      const msg = bulkToast(p.events, p.where);
+      if (msg) this.ctx.toast(msg, 'good');
+    }, 350);
   }
 
   private syncSort(): void {
@@ -264,6 +378,7 @@ export class Shop {
 
   // ---------------------------------------------------------------- update
   update(ui: UiState, scrapRate = 0): void {
+    this.syncQty();
     this.ui = ui;
     // open slots first: a new weapon system or element is the biggest step change there is
     const slots = openSlots(ui);
@@ -273,10 +388,22 @@ export class Shop {
       this.slotRow.replaceChildren(...slots.map((x) => button([icon('plus', 'ico tiny'), x.cat === 'elements' ? 'Attune an element' : 'Mount a weapon'],
         () => this.open(x.cat, `slot:${x.slot}`), { class: 'btn chip quick slot-chip' })));
     }
-    // quick chips
-    this.quickList.sync(cheapestAffordable(ui.shop), (e) => e.node);
+    // quick chips + Buy all
+    const sugg = cheapestAffordable(ui.shop);
+    this.quickList.sync(sugg, (e) => e.node);
     show(this.quick, true);
     const empty = this.quickList.rows.size === 0;
+    const plan = planBuyAll(sugg, ui.run.scrap, this.qty);
+    show(this.buyAll, plan.cmds.length > 0);
+    text(this.sgCount, sugg.length ? String(sugg.length) : '');
+    if (plan.cmds.length) {
+      const plus = plan.open ? '+' : '';
+      text(this.buyAllText, 'Buy all');   // the rank counts live on the chips; keeps the header on one line in a 300 px column
+      const pk = `${plan.total}${plus}`;
+      if (this.buyAllPrice.dataset.v !== pk) { this.buyAllPrice.dataset.v = pk; this.buyAllPrice.replaceChildren(icon('scrap', 'ico tiny'), fmtNum(plan.total) + plus); }
+      this.buyAll.title = `${plan.ranks}${plus} rank${plan.ranks === 1 ? '' : 's'}`;
+      attr(this.buyAll, 'aria-label', `Buy all suggested: ${plan.open ? 'at least ' : ''}${plan.ranks} rank${plan.ranks === 1 ? '' : 's'} for ${plan.open ? 'at least ' : ''}${fmtNum(plan.total)} Scrap`);
+    }
     const next = empty ? nextPurchase(ui.shop, ui.run.scrap, scrapRate) : null;
     // Everything owned (the Prestige Wall): say so and point at the Forecast instead of "nothing affordable yet".
     const allOwned = empty && !next && slots.length === 0 && !ui.shop.some((e) => e.currency === 'scrap' && e.rank < e.maxRank);
@@ -294,6 +421,7 @@ export class Shop {
     const coach = prefs().buyCoach < COACH_BUYS && !empty;
     show(this.coach, coach);
     this.quickRow.classList.toggle('coach', coach);
+    this.updateSpend(ui);
 
     for (const c of CATEGORIES) {
       const cb = this.catBtns.get(c.id)!;
@@ -333,9 +461,24 @@ export class Shop {
     if (key !== this.viewKey) {
       this.viewKey = key;
       this.render(ui, items);
+      this.updateSpend(ui);
     } else {
       for (const it of items) if (it.t === 'node') this.rows.get(it.e.node)?.update(it.e);
     }
+  }
+
+  /** Relabel the open tree's "Spend here" button: Max uses the sim's shopTreeTotals (approximate). */
+  private updateSpend(ui: UiState): void {
+    const sp = this.spend;
+    if (!sp || !sp.btn.isConnected) return;
+    const q = this.qty;
+    const s = treeSpend(ui.shop.filter((e) => inBulkTree(e, sp.tree)), ui.run.scrap, q, ui.shopTreeTotals?.[sp.tree]);
+    const key = `${q}|${s.ranks}|${s.total}`;
+    if (key === sp.key) return;
+    sp.key = key;
+    text(sp.line, spendLabel(s, q));
+    disable(sp.btn, s.ranks === 0);
+    attr(sp.btn, 'aria-label', s.ranks === 0 ? `Spend here: nothing affordable in ${sp.name}` : `Spend here: buy the cheapest ${q === 1 ? 'rank' : `${s.ranks} ranks`} in ${sp.name} for about ${fmtNum(s.total)} Scrap`);
   }
 
   private sorted(list: ShopEntry[]): ShopEntry[] {
@@ -369,6 +512,7 @@ export class Shop {
 
     if (this.cat === 'cross') {
       const list = this.sorted(ui.shop.filter((e) => e.tree === chip));
+      if (list.length) out.push({ t: 'head', text: chip === 'fusion' ? 'Fusions' : chip === 'link' ? 'Linkages' : 'Infusions', spend: chip });
       if (!list.length) out.push({ t: 'note', text: chip === 'fusion' ? 'Fusions appear when two elements are attuned (Triads need three, from Ascension II).' : chip === 'link' ? 'Linkages appear when two systems are mounted (the primary counts), or a hardpoint pairs with Bastion or Reactor.' : 'Infusions appear when a mounted hardpoint meets an attuned element.' });
       for (const e of list) out.push({ t: 'node', e });
       return out;
@@ -398,7 +542,7 @@ export class Shop {
 
     const t = TREE_BY_ID.get(chip as TreeId);
     if (!t) return out;
-    out.push({ t: 'head', text: t.name, sub: 'Core nodes' });
+    out.push({ t: 'head', text: t.name, sub: 'Core nodes', spend: t.id });
     out.push(...nodes(t.shared.map((n) => n.id)));
     out.push({ t: 'head', text: 'Doctrine', sub: 'Choose one path; the fork opens after enough core nodes.' });
     out.push({ t: 'fork', tree: t.id });
@@ -429,16 +573,24 @@ export class Shop {
     const frag = document.createDocumentFragment();
     let section: HTMLElement | null = null;
     const used = new Set<string>();
+    this.spend = null;
     for (const it of items) {
       if (it.t === 'head') {
-        section = h('div', { class: 'shop-section' }, h('h3', { class: 'sec-title' }, it.text, it.sub ? h('span', { class: 'sec-sub', text: it.sub }) : null));
+        const title = h('h3', { class: 'sec-title' }, it.text, it.sub ? h('span', { class: 'sec-sub', text: it.sub }) : null);
+        if (it.spend) {
+          const tree = it.spend, name = it.text;
+          const line = h('span', { class: 'spend-line' });
+          const btn = button([h('span', { class: 'spend-title', text: 'Spend here' }), line], () => this.doSpend(tree, name), { class: 'btn spend-btn', title: 'Buy the cheapest upgrades in this tree (uses the ×1 · ×10 · Max selector)' });
+          this.spend = { tree, name, btn, line, key: '' };
+          section = h('div', { class: 'shop-section' }, h('div', { class: 'sec-head' }, title, btn));
+        } else section = h('div', { class: 'shop-section' }, title);
         frag.appendChild(section);
         continue;
       }
       const host = section ?? frag;
       if (it.t === 'node') {
         let row = this.rows.get(it.e.node);
-        if (!row) { row = new NodeRow(it.e, (id) => this.ctx.host.send({ type: 'buy', node: id })); this.rows.set(it.e.node, row); }
+        if (!row) { row = new NodeRow(it.e, (e, count) => this.sendBuy(e, count), () => this.qty); this.rows.set(it.e.node, row); }
         else row.update(it.e);
         used.add(it.e.node);
         host.appendChild(row.el);

@@ -4,6 +4,7 @@ import { EnemyFlag, Ev, TICK_RATE } from './types';
 import type { WorldImpl } from './world-impl';
 import type { RunMachine } from '../run/machine';
 import { buildShop } from '../economy/shop';
+import { shopTreeTotals } from '../economy/bulk';
 import { abilityUi } from '../systems/abilities';
 import { bossDef, bossDefByIndex } from './content';
 import { SECTORS } from '../data/index';
@@ -29,6 +30,7 @@ export function buildUiState(w: WorldImpl, m: RunMachine): UiState {
   const sector = wave?.sector ?? SECTORS.find((s) => run.wave >= s.waves[0] && run.wave <= s.waves[1])?.id ?? 'outskirts';
   const abilities: UiState['abilities'] = abilityUi(w);   // WP9: cost, cooldown remaining, ready
   const slots = nextSlotWaves(w);
+  const shop = buildShop(w);
   return {
     tick: run.tick,
     run: {
@@ -56,7 +58,8 @@ export function buildUiState(w: WorldImpl, m: RunMachine): UiState {
       progress: total > 0 ? Math.min(1, (spawned - alive) / total) : 0,
       weakPointOpen: bi >= 0 && (e.flags[bi] & EnemyFlag.WeakPointOpen) !== 0,
     },
-    shop: buildShop(w),
+    shop,
+    shopTreeTotals: shopTreeTotals(shop, run.scrap),   // approximate (economy/bulk.ts)
     abilities,
     forecast,
     stats: w.damageShare(),

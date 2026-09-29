@@ -11,6 +11,7 @@ import { h } from './dom';
 import { Hud, StatusStrip } from './hud';
 import { AbilityBar } from './abilities';
 import { Shop } from './shop';
+import { qtyLabel } from './bulk';
 import { DraftModal } from './draft';
 import { ForecastPanel } from './forecast';
 import { openPrestige } from './prestige';
@@ -162,6 +163,7 @@ export class GameUi {
   onEvents(events: readonly SimEvent[]): void {
     this.inspector.ring.push(events);
     this.feed.onEvents(events);
+    this.shop.notePurchases(events);   // bulk-buy summary toast
     for (const e of events) {
       if (e.type === Ev.TowerDeath && this.latest) this.death.show(e.a || this.latest.run.wave, this.latest, e.data);
       else if (e.type === Ev.WaveClear || e.type === Ev.Prestige || e.type === Ev.Ascend) this.death.hide();
@@ -233,5 +235,9 @@ export class GameUi {
     else if (k === 'p') { const ui = this.latest; if (ui) this.host.send({ type: 'set_mode', mode: ui.run.mode === 'push' ? 'patrol' : 'push' }); }
     else if (k === 'b') this.shell.togglePanel();
     else if (k === 'f') this.open('forecast');
+    else if (k === 'q') {
+      const q = this.shop.cycleQty();
+      if (!this.shell.isShown('upgrades')) this.feed.toast(`Buy quantity: ${qtyLabel(q)}`, 'info');
+    }
   }
 }

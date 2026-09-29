@@ -13,10 +13,14 @@ export interface Prefs {
   activeTrial: TrialId | null;
   /** Purchases made while the first-purchase coach was showing (it retires after 3). */
   buyCoach: number;
+  /** Upgrades quantity selector: ranks per Buy tap (1, 10, 0 = Max). Q cycles it. */
+  buyQty: 1 | 10 | 0;
+  /** The Suggested card at the top of Upgrades is expanded. */
+  suggestOpen: boolean;
 }
 
 const KEY = 'citadel.prefs.v1';
-const DEFAULTS: Prefs = { onboarded: false, bloom: true, affordableFirst: false, panelOpen: true, shopCategory: 'chassis', shopTree: 'ballistics', activeTrial: null, buyCoach: 0 };
+const DEFAULTS: Prefs = { onboarded: false, bloom: true, affordableFirst: false, panelOpen: true, shopCategory: 'chassis', shopTree: 'ballistics', activeTrial: null, buyCoach: 0, buyQty: 1, suggestOpen: true };
 
 let cache: Prefs | null = null;
 

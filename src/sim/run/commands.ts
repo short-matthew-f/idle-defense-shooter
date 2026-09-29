@@ -6,7 +6,7 @@ import type { Command } from '../core/types';
 import { EnemyFlag, Ev, NO_ENTITY } from '../core/types';
 import type { WorldImpl } from '../core/world-impl';
 import type { RunMachine } from './machine';
-import { purchase, spendKey } from '../economy/shop';
+import { purchaseCheapest, purchaseMany, spendKey } from '../economy/shop';
 import { validateCommand } from './validate';
 import { allNodes } from '../core/content';
 import { CORE_COSTS, REFIT_REFUND, offlineScrap } from '../economy/curves';
@@ -34,7 +34,8 @@ export function applyCommand(m: RunMachine, cmd: Command): string | null {
 function dispatch(m: RunMachine, cmd: Command): string | null {
   const w = m.w, run = w.run, b = w.build, t = w.tower;
   switch (cmd.type) {
-    case 'buy': return purchase(w, cmd.node);
+    case 'buy': return purchaseMany(w, cmd.node, cmd.count);          // count 0 = Max (bulk buying)
+    case 'buy_cheapest': return purchaseCheapest(w, cmd.tree, cmd.count);
     case 'choose_doctrine': return chooseDoctrineCmd(w, cmd.tree, cmd.doctrine, cmd.second);   // WP8: explicit second doctrine
     case 'mount_hardpoint': {
       if (cmd.slot < 0 || cmd.slot >= run.hardpointSlotsOpen) return 'Slot not open';

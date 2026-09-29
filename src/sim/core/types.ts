@@ -353,7 +353,19 @@ export type DirectiveAction =
 // Commands (UI/agents → sim). All player intent goes through here.
 // ---------------------------------------------------------------------------
 export type Command =
-  | { type: 'buy'; node: NodeId }                         // one rank of a Scrap node (or Core node)
+  /**
+   * Buy ranks of a node. `count` (bulk-buy addition; integer 0..1000, default 1) is how many ranks to
+   * buy: the sim buys rank by rank while affordable and below maxRank and stops silently at the first
+   * rank it cannot buy (3 of 10 is success; none is "Not enough Scrap"). `count: 0` means Max: as many
+   * as the Scrap buys (capped at 1000). Cores-priced nodes and doctrine choices ignore `count`.
+   */
+  | { type: 'buy'; node: NodeId; count?: number }
+  /**
+   * Bulk-buy addition: buy `count` ranks (0 = Max, capped at 1000) in one tree, each time one rank of
+   * the cheapest affordable, unlocked, Scrap-priced node there (ties: shop order). `tree` is a TreeId
+   * (Reactor includes its ability rank nodes) or a Cross group ('fusion' | 'link' | 'infuse').
+   */
+  | { type: 'buy_cheapest'; tree: ShopEntry['tree']; count: number }
   | { type: 'choose_doctrine'; tree: TreeId; doctrine: DoctrineId;
       /** WP8 addition: explicitly choose the tree's SECOND doctrine (Dual Doctrine, Spare Barrel, Monolith, Bulwark, Singularity Core). */ second?: boolean }
   | { type: 'mount_hardpoint'; slot: number; system: HardpointId }
@@ -473,6 +485,12 @@ export interface UiState {
   meta: MetaState;
   wave: { sector: string; isBoss: boolean; bossId: BossId | null; bossPhase: number; bossHp: number; bossMaxHp: number; bossPhaseMarks: number[]; tellActive: AbilityId | 'designate' | null; tellTicksLeft: number; enemiesAlive: number; enemiesTotal: number; spawned: number; formation: FormationId | null; progress: number; weakPointOpen: boolean };
   shop: ShopEntry[];             // every currently visible node with price and affordability
+  /**
+   * Bulk-buy addition: per tree key (as `buy_cheapest` takes it), roughly what `buy_cheapest` Max
+   * would buy now. Approximate: a greedy walk over the entries' `nextCosts` (10 deep), capped at
+   * 200 ranks, blind to nodes a purchase would unlock (economy/bulk.ts).
+   */
+  shopTreeTotals?: Record<string, { affordableRanks: number; affordableTotal: number }>;
   abilities: { id: AbilityId; cost: number; cooldown: number; ready: boolean }[];
   forecast: Forecast | null;
   stats: DamageShare;
@@ -488,6 +506,11 @@ export interface ShopEntry {
   kind: 'stat' | 'mechanic' | 'exotic' | 'doctrine' | 'linkage' | 'infusion' | 'fusion' | 'ability';
   locked?: string;               // reason it can't be bought yet (doctrine not chosen, checkpoint only...)
   tier: number;
+  /** Bulk-buy additions. Prices of the next up-to-10 ranks, same modifiers as `cost` ([] at max rank; Cores nodes: [cost]). */
+  nextCosts: number[];
+  /** How many consecutive ranks the current Scrap buys (0 when locked / unaffordable; ≤ 1 for Cores nodes; capped at 1000) and their total price. */
+  affordableRanks: number;
+  affordableTotal: number;
 }
 
 export interface Forecast {

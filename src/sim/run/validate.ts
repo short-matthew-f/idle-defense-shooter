@@ -22,6 +22,8 @@ const optInt = (v: unknown): boolean => v === undefined || int(v);
 const optFin = (v: unknown): boolean => v === undefined || fin(v);
 const optBool = (v: unknown): boolean => v === undefined || typeof v === 'boolean';
 const optSlot01 = (v: unknown): boolean => v === undefined || v === 0 || v === 1;
+/** Bulk-buy rank count: an integer 0..1000 (0 = Max). */
+const bulkCount = (v: unknown): boolean => int(v) && (v as number) >= 0 && (v as number) <= 1000;
 const oneOf = (list: readonly string[], v: unknown): boolean => typeof v === 'string' && list.includes(v);
 
 /** Null when `cmd` is a well-formed Command, else a short reason ("Malformed command: ..."). */
@@ -30,7 +32,9 @@ export function validateCommand(cmd: unknown): string | null {
   const c = cmd;
   const bad = (what: string): string => `Malformed command: ${String(c.type)}.${what}`;
   switch (c.type as Command['type']) {
-    case 'buy': case 'buy_prestige': case 'buy_star': return str(c.node) ? null : bad('node');
+    case 'buy': return !str(c.node) ? bad('node') : c.count === undefined || bulkCount(c.count) ? null : bad('count');
+    case 'buy_cheapest': return !str(c.tree) ? bad('tree') : bulkCount(c.count) ? null : bad('count');
+    case 'buy_prestige': case 'buy_star': return str(c.node) ? null : bad('node');
     case 'choose_doctrine': return !str(c.tree) ? bad('tree') : !str(c.doctrine) ? bad('doctrine') : optBool(c.second) ? null : bad('second');
     case 'mount_hardpoint': case 'refit_hardpoint': return !int(c.slot) ? bad('slot') : oneOf(HARDPOINTS, c.system) ? null : bad('system');
     case 'attune': return !int(c.slot) ? bad('slot') : oneOf(ELEMENTS, c.element) ? null : bad('element');
