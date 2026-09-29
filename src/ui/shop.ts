@@ -106,7 +106,7 @@ export class Shop {
   private readonly catBtns = new Map<Category, { b: HTMLButtonElement; n: HTMLSpanElement }>();
   private treeBtns = new Map<string, { b: HTMLButtonElement; n: HTMLSpanElement }>();
   private readonly rows = new Map<string, NodeRow>();
-  private readonly quickList: Keyed<ShopEntry, { el: HTMLButtonElement; label: HTMLSpanElement; price: HTMLSpanElement; node: string }>;
+  private readonly quickList: Keyed<ShopEntry, { el: HTMLButtonElement; label: HTMLSpanElement; price: HTMLSpanElement; node: string; key: string }>;
   private cat: Category;
   private tree: string;
   private chipKey = '';
@@ -135,11 +135,14 @@ export class Shop {
     this.quickList = new Keyed(this.quickRow, (e) => {
       const label = h('span', { class: 'qc-name' });
       const price = h('span', { class: 'price scrap' });
-      const row = { el: h('button', { type: 'button', class: 'btn chip quick' }, label, price), label, price, node: e.node };
+      const row = { el: h('button', { type: 'button', class: 'btn chip quick' }, label, price), label, price, node: e.node, key: '' };
       holdRepeat(row.el, () => this.ctx.host.send({ type: 'buy', node: row.node }));
       return row;
     }, (r, e) => {
       r.node = e.node;
+      const key = `${e.rank}|${e.cost}`;
+      if (key === r.key) return;
+      r.key = key;
       text(r.label, e.rank > 0 && e.maxRank > 1 ? `${e.name} ${e.rank + 1}` : e.name);
       r.price.replaceChildren(icon('scrap', 'ico tiny'), fmtNum(e.cost));
       attr(r.el, 'aria-label', `Quick buy ${e.name} for ${fmtNum(e.cost)} Scrap`);

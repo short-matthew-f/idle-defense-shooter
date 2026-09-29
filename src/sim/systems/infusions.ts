@@ -15,6 +15,7 @@
  *             Prism frame: every attuned element counts as infused (rank ≥ 1).
  *   gravitics fire/poison: captives gain stacks each second (firestorm / toxic vortex); lightning: every 0.5 s arcs
  *             between mag pairs of captives; frost: collapses Chill captives (mag stacks), rank 3 freezes 1 s.
+ * Lightning twists deal element-carrying arc damage and apply 1 Shock stack to each struck enemy.
  * Ordnance explosions are read from the event log (Ev.Explosion, src ordnance…) one tick later; wells, collapses,
  * beams, nodes, blades and drones from world.shared.
  */
@@ -181,7 +182,7 @@ export class InfusionsSystem implements System {
       const dx = e.x[i] - x, dy = e.y[i] - y, rr = r + e.radius[i];
       if (dx * dx + dy * dy <= rr * rr) continue;   // outside the blast only
       if (arcs === 0) c = this.emit(w, k, i, x, y, cause, THROTTLE / 2);
-      w.damage(i, Math.max(0.01, dmg * this.mag[k]), { source: 'ordnance', srcTag: this.ids[k], element: 'lightning', cause: c, x, y });
+      this.arc(w, i, Math.max(0.01, dmg * this.mag[k]), 'ordnance', k, c, x, y);
       arcs++;
     }
     SCRATCH.pop();
@@ -215,8 +216,8 @@ export class InfusionsSystem implements System {
           const dmg = (w as WorldImpl).defaultDotDps() * 2.5 * w.stats.get('lightning.arc_damage');
           for (let p = 0; p < pairs; p++) {
             const a = buf[p * 2], b = buf[p * 2 + 1];
-            if (w.alive(a)) w.damage(a, dmg, { source: 'gravitics', srcTag: this.ids[li], element: 'lightning', cause });
-            if (w.alive(b)) w.damage(b, dmg, { source: 'gravitics', srcTag: this.ids[li], element: 'lightning', cause });
+            this.arc(w, a, dmg, 'gravitics', li, cause, x, y);
+            this.arc(w, b, dmg, 'gravitics', li, cause, x, y);
           }
         }
       }
@@ -306,7 +307,7 @@ export class InfusionsSystem implements System {
       const t = w.nearestEnemy(x, y, 100, 'nearest', 'laser');
       if (t < 0) continue;
       if (cause === -2) cause = this.emit(w, k, t, x, y, -1);
-      w.damage(t, this.laserDps * this.mag[k], { source: 'laser', srcTag: this.ids[k], element: 'lightning', cause, x, y });
+      this.arc(w, t, this.laserDps * this.mag[k], 'laser', k, cause, x, y);
     }
   }
 
@@ -351,7 +352,7 @@ export class InfusionsSystem implements System {
       if (this.on[pi] && w.alive(i)) {
         const contaminated = w.tick < this.contaminated;
         const st = this.stacksOf(w, this.mag[pi]) * (contaminated ? 2 : 1);
-        this.status(w, i, E_POISON, st, pi, contaminated ? this.emit(w, pi, i, hit.x, hit.y, hit.eventId, THROTTLE) : hit.eventId);
+        this.status(w, i, E_POISON, st, pi, this.emit(w, pi, i, hit.x, hit.y, hit.eventId, THROTTLE));
       }
       const fi = idx(S_BLD, E_FROST);
       if (this.on[fi] && w.alive(i)) {
@@ -359,7 +360,7 @@ export class InfusionsSystem implements System {
           const cause = this.emit(w, fi, i, hit.x, hit.y, hit.eventId);
           w.damage(i, hit.damage * 0.5, { source: 'blade', srcTag: this.ids[fi], element: 'frost', cause });
         }
-        this.status(w, i, E_FROST, this.stacksOf(w, this.mag[fi]), fi, hit.eventId);
+        if (w.alive(i)) this.status(w, i, E_FROST, this.stacksOf(w, this.mag[fi]), fi, this.emit(w, fi, i, hit.x, hit.y, hit.eventId, THROTTLE));
       }
     }
   }
@@ -390,7 +391,7 @@ export class InfusionsSystem implements System {
     }
     if (other < 0) other = w.nearestEnemy(x, y, 120, 'nearest', 'drones');
     if (other < 0 || other === from) return;
-    w.damage(other, dmg * 0.5, { source: 'drones', srcTag: this.ids[k], element: 'lightning', cause, x, y });
+    this.arc(w, other, dmg * 0.5, 'drones', k, cause, x, y);
   }
 
   private bladeArc(w: World, from: number, x: number, y: number, dmg: number, k: number, parent: number): void {
@@ -401,10 +402,17 @@ export class InfusionsSystem implements System {
       const i = buf[q];
       if (i === from || !targetableEnemy(w, i)) continue;
       if (arcs === 0) cause = this.emit(w, k, i, x, y, parent);
-      w.damage(i, dmg * 0.5, { source: 'blade', srcTag: this.ids[k], element: 'lightning', cause, x, y });
+      this.arc(w, i, dmg * 0.5, 'blade', k, cause, x, y);
       arcs++;
     }
     SCRATCH.pop();
+  }
+
+  /** A lightning twist arc: element-carrying damage plus 1 Shock stack on the struck enemy. */
+  private arc(w: World, i: number, dmg: number, source: HardpointId, k: number, cause: number, x: number, y: number): void {
+    if (!w.alive(i)) return;
+    const h = w.damage(i, dmg, { source, srcTag: this.ids[k], element: 'lightning', cause, x, y });
+    if (!h.killed && w.alive(i)) w.applyStatus(i, 'shock', 1, 120, this.ids[k], h.eventId);
   }
 
   onCompact(w: World, remap: Int32Array, oldCount: number): void {
