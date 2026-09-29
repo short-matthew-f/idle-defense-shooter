@@ -1,0 +1,4 @@
+/* Sound controls (audio pass): the Battle mute chip and the Settings → Sound section. */
+.btn.ctl.mute-btn.muted { color: var(--text-dim); border-style: dashed; }
+.btn.ctl.mute-btn .ico { width: 18px; height: 18px; }
+.sound-test { padding: 8px 0 4px; }

@@ -1,0 +1,10 @@
+/* Settings → Graphics (src/ui/graphics-settings.ts): inline segmented controls. */
+.gfx-seg {
+  display: flex; gap: 2px; padding: 3px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px;
+}
+.gfx-seg-btn {
+  flex: 1 1 0; min-width: 0; min-height: var(--touch); border: 0; border-radius: 9px; background: transparent; color: var(--text-dim);
+  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.gfx-seg-btn.active { background: var(--bg-4); color: var(--text); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06); }
+.gfx-seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

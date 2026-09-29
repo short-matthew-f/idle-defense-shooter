@@ -5,7 +5,8 @@
  *    naturally stop simulating; the worker runs at most MAX_TICKS_PER_BUDGET ticks per message.
  *  - After a budget: posts `snapshot` (instances/fx copied into transferable buffers; the main
  *    thread hands them back with `return_buffer`, giving double buffering), `ui` every 6 ticks,
- *    `events` batches (non-Hit/Spawn events since the last batch) and `save` every 30 s of sim time.
+ *    `events` batches (non-Hit/Spawn events since the last batch, plus an `audio` digest of Hits and
+ *    projectile launches for the sound director) and `save` every 30 s of sim time.
  *  - A rejected player command posts `cmd_error` (Sim.takeLastError; Directive commands are silent).
  *  - Fault tolerance: if step() throws, the worker posts `error` (once per distinct failure), keeps
  *    serving the last good snapshot, and on the next tick budget restarts the checkpoint (after
@@ -14,8 +15,9 @@
  *    fresh game: that would autosave over the player's save). Every `inspector` request gets a reply.
  */
 import { Sim } from '../sim/index';
-import type { FromWorker, RenderSnapshot, SaveState, SimEvent, ToWorker } from '../sim/core/types';
-import { Ev, INSTANCE_FLOATS, FX_FLOATS, TICK_RATE } from '../sim/core/types';
+import type { AudioDigest, FromWorker, RenderSnapshot, SaveState, SimEvent, ToWorker } from '../sim/core/types';
+import { Ev, INSTANCE_FLOATS, FX_FLOATS, ProjFlag, ProjKind, TICK_RATE } from '../sim/core/types';
+import { StateBit } from '../sim/core/events';
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 const MAX_TICKS_PER_BUDGET = 240;
@@ -90,12 +92,68 @@ function postUi(): void {
 function postEvents(): void {
   if (!sim) return;
   const out: SimEvent[] = [];
-  sim.events.forEachSince(lastEventId, (e) => {
-    if (e.type === Ev.Hit || e.type === Ev.Spawn || e.type === Ev.StatusTick) return;
+  const log = sim.events;
+  let nHits = 0;
+  log.forEachSince(lastEventId, (e) => {
+    if (e.type === Ev.Hit) {   // audio digest: every Hit's id (links + sample below)
+      if (nHits === hitIds.length) { const g = new Int32Array(hitIds.length * 2); g.set(hitIds); hitIds = g; }
+      hitIds[nHits++] = e.id;
+      return;
+    }
+    if (e.type === Ev.Spawn || e.type === Ev.StatusTick) return;
     if (out.length < MAX_EVENTS_PER_BATCH) out.push({ ...e, ...(e.data ? { data: { ...e.data } } : {}) });
   });
-  lastEventId = sim.events.nextId;
-  if (out.length) post({ t: 'events', events: out });
+  lastEventId = log.nextId;
+  const audio = audioDigest(nHits);
+  if (out.length || audio) post({ t: 'events', events: out, ...(audio ? { audio } : {}) }, audio ? [audio.links.buffer] : []);
+}
+
+// ---- audio digest (audio pass): Hits and projectile launches, which the events batch leaves out ----
+const MAX_HIT_SAMPLE = 48;
+let hitIds = new Int32Array(4096);
+/** Projectile generations below this were already reported as launches. */
+let lastProjGen = 0;
+
+function audioDigest(nHits: number): AudioDigest | null {
+  if (!sim) return null;
+  const log = sim.events;
+  const links = new Int32Array(nHits * 3);
+  let live = 0;
+  for (let k = 0; k < nHits; k++) {
+    const e = log.byId(hitIds[k]);
+    if (!e) continue;
+    const p = e.cause >= 0 ? log.byId(e.cause) : undefined;
+    links[live * 3] = e.id; links[live * 3 + 1] = e.cause; links[live * 3 + 2] = p && p.src === e.src ? 1 : 0;
+    hitIds[live++] = e.id;
+  }
+  // sample: crits and deep chains first, then evenly spaced ordinary hits
+  const picked: number[] = [];
+  for (let k = 0; k < live && picked.length < MAX_HIT_SAMPLE / 2; k++) {
+    const e = log.byId(hitIds[k]);
+    if (e && (((e.c ?? 0) & StateBit.Crit) !== 0 || log.depthOf(e.id) >= 3)) picked.push(e.id);
+  }
+  const stride = Math.max(1, Math.ceil(live / Math.max(1, MAX_HIT_SAMPLE - picked.length)));
+  for (let k = 0; k < live && picked.length < MAX_HIT_SAMPLE; k += stride) if (!picked.includes(hitIds[k])) picked.push(hitIds[k]);
+  picked.sort((a, b) => a - b);
+  const hits: SimEvent[] = [];
+  for (const id of picked) { const e = log.byId(id); if (e) hits.push({ id: e.id, tick: e.tick, type: e.type, cause: e.cause, src: e.src, a: e.a, b: e.b, x: e.x, y: e.y, c: e.c ?? 0 }); }
+  // launches: projectiles whose generation is new since the last batch (short-lived ones may be missed; that is fine for sound)
+  const pr = sim.world.projectiles;
+  const shots = [0, 0, 0, 0, 0, 0, 0, 0];
+  let maxGen = lastProjGen - 1;
+  for (let i = 0; i < pr.count; i++) {
+    const g = pr.gen[i];
+    if (g > maxGen) maxGen = g;
+    if (g < lastProjGen || (pr.flags[i] & ProjFlag.Hostile) !== 0) continue;
+    const k = pr.kind[i];
+    const cls = k === ProjKind.Bullet || k === ProjKind.Fireball ? 0 : k === ProjKind.Missile || k === ProjKind.Rocket || k === ProjKind.Shell || k === ProjKind.Bomb ? 1
+      : k === ProjKind.DroneShot || k === ProjKind.Microdrone ? 2 : k === ProjKind.EnemyShot ? -1 : 3;
+    if (cls < 0) continue;
+    if (shots[cls * 2]++ === 0) shots[cls * 2 + 1] = pr.x[i];
+  }
+  lastProjGen = maxGen + 1;
+  if (live === 0 && shots[0] + shots[2] + shots[4] + shots[6] === 0) return null;
+  return { links: live * 3 === links.length ? links : links.slice(0, live * 3), hits, shots };
 }
 
 function postSave(): void {
@@ -125,7 +183,7 @@ function recover(): boolean {
   try {
     if (recoveries > MAX_RESTART_RECOVERIES && goodSave) {
       sim = new Sim(JSON.parse(JSON.stringify(goodSave)) as SaveState);
-      lastEventId = sim.events.nextId;
+      lastEventId = sim.events.nextId; lastProjGen = 0;
     } else {
       sim.command({ type: 'restart_checkpoint' });
     }
@@ -149,7 +207,7 @@ function handle(msg: ToWorker): void {
         sim = null; reported.delete(`init:${e instanceof Error ? e.message : String(e)}`); reportError(e, 'init');
         break;
       }
-      lastEventId = 0; ticksSinceUi = 0; ticksSinceSave = 0;
+      lastEventId = 0; lastProjGen = 0; ticksSinceUi = 0; ticksSinceSave = 0;
       faulted = false; recoveries = 0; goodSave = msg.save; goodMeta = null;
       post({ t: 'ready', ui: sim.uiState() });
       break;

@@ -10,7 +10,8 @@ import { button, h } from './dom';
 import { icon } from './icons';
 import { confirmDialog } from './modal';
 import { maybeOnboard } from './onboard';
-import { setPref } from './prefs';
+import { graphicsSettings } from './graphics-settings';
+import { soundSettings } from '../audio/ui';
 import type { UiCtx } from './ctx';
 
 export const SHORTCUTS: [string, string][] = [
@@ -93,8 +94,9 @@ export function settingsPanel(ctx: UiCtx): HTMLElement {
   const autonomy = ((ui?.meta.prestigeRanks['prestige.autonomy'] ?? 0) | 0) > 0;
   const body = h('div', { class: 'settings' },
     row('Clarity', h('div', { class: 'range-wrap' }, slider, val), 'Spectacle ↔ Clarity: player effects fade, enemies never do', true),
-    row('Bloom', toggle('Bloom', ctx.host.bloomOn(), (v) => { ctx.host.setBloom(v); setPref('bloom', v); })),
     row('Auto-Prestige', toggle('Auto-Prestige', !!ui?.meta.settings.autoPrestige, (v) => ctx.host.send({ type: 'set_setting', key: 'autoPrestige', value: v })), autonomy ? 'Lets a Prestige Directive fire' : 'Needs Autonomy (Prestige IV) and a Prestige Directive'),
+    ...graphicsSettings(ctx, row, toggle),
+    ...soundSettings(row, toggle),
     h('h3', { class: 'sec-title', text: 'Save' }),
     h('p', { class: 'dim small', text: 'Autosaves to this device every 30 s and at every checkpoint.' }),
     h('div', { class: 'row gap wrap' }, exportBtn, downloadBtn), exportArea,

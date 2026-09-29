@@ -444,7 +444,31 @@ export interface EventLog {
  */
 export const RETICLE_MARK = 1;
 
-export const enum Shape { Circle = 0, Ring = 1, Triangle = 2, Square = 3, Diamond = 4, Hex = 5, Star = 6, Capsule = 7, Line = 8, Shard = 9, Cross = 10, Crescent = 11 }
+export const enum Shape { Circle = 0, Ring = 1, Triangle = 2, Square = 3, Diamond = 4, Hex = 5, Star = 6, Capsule = 7, Line = 8, Shard = 9, Cross = 10, Crescent = 11,
+  /** Graphics-pass additions (SDFs in render/shaders.ts). Arc = a 90° ring segment centred on +x (aux0 = thickness like Ring); Drop = teardrop, point on +x. */
+  Pentagon = 12, Octagon = 13, Chevron = 14, Arc = 15, Gear = 16, Drop = 17 }
+
+/**
+ * Graphics-pass instance flags, packed into the layer float: `layer + INST_FLAG_SCALE * flags` (so every
+ * pre-existing reader that tests `layer === 4` etc. sees only unflagged instances). The renderer
+ * (render/frame-prep.ts) decodes `L & 7` / `L >> 3`:
+ *  - Part:   an enemy composite part that follows its body; aux1 = the body's instance index in the same stream
+ *            (the renderer applies the body's idle animation and minimum on-screen size to it). Never a Line.
+ *  - Detail: optional decoration, dropped at the Low quality tier and by the renderer's LOD.
+ *  - Chain:  a kill-chain link line (Settings → Graphics → Chain lines).
+ *  - Flash:  a bright flash (alpha scaled down under reduced motion / photosensitive settings).
+ *  - Soft:   radial soft glow instead of a hard SDF edge.
+ */
+export const INST_FLAG_SCALE = 8;
+export const enum InstFlag { Part = 1, Detail = 2, Chain = 4, Flash = 8, Soft = 16 }
+/**
+ * aux1 of unflagged layer-4 bodies, layer-5 outlines and layer-6 halos (graphics pass): a packed integer
+ *   bits 0-7 RStatus mask (status patterns drawn on the body) | bits 8-13 animation phase (0..63)
+ *   | bits 14-17 AnimKind (idle animation applied by the renderer) | bits 18-19 AnimRate.
+ */
+export const enum RStatus { Burn = 1, Chill = 2, Frozen = 4, Poison = 8, Shock = 16, Bleed = 32, Brittle = 64, Marked = 128 }
+export const enum AnimKind { None = 0, Breathe = 1, Wobble = 2, Spin = 3, Jitter = 4, Heavy = 5, Pulse = 6, Sway = 7, SlowSpin = 8 }
+export const enum AnimRate { Normal = 0, Slow = 1, Frozen = 2, Fast = 3 }
 
 /**
  * Instance stream, 12 floats per instance:
@@ -465,7 +489,11 @@ export interface RenderSnapshot {
   clarity: number;
 }
 export const FX_FLOATS = 8;
-export const enum FxKind { Hit = 0, Kill = 1, Explosion = 2, Spark = 3, Ember = 4, Frost = 5, Toxic = 6, Arc = 7, Shockwave = 8, Muzzle = 9, Trail = 10, Text = 11, Counter = 12, Tell = 13 }
+export const enum FxKind { Hit = 0, Kill = 1, Explosion = 2, Spark = 3, Ember = 4, Frost = 5, Toxic = 6, Arc = 7, Shockwave = 8, Muzzle = 9, Trail = 10, Text = 11, Counter = 12, Tell = 13,
+  /** Graphics-pass additions. Shatter: body-coloured shards (size = enemy radius). ChainPips: `count` pips (kill-chain depth).
+   *  Punch / Shake / SlowMo: presentation-only camera and time cues (size = strength). Pickup / PickupCore: `count`
+   *  Scrap / Core motes flying from (x, y) to the HUD counter. */
+  Shatter = 14, ChainPips = 15, Punch = 16, Shake = 17, SlowMo = 18, Pickup = 19, PickupCore = 20 }
 
 /** Everything the UI draws from, sent ~10 Hz. Plain JSON, no typed arrays. */
 export interface UiState {
@@ -575,12 +603,25 @@ export type FromWorker =
   | { t: 'ready'; ui: UiState }
   | { t: 'snapshot'; snap: RenderSnapshot }
   | { t: 'ui'; ui: UiState }
-  | { t: 'events'; events: SimEvent[] }
+  | { t: 'events'; events: SimEvent[]; /** Audio-pass addition (optional; see AudioDigest). */ audio?: AudioDigest }
   | { t: 'save'; save: SaveState }
   | { t: 'inspector'; chain: SimEvent[]; sentence: string }
   | { t: 'error'; message: string; /** integration addition */ stack?: string }
   /** Integration addition: a player command was rejected (message from the sim). */
   | { t: 'cmd_error'; message: string; cmd: Command['type'] };
+
+/**
+ * Audio-pass addition: what the sound director needs from the events the `events` batch leaves out
+ * (Hit and projectile launches), in a compact form the worker builds once per tick budget.
+ */
+export interface AudioDigest {
+  /** [id, cause, continues] triples for every Hit in the batch, ascending id (continues = 1 when the cause has the same src). */
+  links: Int32Array;
+  /** A capped sample (≤ 48) of those Hit events: crits and deep chains first, then evenly spaced. Ascending id. */
+  hits: SimEvent[];
+  /** Player projectiles launched since the last batch: [bullets, x, missiles, x, drone shots, x, other, x] (x of one launch, for panning). */
+  shots: number[];
+}
 
 // ---------------------------------------------------------------------------
 // Waves (generator → run). Fixed per Prestige seed: generateWave(seed, wave, dial, ascension).

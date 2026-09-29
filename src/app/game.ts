@@ -17,6 +17,7 @@ import type { Command } from '@sim/core/types';
 import { clearSave, exportToString, importFromString, loadSave, parkSave, storeSave } from './storage';
 import { canInstall, initInstallPrompt, promptInstall, onUpdateReady } from './pwa';
 import { GameUi } from '@ui/index';
+import { createGameAudio, type GameAudio } from '../audio/index';
 import { prefs, resetPrefs } from '@ui/prefs';
 import { offlineEstimate } from '@ui/format';
 import type { UiHost } from '@ui/host';
@@ -35,6 +36,8 @@ export interface Game {
   /** Tick-budget multiplier from `?fast` (1 = normal); `setFast` changes it at runtime (playtests). */
   readonly fast: number;
   setFast(n: number): void;
+  /** Audio pass: the sound runtime (levels, mute, diagnostics). */
+  readonly audio: GameAudio;
 }
 
 /** `?fast` / `?fast=N` query param → tick-budget multiplier (1 when absent). */
@@ -64,11 +67,13 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
   const simErrors: string[] = [];
 
   app.renderer.setBloom(prefs().bloom);
+  // audio pass: lazy Web Audio (unlocked by the first tap); a silent no-op without Web Audio
+  const audio = createGameAudio();
 
   const host: UiHost = {
     send: (cmd) => client.send(cmd),
     inspect: (i, g) => client.inspect(i, g),
-    setPaused: (p) => { paused = p; app.frozen = p; pacer.reset(); if (p && aiming) endAim(); },
+    setPaused: (p) => { paused = p; app.frozen = p; pacer.reset(); if (p && aiming) endAim(); audio.director.setPaused(p); },
     isPaused: () => paused,
     setClarity: (v) => { app.renderer.setClarity(v); client.setClarity(v); },
     setBloom: (on) => app.renderer.setBloom(on),
@@ -87,7 +92,7 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
       location.reload();
     },
     setInsets: (t, r, b, l) => { app.camera.setInsets(t, r, b, l); },
-    setRenderPaused: (p) => { app.renderPaused = p; },
+    setRenderPaused: (p) => { app.renderPaused = p; audio.director.setScreen(p ? 'other' : 'battle'); },
     canInstall,
     install: promptInstall,
     saveNow: () => { if (ready) client.requestSave(); },
@@ -116,9 +121,12 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
       }
     };
     c.onUi = (s) => { latestUi = s; scheduleUi(); };
-    c.onEvents = (evs) => {
-      ui.onEvents(evs);
-      if (evs.some((e) => e.type === Ev.Checkpoint || e.type === Ev.Prestige || e.type === Ev.Ascend)) c.requestSave();
+    c.onEvents = (evs, digest) => {
+      if (evs.length) {
+        ui.onEvents(evs);
+        if (evs.some((e) => e.type === Ev.Checkpoint || e.type === Ev.Prestige || e.type === Ev.Ascend)) c.requestSave();
+      }
+      audio.director.onEvents(evs, digest);
     };
     c.onSave = (s) => {
       if (resetting) return;
@@ -170,6 +178,8 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
     if (!latestUi) return;
     syncSector(latestUi);
     ui.update(latestUi);
+    audio.director.setSimSpeed(latestUi.run.speedMultiplier * fast);
+    audio.director.onUi(latestUi);
   }
   function scheduleUi(): void {
     if (uiTimer) return;
@@ -272,5 +282,6 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
     simErrors,
     get fast() { return fast; },
     setFast: (n: number) => { fast = Math.max(1, Math.min(32, Math.floor(n) || 1)); pacer.reset(); },
+    audio,
   };
 }

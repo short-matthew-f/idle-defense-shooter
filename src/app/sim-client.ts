@@ -6,14 +6,15 @@
  *   client.onUi = (ui) => hud.update(ui);
  *   requestAnimationFrame loop: client.tickBudget(framesElapsed * ui.run.speedMultiplier);
  */
-import type { Command, FromWorker, RenderSnapshot, SaveState, SimEvent, ToWorker, UiState } from '../sim/core/types';
+import type { AudioDigest, Command, FromWorker, RenderSnapshot, SaveState, SimEvent, ToWorker, UiState } from '../sim/core/types';
 
 export class SimClient {
   readonly worker: Worker;
   onSnapshot: ((snap: RenderSnapshot) => void) | null = null;
   onUi: ((ui: UiState) => void) | null = null;
   onReady: ((ui: UiState) => void) | null = null;
-  onEvents: ((events: SimEvent[]) => void) | null = null;
+  /** Event batches; `audio` (audio pass) carries the Hits and projectile launches the batch leaves out. `events` may be empty when only `audio` has content. */
+  onEvents: ((events: SimEvent[], audio?: AudioDigest) => void) | null = null;
   onSave: ((save: SaveState) => void) | null = null;
   onError: ((message: string, stack?: string) => void) | null = null;
   /** A player command was rejected by the sim (message is player-facing, e.g. "Not enough Scrap"). */
@@ -39,7 +40,7 @@ export class SimClient {
       case 'ready': this.ui = msg.ui; this.onReady?.(msg.ui); this.onUi?.(msg.ui); break;
       case 'snapshot': this.onSnapshot?.(msg.snap); break;
       case 'ui': this.ui = msg.ui; this.onUi?.(msg.ui); break;
-      case 'events': this.onEvents?.(msg.events); break;
+      case 'events': this.onEvents?.(msg.events, msg.audio); break;
       case 'save': {
         const waiters = this.saveWaiters; this.saveWaiters = [];
         for (const w of waiters) w(msg.save);

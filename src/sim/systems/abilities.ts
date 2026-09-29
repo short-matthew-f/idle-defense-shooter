@@ -433,7 +433,7 @@ export class AbilitiesSystem implements System {
       const left = Math.max(0, z.end - now);
       switch (z.kind) {
         case Z_TIME: out.push(z.x, z.y, z.r, now * 0.01, Shape.Ring, 0.6, 0.7, 1, 0.55 + 0.3 * Math.min(1, left / 60), 1); break;
-        case Z_BOMB: out.push(z.x, z.y, z.r, 0, Shape.Ring, 1, 0.45, 0.2, 0.4 + 0.4 * ((now >> 2) & 1), 7); out.push(z.x, z.y, 8, 0, Shape.Cross, 1, 0.45, 0.2, 1, 7); break;
+        case Z_BOMB: out.push(z.x, z.y, z.r, 0, Shape.Ring, 1, 0.45, 0.2, 0.4 + 0.4 * ((now >> 4) & 1), 7); out.push(z.x, z.y, 8, 0, Shape.Cross, 1, 0.45, 0.2, 1, 7); break;
         case Z_SING: {
           const f = Math.min(1, left / 120);
           out.push(z.x, z.y, z.r * (0.3 + 0.7 * f), now * 0.2, Shape.Ring, 0.7, 0.4, 1, 0.7, 2);

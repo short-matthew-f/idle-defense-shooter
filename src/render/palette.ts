@@ -11,6 +11,7 @@
  */
 import { Shape } from '@sim/core/types';
 import type { ElementId, StatusId } from '@sim/core/ids';
+import { SECTORS } from '@sim/data/sectors';
 
 export type RGB = readonly [number, number, number];
 
@@ -78,20 +79,23 @@ export interface SectorPalette {
   enemy: RGB;
   enemyAlt: RGB;
   outline: RGB;
+  /** Graphics pass: backdrop grid style (render/shaders.ts BACKDROP_FS uStyle) and drifting-mote colour (the Sector accent, data/sectors.ts). */
+  style: number;
+  mote: RGB;
 }
 
 const BG: RGB = [0.043, 0.051, 0.071]; // #0b0d12
 
 export const SECTOR_PALETTES: readonly SectorPalette[] = [
-  { id: 0, name: 'Outskirts', bg: BG, floorCenter: [0.165, 0.155, 0.145], floorEdge: [0.095, 0.09, 0.092],
+  { id: 0, style: 0, mote: SECTORS[0].palette.accent, name: 'Outskirts', bg: BG, floorCenter: [0.165, 0.155, 0.145], floorEdge: [0.095, 0.09, 0.092],
     grid: [0.5, 0.36, 0.16], rim: [0.95, 0.66, 0.2], enemy: [1.0, 0.72, 0.22], enemyAlt: [0.95, 0.5, 0.18], outline: [1.0, 0.93, 0.8] },
-  { id: 1, name: 'The Hive', bg: BG, floorCenter: [0.115, 0.14, 0.065], floorEdge: [0.065, 0.085, 0.045],
+  { id: 1, style: 1, mote: SECTORS[1].palette.accent, name: 'The Hive', bg: BG, floorCenter: [0.115, 0.14, 0.065], floorEdge: [0.065, 0.085, 0.045],
     grid: [0.36, 0.5, 0.14], rim: [0.66, 0.92, 0.22], enemy: [0.74, 0.96, 0.26], enemyAlt: [0.5, 0.8, 0.2], outline: [0.94, 1.0, 0.8] },
-  { id: 2, name: 'The Bastion Line', bg: BG, floorCenter: [0.125, 0.15, 0.2], floorEdge: [0.075, 0.09, 0.13],
+  { id: 2, style: 2, mote: SECTORS[2].palette.accent, name: 'The Bastion Line', bg: BG, floorCenter: [0.125, 0.15, 0.2], floorEdge: [0.075, 0.09, 0.13],
     grid: [0.28, 0.4, 0.58], rim: [0.5, 0.7, 0.98], enemy: [0.6, 0.76, 0.98], enemyAlt: [0.4, 0.56, 0.88], outline: [0.9, 0.96, 1.0] },
-  { id: 3, name: 'The Fold', bg: BG, floorCenter: [0.095, 0.06, 0.14], floorEdge: [0.048, 0.03, 0.08],
+  { id: 3, style: 3, mote: SECTORS[3].palette.accent, name: 'The Fold', bg: BG, floorCenter: [0.095, 0.06, 0.14], floorEdge: [0.048, 0.03, 0.08],
     grid: [0.42, 0.28, 0.64], rim: [0.72, 0.5, 1.0], enemy: [0.8, 0.58, 1.0], enemyAlt: [0.62, 0.42, 0.96], outline: [0.96, 0.9, 1.0] },
-  { id: 4, name: 'The Court', bg: BG, floorCenter: [0.085, 0.11, 0.24], floorEdge: [0.05, 0.065, 0.15],
+  { id: 4, style: 4, mote: SECTORS[4].palette.accent, name: 'The Court', bg: BG, floorCenter: [0.085, 0.11, 0.24], floorEdge: [0.05, 0.065, 0.15],
     grid: [0.55, 0.5, 0.3], rim: [1.0, 0.86, 0.4], enemy: [1.0, 0.87, 0.42], enemyAlt: [0.96, 0.96, 1.0], outline: [1.0, 1.0, 0.92] },
 ];
 

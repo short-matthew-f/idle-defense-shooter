@@ -17,10 +17,17 @@ export interface Prefs {
   buyQty: 1 | 10 | 0;
   /** The Suggested card at the top of Upgrades is expanded. */
   suggestOpen: boolean;
+  /** Sound (audio pass): slider values 0..1 (gain = value², see src/audio/engine.ts), mute, music switch. */
+  soundMaster: number;
+  soundSfx: number;
+  soundMusic: number;
+  soundMuted: boolean;
+  musicOn: boolean;
 }
 
 const KEY = 'citadel.prefs.v1';
-const DEFAULTS: Prefs = { onboarded: false, bloom: true, affordableFirst: false, panelOpen: true, shopCategory: 'chassis', shopTree: 'ballistics', activeTrial: null, buyCoach: 0, buyQty: 1, suggestOpen: true };
+const DEFAULTS: Prefs = { onboarded: false, bloom: true, affordableFirst: false, panelOpen: true, shopCategory: 'chassis', shopTree: 'ballistics', activeTrial: null, buyCoach: 0, buyQty: 1, suggestOpen: true,
+  soundMaster: 0.71, soundSfx: 0.8, soundMusic: 0.55, soundMuted: false, musicOn: true };
 
 let cache: Prefs | null = null;
 

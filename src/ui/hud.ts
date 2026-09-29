@@ -14,6 +14,7 @@ import { ABILITY_BY_ID, BOSS_BY_ID, sectorName } from './content';
 import { confirmDialog } from './modal';
 import { setPref } from './prefs';
 import { cycleBar } from './shell-logic';
+import { muteChip } from '../audio/ui';
 import type { UiCtx } from './ctx';
 
 const SPEEDS = [1, 2, 4, 8] as const;
@@ -48,11 +49,11 @@ export function speedCycle(current: number, allowed: number): 1 | 2 | 4 | 8 {
  *   row 1: "Wave 13 · The Outskirts" (the boss name during a boss wave) · Scrap + rate · Cores · pause
  *   row 2: HP (shield and barrier as thin strips on the same bar) · CE (ability cost marks)
  *   cycle: waves checkpoint+1 … +5 with the wave boundaries as ticks, the boss tick last
- * The Battle controls (Push / Patrol, speed, restart) are 36 px chips over the arena (`controls`).
+ * The Battle controls (Push / Patrol, speed, restart, mute) are 36 px chips over the arena (`controls`).
  */
 export class Hud {
   readonly el: HTMLElement;
-  /** Push / Patrol, speed (when > ×1 is allowed), restart: chips over the top-right of the arena. */
+  /** Push / Patrol, speed (when > ×1 is allowed), restart, mute (src/audio/ui.ts): chips over the top-right of the arena. */
   readonly controls: HTMLElement;
   private readonly waveNum = h('span', { class: 'wave-num' });
   private readonly waveSub = h('span', { class: 'wave-sub' });
@@ -121,7 +122,7 @@ export class Hud {
         this.pauseBtn),
       h('div', { class: 'tb-row tb-bars' }, this.hp.el, this.ce.el),
       this.cycle);
-    this.controls = h('div', { class: 'battle-controls', attrs: { role: 'toolbar', 'aria-label': 'Run controls' } }, this.trialBanner, this.modeBtn, this.speedBtn, restart);
+    this.controls = h('div', { class: 'battle-controls', attrs: { role: 'toolbar', 'aria-label': 'Run controls' } }, this.trialBanner, this.modeBtn, this.speedBtn, restart, muteChip());
     this.bossBar = new BossBar((t) => this.onTell?.(t));
   }
 

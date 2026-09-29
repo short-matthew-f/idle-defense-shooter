@@ -17,7 +17,9 @@ import { bossDef, enemyDef } from './content';
 export const EVENT_CAPACITY = 16384;
 
 /** Enemy state bits carried in SimEvent.c for Hit/Kill (and in c>>8 for StatusApply). */
-export const enum StateBit { Frozen = 1, Chilled = 2, Burning = 4, Poisoned = 8, Shocked = 16, Elite = 32, Boss = 64, Clump = 128 }
+export const enum StateBit { Frozen = 1, Chilled = 2, Burning = 4, Poisoned = 8, Shocked = 16, Elite = 32, Boss = 64, Clump = 128,
+  /** Audio-pass addition: set on Hit events only (never in StatusApply's c >> 8): the hit was a critical hit. Not hashed. */
+  Crit = 256 }
 
 /** Status index carried in StatusApply.c & 0xff. */
 export const STATUS_NAMES = ['burn', 'shock', 'poison', 'chill', 'bleed', 'brittle', 'marked', 'static', 'frozen'] as const;

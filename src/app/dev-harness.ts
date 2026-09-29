@@ -4,10 +4,26 @@
  * columns, ~800 projectiles, a rotating blade, a 5-node laser polygon, gravity wells, hazards,
  * threat halos, status icons, a boss, and a steady fx stream.
  *
+ * `#dev:showcase[=page]` (graphics pass) instead lays out the real art writers the sim snapshot uses
+ * (core/snapshot-art.ts, snapshot-tower.ts, snapshot-fx.ts) on pages for eyeballing and screenshots:
+ *   enemies   the 21 families + sub-units: plain, elite, and in their telegraph / active state
+ *   statuses  every status on three bodies, all at once, plus spawn-in, hit flash and knockback
+ *   towers    the nine Frames with hardpoints, attunements, ornament from wave 1 to 100, damage, shields
+ *   bosses    all 21 boss silhouettes cycling phases, tells and open weak points
+ *   fx        kill-chain lines and pips, deaths, pickups and every effect kind
+ *
  * DOM-free so it can be unit tested in Node.
  */
-import { ARENA_RADIUS, FX_FLOATS, FxKind, INSTANCE_FLOATS, Shape, TOWER_RADIUS, type RenderSnapshot } from '@sim/core/types';
+import { ARENA_RADIUS, EnemyFlag, FX_FLOATS, FxKind, INSTANCE_FLOATS, RStatus, Shape, TOWER_RADIUS, type RenderSnapshot } from '@sim/core/types';
 import { ELEMENT_COLORS, ELEMENT_ORDER, GOLD, SECTOR_PALETTES, THREAT_HALO_COLOR, type RGB } from '@render/palette';
+import { SnapshotWriter, animPhase } from '@sim/core/snapshot';
+import { EnemyView, FAMILY_KINDS, SUBUNIT_KINDS, writeEnemy } from '@sim/core/snapshot-art';
+import { TowerView, FRAME_IDS, writeTowerBase, writeTowerTop } from '@sim/core/snapshot-tower';
+import { ChainLines, srcColor } from '@sim/core/snapshot-fx';
+import { BOSS_LIST, bossDef, enemyDefByIndex, flagBitsFor } from '@sim/core/content';
+
+export type ShowcasePage = 'enemies' | 'statuses' | 'towers' | 'bosses' | 'fx';
+export const SHOWCASE_PAGES: readonly ShowcasePage[] = ['enemies', 'statuses', 'towers', 'bosses', 'fx'];
 
 export interface DevOptions {
   enemies: number;
@@ -15,6 +31,8 @@ export interface DevOptions {
   /** Multiplier on the fx-per-frame rate. */
   fxRate: number;
   sector: number;
+  /** Graphics pass: show a showcase page instead of the synthetic battle. */
+  showcase?: ShowcasePage;
 }
 
 export const DEV_DEFAULTS: Readonly<DevOptions> = { enemies: 600, projectiles: 800, fxRate: 1, sector: 0 };
@@ -38,9 +56,12 @@ export class DevHarness {
   private readonly maxInstances: number;
   private n = 0;
   private fxN = 0;
+  /** Showcase page renderer (graphics pass), when `opts.showcase` is set. */
+  readonly showcase: Showcase | null;
 
   constructor(opts: Partial<DevOptions> = {}) {
     this.opts = { ...DEV_DEFAULTS, ...opts };
+    this.showcase = this.opts.showcase ? new Showcase(this.opts.showcase) : null;
     const o = this.opts;
     this.maxInstances = o.enemies * 2 + o.projectiles + o.enemies / 10 + 512;
     const maxFx = Math.ceil(60 * o.fxRate) + 16;
@@ -57,6 +78,7 @@ export class DevHarness {
 
   /** Fill (and return) the reused snapshot for `frame`. */
   step(frame: number): RenderSnapshot {
+    if (this.showcase) return this.showcase.step(frame);
     this.n = 0;
     this.fxN = 0;
     const o = this.opts;
@@ -325,6 +347,204 @@ export function parseDevHash(hash: string): Partial<DevOptions> | null {
     if (part === 'stress') out = { ...out, ...DEV_STRESS };
     const m = /^sector=(\d)$/.exec(part);
     if (m) out.sector = Number(m[1]);
+    const sc = /^showcase(?:=(\w+))?$/.exec(part);
+    if (sc) out.showcase = (SHOWCASE_PAGES as readonly string[]).includes(sc[1] ?? '') ? sc[1] as ShowcasePage : 'enemies';
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Showcase (graphics pass)
+// ---------------------------------------------------------------------------------------------
+/** Showcase radius multiplier: enemies are drawn this much larger than in play so parts are legible. */
+export const SHOWCASE_SCALE = 2.2;
+const STATUS_COLUMNS: readonly number[] = [0, RStatus.Burn, RStatus.Chill, RStatus.Frozen, RStatus.Poison, RStatus.Shock, RStatus.Bleed, RStatus.Brittle, RStatus.Marked];
+
+export class Showcase {
+  readonly page: ShowcasePage;
+  readonly out = new SnapshotWriter();
+  readonly snap: RenderSnapshot = { tick: 0, instances: this.out.instances, instanceCount: 0, fx: this.out.fxBuf, fxCount: 0, cameraShake: 0, clarity: 0 };
+  private readonly v = new EnemyView();
+  private readonly tv = new TowerView();
+  private readonly chains = new ChainLines();
+  private seq = 0;
+  private last = -1;
+
+  constructor(page: ShowcasePage) { this.page = page; }
+
+  /** Did the frame counter pass a multiple of `period` (shifted by `off`) since the last step? (robust to skipped frames) */
+  private crossed(frame: number, period: number, off: number): boolean {
+    if (this.last < 0 || frame <= this.last) return (frame - off) % period === 0;
+    return Math.floor((frame - off) / period) > Math.floor((this.last - off) / period);
+  }
+
+  step(frame: number): RenderSnapshot {
+    const out = this.out;
+    out.reset();
+    out.frame = frame;
+    this.seq = 0;
+    out.push(0, 0, ARENA_RADIUS, 0, Shape.Ring, 0.3, 0.36, 0.48, 0.45, 0);
+    switch (this.page) {
+      case 'statuses': this.statuses(frame); break;
+      case 'towers': this.towers(frame); break;
+      case 'bosses': this.bosses(frame); break;
+      case 'fx': this.effects(frame); break;
+      default: this.enemies(frame); break;
+    }
+    this.last = frame;
+    const s = this.snap;
+    s.tick = frame; s.instances = out.instances; s.instanceCount = out.count; s.fx = out.fxBuf; s.fxCount = out.fxCount;
+    return s;
+  }
+
+  /** Fill the view for a family at (x, y). */
+  private enemy(kind: number, x: number, y: number, frame: number, scale = SHOWCASE_SCALE): EnemyView {
+    const v = this.v, d = enemyDefByIndex(kind);
+    v.x = x; v.y = y; v.r = d.radius * scale; v.kind = kind; v.shape = d.shape;
+    v.cr = d.color[0]; v.cg = d.color[1]; v.cb = d.color[2]; v.alpha = 1;
+    v.hp = 1; v.status = 0; v.flags = flagBitsFor(d); v.eliteMods = 0;
+    v.bossId = -1; v.bossDef = null; v.bossPhase = 0; v.tell = -1;
+    v.gen = 1000 + kind * 13 + this.seq++; v.phase = animPhase(v.gen); v.tick = frame;
+    v.spawnAge = 9999; v.flash = 0; v.squash = 0; v.wobble = 0;
+    v.aiI = 1; v.aiA = 0; v.aiB = 0; v.attackT = 100; v.shieldFrac = d.shieldMul > 0 ? 1 : 0; v.clump = 0;
+    v.dist = Math.hypot(x, y); v.chilled = false; v.frozen = false;
+    v.facing = 0; v.or = 0.05; v.og = 0.05; v.ob = 0.08; v.oa = 0.85;
+    v.halo = kind === 4 || kind === 7 || kind === 8 || kind === 12;
+    v.lod = false; v.allowPulse = true;
+    return v;
+  }
+
+  private enemies(frame: number): void {
+    const out = this.out;
+    const rows: number[][] = [FAMILY_KINDS.slice(0, 6), FAMILY_KINDS.slice(6, 11), FAMILY_KINDS.slice(11, 16), FAMILY_KINDS.slice(16, 21), [...SUBUNIT_KINDS]];
+    const cycle = frame % 180;
+    for (let r = 0; r < rows.length; r++) {
+      const row = rows[r];
+      for (let c = 0; c < row.length; c++) {
+        const k = row[c];
+        const cx = -415 + c * 166, cy = -400 + r * 190;
+        // plain
+        writeEnemy(out, this.enemy(k, cx - 42, cy, frame));
+        // elite
+        const e = this.enemy(k, cx + 42, cy, frame);
+        e.flags |= EnemyFlag.Elite; e.or = 1; e.og = 0.84; e.ob = 0.36; e.hp = 0.6;
+        writeEnemy(out, e);
+        // active / telegraph state, with a hit flash and spawn-in every 3 s
+        const a = this.enemy(k, cx, cy + 82, frame);
+        a.hp = 0.35 + 0.6 * ((cycle % 90) / 90);
+        if (cycle < 6) { a.flash = 1 - cycle / 6; a.squash = a.flash; }
+        if (cycle >= 120) a.spawnAge = cycle - 120;
+        switch (k) {
+          case 4: a.dist = 60; break;                                   // kamikaze fuse close to the tower
+          case 5: a.shieldFrac = 0; break;                              // shielded: shield broken
+          case 7: a.aiA = (frame * 2) % 240; break;                     // carrier pods swell
+          case 9: a.aiI = 1 | 8; break;                                 // leech tethered
+          case 13: a.attackT = 45 - (frame % 45); break;                // artillery aim line
+          case 14: a.aiI = (frame % 120) < 60 ? 1 | 16 : 1 | 32; break; // charger wind-up / dash
+          case 16: a.flags |= EnemyFlag.Phased; a.alpha = 0.45; break;  // phased
+          case 17: a.flags |= EnemyFlag.Burrowed; break;                // burrowed
+          case 24: a.aiB = (frame / 120 | 0) % 2 === 0 ? 3 : 4; a.aiA = (frame / 60 | 0) % 4; break;
+          default: a.facing = Math.sin(frame * 0.02) * 0.6; break;
+        }
+        writeEnemy(out, a);
+      }
+    }
+  }
+
+  private statuses(frame: number): void {
+    const out = this.out;
+    const bodies = [3, 0, 8];   // brute, grunt, healer
+    for (let r = 0; r < bodies.length; r++) {
+      for (let c = 0; c < STATUS_COLUMNS.length; c++) {
+        const v = this.enemy(bodies[r], -440 + c * 110, -330 + r * 150, frame);
+        const st = STATUS_COLUMNS[c];
+        v.status = st; v.frozen = (st & RStatus.Frozen) !== 0; v.chilled = (st & RStatus.Chill) !== 0;
+        if (v.frozen) { v.or = 0.7; v.og = 0.95; v.ob = 1; }
+        if (st & RStatus.Marked) { v.or = 1; v.og = 0.3; v.ob = 0.3; out.push(v.x, v.y, v.r + 6, 0, Shape.Ring, 1, 0.42, 0.42, 0.95, 7, 0.12, 1); }
+        v.hp = 0.8;
+        writeEnemy(out, v);
+      }
+    }
+    // everything at once on an armored and a warden
+    const all = RStatus.Burn | RStatus.Poison | RStatus.Shock | RStatus.Bleed | RStatus.Brittle | RStatus.Chill;
+    for (let k = 0; k < 2; k++) {
+      const v = this.enemy(k === 0 ? 11 : 12, -120 + k * 240, 150, frame, 3);
+      v.status = all; v.chilled = true; v.hp = 0.5;
+      writeEnemy(out, v);
+    }
+    // presentation beats: spawn-in, hit flash (≤ 3 Hz), knockback wobble, LOD base shapes
+    const cyc = frame % 120;
+    const s = this.enemy(3, -330, 360, frame); s.spawnAge = cyc % 40; writeEnemy(out, s);
+    const h = this.enemy(3, -110, 360, frame); const fa = cyc % 20; h.flash = fa < 6 ? 1 - fa / 6 : 0; h.squash = h.flash; writeEnemy(out, h);
+    const w = this.enemy(3, 110, 360, frame); const ka = cyc % 40; w.wobble = ka < 12 ? 0.5 * Math.sin(ka * 1.1) * (1 - ka / 12) : 0; writeEnemy(out, w);
+    const l = this.enemy(8, 330, 360, frame); l.lod = true; l.status = RStatus.Burn | RStatus.Frozen; l.frozen = true; writeEnemy(out, l);
+  }
+
+  private towers(frame: number): void {
+    const out = this.out, tv = this.tv;
+    const deep = [1, 12, 25, 42, 62, 80, 100, 100, 100];
+    const hps: (string | null)[][] = [[], ['ordnance'], ['laser', 'gravitics'], ['blade'], ['drones', 'ordnance'], ['blade', 'gravitics', 'ordnance'], ['ordnance', 'laser', 'drones'], ['laser', 'gravitics', 'blade'], ['ordnance', 'drones', 'blade', 'gravitics']];
+    const ats: (string | null)[][] = [[], ['fire'], ['fire', 'poison', 'frost'], ['lightning', 'frost'], ['poison', 'fire'], ['frost', 'fire'], ['lightning', 'poison'], ['fire', 'lightning'], ['fire', 'lightning', 'poison', 'frost']];
+    for (let k = 0; k < FRAME_IDS.length; k++) {
+      const col = k % 3, row = (k / 3) | 0;
+      tv.x = -330 + col * 330; tv.y = -330 + row * 330; tv.scale = 2.1;
+      tv.frame = FRAME_IDS[k]; tv.hardpoints = hps[k]; tv.attunements = ats[k]; tv.deepest = deep[k];
+      tv.hpFrac = k === 3 ? 0.2 : k === 5 ? 0.4 : 1;
+      tv.shieldFrac = k === 5 ? 0.7 : 0; tv.barrierFrac = k === 5 ? 0.8 : 0; tv.barrierR = 70; tv.tempHp = false;
+      tv.aim = frame * 0.02 + k; tv.firing = (frame + k * 7) % 24 < 4 ? 1 - ((frame + k * 7) % 24) / 4 : 0;
+      tv.tick = frame; tv.dronesOut = (frame / 180 | 0) % 2;
+      writeTowerBase(out, tv);
+      writeTowerTop(out, tv);
+    }
+  }
+
+  private bosses(frame: number): void {
+    const out = this.out;
+    for (let k = 0; k < BOSS_LIST.length; k++) {
+      const col = k % 5, row = (k / 5) | 0;
+      const def = bossDef(BOSS_LIST[k], 5);
+      const v = this.enemy(25, -400 + col * 200, -400 + row * 195, frame, 1);
+      v.r = def.radius * 1.35; v.shape = def.shape; v.cr = def.color[0]; v.cg = def.color[1]; v.cb = def.color[2];
+      v.bossId = k; v.bossDef = def; v.flags = EnemyFlag.Boss; v.or = 1; v.og = 1; v.ob = 1;
+      const nph = def.phases.length;
+      v.bossPhase = ((frame / 240) | 0) % nph;
+      const tc = frame % 240;
+      v.tell = tc >= 150 && tc < 240 ? (tc - 150) / 90 : -1;
+      if (def.phases[v.bossPhase]?.weakPoint && tc < 120) v.flags |= EnemyFlag.WeakPointOpen;
+      v.halo = (v.flags & EnemyFlag.WeakPointOpen) !== 0;
+      v.hp = 1 - v.bossPhase / nph - 0.1;
+      writeEnemy(out, v);
+    }
+  }
+
+  private effects(frame: number): void {
+    const out = this.out;
+    // a five-link chain hopping across the field every second: gun → drone → lightning → laser → poison → kill
+    const hops: [number, number, string][] = [[-380, 200, 'ballistics'], [-250, 120, 'drones'], [-130, 210, 'lightning'], [0, 110, 'laser'], [130, 220, 'poison'], [260, 140, 'fusion.toxic_combustion']];
+    for (let ph = 0; ph < hops.length - 1; ph++) {
+      if (!this.crossed(frame, 60, ph * 3)) continue;
+      const a = hops[ph], b = hops[ph + 1];
+      this.chains.add(a[0], a[1], b[0], b[1], srcColor(b[2]), ph + 2, frame);
+      if (ph === hops.length - 2) {
+        out.fx(FxKind.Kill, b[0], b[1], ...srcColor(b[2]), 14, 12);
+        out.fx(FxKind.Shatter, b[0], b[1], 1, 0.72, 0.22, 12, 8);
+        out.fx(FxKind.ChainPips, b[0], b[1] - 20, 1, 0.84, 0.36, 3, ph + 2);
+      }
+    }
+    this.chains.write(out, frame);
+    for (const [x, y] of hops) { const v = this.enemy(0, x, y, frame, 1.4); writeEnemy(out, v); }
+    // every effect kind on a grid, re-fired every 1.5 s
+    const kinds = [FxKind.Hit, FxKind.Kill, FxKind.Explosion, FxKind.Spark, FxKind.Ember, FxKind.Frost, FxKind.Toxic, FxKind.Arc, FxKind.Shockwave, FxKind.Muzzle, FxKind.Trail, FxKind.Counter, FxKind.Tell, FxKind.Shatter, FxKind.ChainPips, FxKind.Pickup, FxKind.PickupCore];
+    for (let k = 0; k < kinds.length; k++) {
+      if (!this.crossed(frame, 90, -k * 5)) continue;
+      const x = -400 + (k % 6) * 160, y = -380 + ((k / 6) | 0) * 150;
+      const c = ELEMENT_COLORS[ELEMENT_ORDER[k % 4]];
+      out.fx(kinds[k], x, y, c[0], c[1], c[2], kinds[k] === FxKind.Shockwave || kinds[k] === FxKind.Counter || kinds[k] === FxKind.Tell ? 60 : kinds[k] === FxKind.Pickup || kinds[k] === FxKind.PickupCore ? 3.5 : 14, 6);
+    }
+    // the tower the pickups fly to
+    const tv = this.tv;
+    tv.x = 0; tv.y = 0; tv.scale = 1; tv.frame = 'standard'; tv.hardpoints = ['ordnance', 'drones']; tv.attunements = ['fire', 'lightning'];
+    tv.deepest = 40; tv.hpFrac = 1; tv.shieldFrac = 0; tv.barrierFrac = 0; tv.aim = frame * 0.03; tv.firing = frame % 20 < 3 ? 1 : 0; tv.tick = frame; tv.dronesOut = 0;
+    writeTowerBase(out, tv); writeTowerTop(out, tv);
+  }
 }

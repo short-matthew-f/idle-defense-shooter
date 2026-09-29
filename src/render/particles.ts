@@ -3,8 +3,12 @@
  * and emits instances (same 12-float format as the sim stream) into the renderer's sorted buffer.
  *
  * Everything lives in preallocated typed arrays (budget 10,000). Removal is swap-with-last.
- * Player-effect particles go to layer 2 (additive); Tell rings go to layer 7 (in-world UI, normal
- * blending) so warnings are never dimmed by the density governor.
+ * Player-effect particles go to layer 2 (additive); Tell rings and kill-chain pips go to layer 7
+ * (in-world UI, normal blending) so warnings are never dimmed by the density governor.
+ *
+ * Graphics pass: Shatter (body-coloured shards sized by the enemy), ChainPips, Scrap / Core pickups
+ * that home on the HUD counters (`setPickupTarget`), `flashScale` (bright flashes under reduced
+ * motion), and every pulse at or under 3 Hz.
  */
 import { FxKind, Shape, FX_FLOATS } from '@sim/core/types';
 import { INSTANCE_STRIDE, LAYER_OFFSET } from './layer-sort';
@@ -41,6 +45,12 @@ const FADE_LINEAR = 0;   // a * (1 - t)
 const FADE_FLASH = 1;    // a * (1 - t)^2
 const FADE_PULSE = 2;    // pulsing warning ring
 const FADE_HOLD = 3;     // hold, then fade over the last third
+/** Tell ring pulse: 1.25 cycles over its 0.5 s life = 2.5 Hz (never above 3 Hz). */
+export const TELL_PULSE_CYCLES = 1.25;
+export const TELL_LIFE = 0.5;
+/** Pickup motes: burst outward, then home on their target and vanish on arrival. */
+const PICKUP_LIFE = 1.5;
+const PICKUP_BURST = 0.22;
 
 const LAYER_FX = 2;
 const LAYER_UI = 7;
@@ -73,6 +83,13 @@ export class Particles {
   private readonly shape: Uint8Array;
   private readonly layer: Uint8Array;
   private readonly mode: Uint8Array;
+  /** 0 = free, 1 = homes on the Scrap target, 2 = on the Core target. */
+  private readonly home: Uint8Array;
+  /** Pickup targets in world units (set every frame by the renderer; default: the tower). */
+  readonly targetX = new Float32Array(3);
+  readonly targetY = new Float32Array(3);
+  /** Alpha multiplier for bright flash discs (reduced motion lowers it). */
+  flashScale = 1;
 
   private seed = 0x9e3779b9 | 0;
   /** Scale on emission counts, set from the Clarity slider (1 = Spectacle, lower = Clarity). */
@@ -86,6 +103,7 @@ export class Particles {
     this.rot = f(); this.vrot = f(); this.cr = f(); this.cg = f(); this.cb = f(); this.a0 = f();
     this.aux0 = f(); this.ex = f(); this.ey = f();
     this.shape = new Uint8Array(budget); this.layer = new Uint8Array(budget); this.mode = new Uint8Array(budget);
+    this.home = new Uint8Array(budget);
   }
 
   clear(): void { this.count = 0; }
@@ -125,7 +143,7 @@ export class Particles {
     this.s0[i] = s0; this.s1[i] = s1; this.rot[i] = rot; this.vrot[i] = vrot;
     this.cr[i] = r; this.cg[i] = g; this.cb[i] = b; this.a0[i] = a;
     this.aux0[i] = aux0; this.ex[i] = 0; this.ey[i] = 0;
-    this.shape[i] = shape; this.layer[i] = layer; this.mode[i] = mode;
+    this.shape[i] = shape; this.layer[i] = layer; this.mode[i] = mode; this.home[i] = 0;
     return i;
   }
 
@@ -135,6 +153,9 @@ export class Particles {
     const whole = f | 0;
     return whole + (this.rnd() < f - whole ? 1 : 0);
   }
+
+  /** Where Scrap (1) / Core (2) pickups fly to, in world units. */
+  setPickupTarget(which: 1 | 2, x: number, y: number): void { this.targetX[which] = x; this.targetY[which] = y; }
 
   /** Consume `fxCount` requests from the snapshot fx stream. */
   consume(fx: Float32Array, fxCount: number): void {
@@ -167,12 +188,13 @@ export class Particles {
         }
         if (thin > 0.5) {
           this.emit(Shape.Ring, LAYER_FX, FADE_FLASH, x, y, 0, 0, size * 0.35, size * 1.15, 0.26, r, g, b, 0.6, 0, 0, 0, 0, 0.14);
-          this.emit(Shape.Circle, LAYER_FX, FADE_FLASH, x, y, 0, 0, size * 0.5, size * 0.9, 0.1, 1, 1, 1, 0.7, 0, 0, 0, 0, 0);
+          this.emit(Shape.Circle, LAYER_FX, FADE_FLASH, x, y, 0, 0, size * 0.45, size * 0.8, 0.1, 0.6 + 0.4 * r, 0.6 + 0.4 * g, 0.6 + 0.4 * b, 0.5, 0, 0, 0, 0, 0);
         }
         break;
       }
       case FxKind.Explosion: {
-        this.emit(Shape.Circle, LAYER_FX, FADE_FLASH, x, y, 0, 0, size * 0.45, size * 0.85, 0.14, 1, 0.95, 0.85, 0.85, 0, 0, 0, 0, 0);
+        // white-hot core, kept small and brief so enemies inside a blast stay readable
+        this.emit(Shape.Circle, LAYER_FX, FADE_FLASH, x, y, 0, 0, size * 0.35, size * 0.7, 0.12, 0.65 + 0.35 * r, 0.65 + 0.35 * g, 0.65 + 0.35 * b, 0.6, 0, 0, 0, 0, 0);
         this.emit(Shape.Ring, LAYER_FX, FADE_FLASH, x, y, 0, 0, size * 0.25, size, 0.42, r, g, b, 1, 0, 0, 0, 0, 0.1);
         const n = this.amount(count > 0 ? count : 18, thin);
         const top = Math.min(320, size * 3.5);
@@ -269,8 +291,40 @@ export class Particles {
       }
       case FxKind.Tell:
         // Pulsing warning ring on the UI layer: never dimmed by the density governor.
-        this.emit(Shape.Ring, LAYER_UI, FADE_PULSE, x, y, 0, 0, size, size * 0.9, 0.5, r, g, b, 0.9, 0, 0, 0, 0, 0.06);
+        this.emit(Shape.Ring, LAYER_UI, FADE_PULSE, x, y, 0, 0, size, size * 0.9, TELL_LIFE, r, g, b, 0.9, 0, 0, 0, 0, 0.06);
         break;
+      case FxKind.Shatter: {
+        // body-coloured shards: count and throw scale with the enemy radius
+        const n = this.amount(count > 0 ? count : 6, thin);
+        const rad = size > 0 ? size : 8;
+        for (let k = 0; k < n; k++) {
+          const a = this.rnd() * TAU, sp = (40 + this.rnd() * 90) * (0.6 + rad / 20);
+          this.emit(Shape.Triangle, LAYER_FX, FADE_LINEAR, x + Math.cos(a) * rad * 0.4, y + Math.sin(a) * rad * 0.4, Math.cos(a) * sp, Math.sin(a) * sp,
+            rad * (0.22 + this.rnd() * 0.22), rad * 0.08, 0.45 + this.rnd() * 0.4, r, g, b, 0.9, 3.2, 40, a, this.rnd() * 14 - 7, 0);
+        }
+        break;
+      }
+      case FxKind.ChainPips: {
+        // kill-chain depth: a row of small pips above the kill (UI layer, subtle)
+        const n = Math.max(0, Math.min(9, count | 0));
+        const gap = 3.6;
+        for (let k = 0; k < n; k++) {
+          this.emit(Shape.Diamond, LAYER_UI, FADE_HOLD, x + (k - (n - 1) / 2) * gap, y, 0, -14, 1.5, 1.5, 0.75, r, g, b, 0.85, 1.5, 0, 0, 0, 0);
+        }
+        break;
+      }
+      case FxKind.Pickup:
+      case FxKind.PickupCore: {
+        const core = kind === FxKind.PickupCore;
+        const n = Math.max(1, Math.min(core ? 6 : 3, count | 0));
+        for (let k = 0; k < n; k++) {
+          const a = this.rnd() * TAU, sp = 60 + this.rnd() * 80;
+          const p = this.emit(core ? Shape.Hex : Shape.Diamond, LAYER_FX, FADE_HOLD, x, y, Math.cos(a) * sp, Math.sin(a) * sp,
+            size, size * 0.7, PICKUP_LIFE, r, g, b, 1, 2.5, 0, a, 0, 0);
+          if (p >= 0) this.home[p] = core ? 2 : 1;
+        }
+        break;
+      }
       default:
         break;
     }
@@ -279,7 +333,7 @@ export class Particles {
   /** Advance all particles by dt seconds. Removal is swap-with-last. */
   update(dt: number): void {
     let n = this.count;
-    const { x, y, vx, vy, gy, drag, life, invLife, t, rot, vrot, s0, s1, cr, cg, cb, a0, aux0, ex, ey, shape, layer, mode } = this;
+    const { x, y, vx, vy, gy, drag, life, invLife, t, rot, vrot, s0, s1, cr, cg, cb, a0, aux0, ex, ey, shape, layer, mode, home } = this;
     for (let i = 0; i < n; i++) {
       const l = life[i] - dt;
       if (l <= 0) {
@@ -289,13 +343,26 @@ export class Particles {
           life[i] = life[n]; invLife[i] = invLife[n]; t[i] = t[n]; rot[i] = rot[n]; vrot[i] = vrot[n];
           s0[i] = s0[n]; s1[i] = s1[n]; cr[i] = cr[n]; cg[i] = cg[n]; cb[i] = cb[n]; a0[i] = a0[n];
           aux0[i] = aux0[n]; ex[i] = ex[n]; ey[i] = ey[n];
-          shape[i] = shape[n]; layer[i] = layer[n]; mode[i] = mode[n];
+          shape[i] = shape[n]; layer[i] = layer[n]; mode[i] = mode[n]; home[i] = home[n];
         }
         i--;
         continue;
       }
       life[i] = l;
       t[i] = 1 - l * invLife[i];
+      const hm = home[i];
+      if (hm !== 0 && PICKUP_LIFE - l > PICKUP_BURST) {
+        // steer toward the HUD counter, accelerating; arrive → expire next frame
+        const dx = this.targetX[hm] - x[i], dy = this.targetY[hm] - y[i];
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < 10) { life[i] = 1e-6; continue; }
+        const sp = 260 + 1400 * (PICKUP_LIFE - l);
+        const blend = dt * 7 > 1 ? 1 : dt * 7;
+        vx[i] += ((dx / d) * sp - vx[i]) * blend;
+        vy[i] += ((dy / d) * sp - vy[i]) * blend;
+        x[i] += vx[i] * dt; y[i] += vy[i] * dt;
+        continue;
+      }
       let k = 1 - drag[i] * dt;
       if (k < 0) k = 0;
       vx[i] *= k;
@@ -326,8 +393,8 @@ export class Particles {
       const inv = 1 - t;
       switch (this.mode[i]) {
         case FADE_LINEAR: a *= inv; break;
-        case FADE_FLASH: a *= inv * inv; break;
-        case FADE_PULSE: a *= (0.55 + 0.45 * Math.sin(t * 25)) * (t > 0.8 ? (1 - t) * 5 : 1); break;
+        case FADE_FLASH: a *= inv * inv * (this.shape[i] === Shape.Circle ? this.flashScale : 1); break;
+        case FADE_PULSE: a *= (0.55 + 0.45 * Math.sin(t * 6.283185307179586 * TELL_PULSE_CYCLES)) * (t > 0.8 ? (1 - t) * 5 : 1); break;
         default: a *= inv > 0.34 ? 1 : inv * 2.94; break;
       }
       const isLine = this.shape[i] === Shape.Line;

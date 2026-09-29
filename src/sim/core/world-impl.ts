@@ -239,7 +239,7 @@ export class WorldImpl implements World {
     e.hp[enemy] -= toHp;
     h.damage = dmg;
     e.lastHitTick[enemy] = this.run.tick;
-    if (!opts.silent) h.eventId = this.emitC(Ev.Hit, opts.srcTag, enemy, dmg, this.stateBits(enemy), h.x, h.y, opts.cause);
+    if (!opts.silent) h.eventId = this.emitC(Ev.Hit, opts.srcTag, enemy, dmg, this.stateBits(enemy) | (h.crit ? StateBit.Crit : 0), h.x, h.y, opts.cause);
     // Damage share counts effective damage (HP and shield actually removed), not overkill: an 8,000-damage
     // blast on a 50-HP enemy contributed 50. Hit events still carry the full dealt damage.
     this.recordShare(opts.srcTag, (toHp < hpBefore ? toHp : hpBefore) + absorbed);
