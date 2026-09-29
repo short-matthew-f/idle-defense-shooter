@@ -4,7 +4,8 @@
  *  - Shield recharge: after 3 s without damage, shields refill at `bastion.shield_recharge`/s plus a
  *    baseline 10% of capacity per second.
  *  - invulnerability countdown, low-HP bookkeeping (lowHpTicks for Command Energy / Phoenix).
- *  - Death: when HP reaches 0 during combat, emits Ev.TowerDeath once; the run machine reacts.
+ *  - Death: when HP reaches 0 during combat, emits Ev.TowerDeath once (data: World.towerKiller, i.e.
+ *    { killer, boss?, bossPhase? }); the run machine reacts.
  * `betweenWaveHeal` is called by the run machine at each `between` phase.
  */
 import type { System } from '../core/system';
@@ -33,7 +34,8 @@ export class TowerSystem implements System {
     const t = w.tower;
     if (t.invulnT > 0) t.invulnT--;
     if (t.hp <= 0) {
-      if (!this.deathEmitted) { this.deathEmitted = true; w.emit(Ev.TowerDeath, 'tower', w.run.wave, w.run.attempts, 0, 0, -1); }
+      // data (UX review S3): { killer, boss?, bossPhase? } from World.damageTower's killing blow
+      if (!this.deathEmitted) { this.deathEmitted = true; w.emit(Ev.TowerDeath, 'tower', w.run.wave, w.run.attempts, 0, 0, -1, w.towerKiller ?? { killer: 'enemy' }); }
       return;
     }
     this.deathEmitted = false;

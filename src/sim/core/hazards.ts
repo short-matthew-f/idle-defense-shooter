@@ -31,7 +31,7 @@ export function updateHazards(w: WorldImpl): void {
       const amt = h.dps * PULSE_DT;
       if (h.owner === 'enemy') {
         const rr = h.radius + TOWER_RADIUS;
-        if (hazardDist2(0, 0, h) <= rr * rr) w.damageTower(amt, -1, h.cause);
+        if (hazardDist2(0, 0, h) <= rr * rr) w.damageTower(amt, -1, h.cause, 'hazard');
       } else {
         const line = h.x2 !== undefined && h.y2 !== undefined;
         const cx = line ? (h.x + h.x2!) * 0.5 : h.x, cy = line ? (h.y + h.y2!) * 0.5 : h.y;

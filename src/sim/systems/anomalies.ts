@@ -307,7 +307,7 @@ export class AnomaliesSystem implements System {
         if (this.isotope && e.src !== 'anomaly.unstable_isotope' && w.prng.chance(w.stats.get('anomaly.unstable_isotope.self_chance'))) {
           const ev = this.fire(w, 'anomaly.unstable_isotope', e.id, e.x, e.y);
           // capped per detonation: with Flashpoint-scale explosion volume the uncapped 10% was self-destruction
-          w.damageTower(Math.min(e.b * w.stats.get('anomaly.unstable_isotope.self_damage'), w.tower.maxHp * w.stats.get('anomaly.unstable_isotope.self_cap')), -1, ev);
+          w.damageTower(Math.min(e.b * w.stats.get('anomaly.unstable_isotope.self_damage'), w.tower.maxHp * w.stats.get('anomaly.unstable_isotope.self_cap')), -1, ev, 'self');
         }
         if (this.echoChamber && e.src !== 'anomaly.echo_chamber') this.queueExplosion(w, e);
       } else if (e.type === Ev.Cast && this.feedback && e.src.startsWith('ability.')) {

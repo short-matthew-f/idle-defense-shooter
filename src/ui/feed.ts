@@ -15,6 +15,7 @@ export class Feed {
   readonly el = h('div', { class: 'feed', attrs: { 'aria-live': 'polite', role: 'status' } });
   private lastDraft = '';
   private lastRec = false;
+  private lastGate = false;
   private lastSlots: { hp: number; at: number } | null = null;
 
   toast(msg: string, kind: ToastKind = 'info', ms = 3600): void {
@@ -54,5 +55,9 @@ export class Feed {
     const rec = !!ui.forecast?.recommended;
     if (rec && !this.lastRec) this.toast('Prestige recommended: see the Forecast', 'warn', 6000);
     this.lastRec = rec;
+    // The run machine parks Push at wave 100 until Ascension V opens the Deep Waves (run/machine.ts).
+    const gate = ui.run.mode === 'push' && ui.run.wave >= 100 && ui.run.deepestCleared >= 100 && ui.meta.ascension < 5;
+    if (gate && !this.lastGate) this.toast('Wave 100 cleared: the Deep Waves open at Ascension V. Ascend from Menu → Ascension, or Patrol meanwhile.', 'warn', 9000);
+    this.lastGate = gate;
   }
 }

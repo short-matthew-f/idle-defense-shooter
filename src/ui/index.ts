@@ -143,7 +143,7 @@ export class GameUi {
     this.inspector.ring.push(events);
     this.feed.onEvents(events);
     for (const e of events) {
-      if (e.type === Ev.TowerDeath && this.latest) this.death.show(e.a || this.latest.run.wave, this.latest);
+      if (e.type === Ev.TowerDeath && this.latest) this.death.show(e.a || this.latest.run.wave, this.latest, e.data);
       else if (e.type === Ev.WaveClear || e.type === Ev.Prestige || e.type === Ev.Ascend) this.death.hide();
       else if (e.type === Ev.Purchase) this.shop.noteBuy();
     }

@@ -1,21 +1,21 @@
 /**
  * Field overlay (UI-in-world, layer 7): feedback the sim snapshot does not draw at phone scale.
  *   - tap ripple: an expanding ring where a tap landed (snapped onto the enemy it designated)
- *   - designation reticle: a ring around every enemy drawn with the designated/marked outline
- *     colour (the sim's outline is only 2 world units wide, under 1 px on a phone)
+ *   - designation reticle: the sim marks every designated / Hunter-marked enemy with a layer-7 Ring
+ *     tagged aux1 = RETICLE_MARK (core/snapshot.ts); here it is redrawn at least 12 CSS px wide (the
+ *     sim's ring is sized in world units, a few px on a phone)
  *   - aim line: tower → pointer while hold-to-aim steers the primary
  * Sizes are in CSS pixels converted with the camera scale, so they read the same on every screen.
  * Pure over typed arrays (no DOM, no GL); allocates nothing per frame.
  */
-import { INSTANCE_FLOATS, Shape, ARENA_RADIUS, TOWER_RADIUS } from '@sim/core/types';
+import { INSTANCE_FLOATS, Shape, ARENA_RADIUS, TOWER_RADIUS, RETICLE_MARK } from '@sim/core/types';
 
 export const OVERLAY_LAYER = 7;
-const OUTLINE_LAYER = 5;
 const MAX = 96;
 const RIPPLE_S = 0.35;
-/** Designated / Hunter-marked outline colour written by the sim snapshot (core/snapshot.ts). */
-export function isDesignatedOutline(r: number, g: number, b: number): boolean {
-  return r === 1 && Math.abs(g - 0.3) < 1e-3 && Math.abs(b - 0.3) < 1e-3;
+/** Is instance `o` (float offset) the sim's designation reticle? */
+export function isReticle(f: Float32Array, o: number): boolean {
+  return f[o + 9] === OVERLAY_LAYER && f[o + 4] === Shape.Ring && f[o + 11] === RETICLE_MARK;
 }
 
 export class FieldOverlay {
@@ -50,8 +50,8 @@ export class FieldOverlay {
       let marks = 0;
       for (let i = 0; i < n && marks < 8; i++) {
         const o = i * INSTANCE_FLOATS;
-        if (instances[o + 9] !== OUTLINE_LAYER || !isDesignatedOutline(instances[o + 5], instances[o + 6], instances[o + 7])) continue;
-        const r = Math.max(instances[o + 2] + 6, 12 * px);
+        if (!isReticle(instances, o)) continue;
+        const r = Math.max(instances[o + 2], 12 * px);
         this.push(instances[o], instances[o + 1], r, Shape.Ring, 1, 0.42, 0.42, 0.95, Math.min(0.5, (2.5 * px) / r));
         marks++;
       }

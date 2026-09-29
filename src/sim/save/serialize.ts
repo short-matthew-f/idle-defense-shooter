@@ -31,7 +31,7 @@ function table(src: readonly number[] | undefined, min: number): Uint8Array {
 }
 
 /** WP8: optional progression fields shared by RunState and RunSave (copied when present). */
-const RUN_EXTRAS = ['plannedHardpoints', 'plannedAttunements', 'plannedDoctrines', 'minThreatDial', 'discountTree', 'checkpointSeconds'] as const;
+const RUN_EXTRAS = ['plannedHardpoints', 'plannedAttunements', 'plannedDoctrines', 'minThreatDial', 'discountTree', 'checkpointSeconds', 'patrolMeasured'] as const;
 function runExtras(src: RunState | RunSave): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const k of RUN_EXTRAS) { const v = src[k]; if (v !== undefined && v !== null) out[k] = clone(v); }

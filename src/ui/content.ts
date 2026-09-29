@@ -5,7 +5,7 @@
 import type { AbilityId, AnomalyId, BossId, ElementId, FrameId, HardpointId, NodeId, TreeId } from '@sim/core/ids';
 import type { AbilityDef, AnomalyDef, FrameDef, NodeDef, TreeDef } from '@sim/data/schema';
 import {
-  ABILITIES, ANOMALIES, CHASSIS_LINKAGES, FRAMES, FUSIONS, INFUSIONS, PRESTIGE_NODES, STAR_NODES, TREES, TRIADS, WEAPON_LINKAGES, BOSSES, SECTORS,
+  ABILITIES, ANOMALIES, CHASSIS_LINKAGES, FRAMES, FUSIONS, INFUSIONS, PRESTIGE_NODES, STAR_NODES, TREES, TRIADS, WEAPON_LINKAGES, BOSSES, SECTORS, ENEMIES,
 } from '@sim/data/index';
 
 export const TREE_BY_ID = new Map<TreeId, TreeDef>(TREES.map((t) => [t.id, t]));
@@ -13,6 +13,8 @@ export const ABILITY_BY_ID = new Map<AbilityId, AbilityDef>(ABILITIES.map((a) =>
 export const ANOMALY_BY_ID = new Map<AnomalyId, AnomalyDef>(ANOMALIES.map((a) => [a.id, a]));
 export const FRAME_BY_ID = new Map<FrameId, FrameDef>(FRAMES.map((f) => [f.id, f]));
 export const BOSS_BY_ID = new Map<BossId, (typeof BOSSES)[number]>(BOSSES.map((b) => [b.id, b]));
+/** Enemy display names by kind ('grunt' → 'Grunt'). */
+export const ENEMY_NAME = new Map<string, string>(ENEMIES.map((e) => [e.kind, e.name]));
 
 /** Every NodeDef by id (trees, doctrines, exotics, cross-system, prestige, stars, abilities). */
 export const NODE_BY_ID = new Map<NodeId, NodeDef>();

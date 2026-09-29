@@ -6,9 +6,26 @@
 import type { AnomalyId } from '../core/ids';
 import type { AnomalyDef } from '../data/schema';
 import type { WorldImpl } from '../core/world-impl';
+import type { RunState } from '../core/types';
+import { TICK_RATE } from '../core/types';
 import { Prng, combineSeed } from '../math/prng';
 import { allAnomalies } from '../core/content';
 import { codexAnomalyWeight } from '../economy/codex';   // WP8: Codex milestones weight non-Common offers
+
+/** Ticks in the `draft` phase before the run machine auto-picks the first offer (an unattended tower never stalls). */
+export const DRAFT_AUTO_TICKS = 30 * TICK_RATE;
+
+/**
+ * Ticks until the auto-pick (UiState.run.draftTicksLeft): counting down in `draft`; in `wave_clear` with a
+ * draft pending, the rest of that phase (`waveClearTicks` long) plus the full draft window; otherwise null
+ * (no draft, or a draft restored from a save that waits for the next wave clear).
+ */
+export function draftTicksLeft(run: Pick<RunState, 'phase' | 'phaseTicks' | 'pendingDraft'>, waveClearTicks: number): number | null {
+  if (!run.pendingDraft || run.pendingDraft.length === 0) return null;
+  if (run.phase === 'draft') return Math.max(0, DRAFT_AUTO_TICKS - run.phaseTicks);
+  if (run.phase === 'wave_clear') return DRAFT_AUTO_TICKS + Math.max(0, waveClearTicks - run.phaseTicks);
+  return null;
+}
 
 const RARITY_WEIGHT: Record<string, number> = { common: 5, rare: 3, cursed: 2, paradox: 1 };
 

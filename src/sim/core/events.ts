@@ -220,6 +220,11 @@ function killObject(e: SimEvent): string {
 
 const LAUNCHERS = new Set(['ordnance', 'drones', 'blade', 'laser', 'gravitics', 'ballistics', 'primary', 'ability', 'link', 'chassis', 'infuse', 'fusion']);
 
+/** Event types whose src IS the thing triggered (a Fusion, Linkage, Anomaly...): "which triggered the X". */
+function isTrigger(t: Ev): boolean {
+  return t === Ev.Fusion || t === Ev.Triad || t === Ev.Linkage || t === Ev.Infusion || t === Ev.Anomaly;
+}
+
 function clause(e: SimEvent): { verb: Verb; obj: string; launch?: boolean } {
   const c = e.c ?? 0;
   switch (e.type) {
@@ -245,6 +250,9 @@ function clause(e: SimEvent): { verb: Verb; obj: string; launch?: boolean } {
 /**
  * "The drone shocked the frozen enemy, which caused the lightning to jump to the enemy, ..., which killed the elite."
  * Hit events immediately followed by a same-src Kill of the same enemy are folded into the Kill.
+ * A triggered Fusion / Linkage / Infusion / Anomaly reads "which triggered the loaded dice" (its src is the
+ * thing triggered, so "caused the loaded dice to trigger loaded dice" never appears), and consecutive
+ * identical clauses (repeated links such as DoT ticks or re-triggers) are collapsed into one.
  */
 export function chainSentence(chain: readonly SimEvent[]): string {
   const items: SimEvent[] = [];
@@ -261,10 +269,13 @@ export function chainSentence(chain: readonly SimEvent[]): string {
     const noun = nounFor(e.src);
     const { verb, obj, launch } = clause(e);
     const tail = obj ? ` ${obj}` : '';
-    if (launch) parts.push(i === 0 ? `The ${noun} launched` : `which launched the ${noun}`);
-    else if (i === 0) parts.push(`The ${noun} ${verb[0]}${tail}`);
-    else if (noun === prevNoun) parts.push(`which ${verb[0]}${tail}`);
-    else parts.push(`which caused the ${noun} to ${verb[1]}${tail}`);
+    let part: string;
+    if (launch) part = i === 0 ? `The ${noun} launched` : `which launched the ${noun}`;
+    else if (isTrigger(e.type)) part = i === 0 ? `The ${noun} triggered` : `which triggered the ${noun}`;
+    else if (i === 0) part = `The ${noun} ${verb[0]}${tail}`;
+    else if (noun === prevNoun) part = `which ${verb[0]}${tail}`;
+    else part = `which caused the ${noun} to ${verb[1]}${tail}`;
+    if (parts.length === 0 || parts[parts.length - 1] !== part) parts.push(part);
     prevNoun = noun;
   }
   return parts.join(', ') + '.';

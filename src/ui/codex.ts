@@ -4,7 +4,7 @@
  * entries read "???" and the sim's hints are listed. Each entry: +0.25% damage and Scrap.
  *
  * Entry ids assumed (see report): fusion.<id>, triad.<id>, link.<a>+<b> / chassis.<x>+<hp>,
- * infuse.<system>.<element>, anomaly.<id>, counter.<boss>, chain.<n> for n in 3/5/8/12.
+ * infuse.<system>.<element>, anomaly.<id>, counter.<boss> (sim: counter.boss.<boss>), chain.<n> for n in 3/5/8/12.
  */
 import '../styles/codex.css';
 import type { UiState } from '@sim/core/types';
@@ -26,7 +26,8 @@ export function codexGroups(): CodexGroup[] {
     { name: 'Linkages', entries: [...WEAPON_LINKAGES, ...CHASSIS_LINKAGES].map((l) => ({ id: l.id, name: l.name, desc: l.desc })) },
     { name: 'Infusions', entries: INFUSIONS.map((i) => ({ id: i.id, name: i.name, desc: i.desc })) },
     { name: 'Anomalies', entries: ANOMALIES.map((a) => ({ id: `anomaly.${a.id}`, name: a.name, desc: a.desc, alt: [a.id] })) },
-    { name: 'Counters', entries: BOSSES.map((b) => ({ id: `counter.${b.id}`, name: `Countered ${b.name}`, desc: b.tell.desc })) },
+    // the sim records a boss Counter under its Ev.BossCounter src: `counter.boss.<id>`
+    { name: 'Counters', entries: BOSSES.map((b) => ({ id: `counter.${b.id}`, name: `Countered ${b.name}`, desc: b.tell.desc, alt: [`counter.boss.${b.id}`] })) },
     { name: 'Chains', entries: [3, 5, 8, 12].map((n) => ({ id: `chain.${n}`, name: `Chain of ${n}`, desc: `A kill chain ${n} links long.` })) },
   ];
 }

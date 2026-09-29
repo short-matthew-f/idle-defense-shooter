@@ -4,7 +4,8 @@
  *
  *  echoesNow        prestigeEchoes(w)
  *  echoRate         echoesNow ÷ hours of play since this Prestige began
- *  peakRate         max rate over run.echoRateHistory (sampled at every checkpoint and every 60 s)
+ *  peakRate         max rate over `curve`: run.echoRateHistory (sampled at every checkpoint and every
+ *                   60 s) plus the current point, so the readout and the chart always agree (UX review S5)
  *  nextBoss*        Echoes at the next checkpoint and the rate if it is reached at the recent pace
  *  reclimbSeconds   0.3 × the previous Prestige's time to reach this checkpoint, else 0.35 × this run's time
  *  wallGaugeSeconds seconds until the cheapest not-yet-owned behavior-changing Scrap unlock is
@@ -150,7 +151,13 @@ export function computeForecast(w: WorldImpl): Forecast {
   const hours = run.playSeconds / 3600;
   const echoRate = hours > 0 ? echoesNow / hours : 0;
   const curve = run.echoRateHistory.map((s) => ({ seconds: s.seconds, rate: sampleRate(s) }));
-  let peakRate = echoRate;
+  // the curve ends at "now" (replacing a sample taken this very second), so the peak it draws is the peak reported
+  if (run.playSeconds > 0) {
+    const last = curve[curve.length - 1];
+    if (last && last.seconds >= run.playSeconds) curve[curve.length - 1] = { seconds: last.seconds, rate: Math.max(last.rate, echoRate) };
+    else curve.push({ seconds: run.playSeconds, rate: echoRate });
+  }
+  let peakRate = 0;
   for (const c of curve) if (c.rate > peakRate) peakRate = c.rate;
   const T = Math.min(run.threatDial, run.minThreatDial ?? run.threatDial);
   const nextCp = (Math.floor(run.deepestCleared / 5) + 1) * 5;

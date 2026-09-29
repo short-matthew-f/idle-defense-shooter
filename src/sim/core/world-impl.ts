@@ -536,7 +536,7 @@ export class WorldImpl implements World {
   // -------------------------------------------------------------------------
   // Tower
   // -------------------------------------------------------------------------
-  damageTower(amount: number, enemy: number, cause: number): void {
+  damageTower(amount: number, enemy: number, cause: number, source: 'hazard' | 'self' | 'enemy' = 'enemy'): void {
     const t = this.tower;
     if (t.hp <= 0 || !(amount > 0)) return;
     if (t.invulnT > 0) return;
@@ -552,7 +552,12 @@ export class WorldImpl implements World {
     if (dmg > 0 && t.tempHp > 0) { const a = Math.min(t.tempHp, dmg); t.tempHp -= a; dmg -= a; }
     t.hp -= dmg;
     this.lastTowerDamageTick = this.run.tick;
-    const src = enemy >= 0 && enemy < this.enemies.count ? KIND_LIST[this.enemies.kind[enemy]] ?? 'enemy' : 'enemy';
+    const live = enemy >= 0 && enemy < this.enemies.count;
+    const src = live ? KIND_LIST[this.enemies.kind[enemy]] ?? 'enemy' : 'enemy';
+    // UX review S3: damage taken this attempt by source, and who dealt the blow that took HP to 0
+    const by = !live ? source : this.enemies.bossId[enemy] >= 0 ? 'boss' : src;
+    const taken = this.run.attemptDamageTaken;
+    taken[by] = (taken[by] ?? 0) + total;
     const id = this.emit(Ev.TowerHit, src, enemy, total, 0, 0, cause);
     if (this.hookDepth < HOOK_DEPTH_LIMIT) {
       this.hookDepth++;
@@ -563,8 +568,23 @@ export class WorldImpl implements World {
       if (!t.secondCoreUsed && this.stats.has('bastion.second_core')) {
         t.hp = 1; t.invulnT = 3 * TICK_RATE; t.secondCoreUsed = true;
         this.emit(Ev.SecondCore, 'bastion', 0, 0, 0, 0, id);
-      } else t.hp = 0;
+      } else { t.hp = 0; this.noteKiller(enemy, live, src, source); }
     }
+  }
+  /**
+   * TowerDeath payload (UX review S3): `killer` = enemy kind, boss id (with `boss: true` and the boss's
+   * `bossPhase`), or 'hazard' / 'self' / 'enemy'. Set by the hit that took HP to 0; systems/tower.ts emits it.
+   */
+  towerKiller: NonNullable<SimEvent['data']> | null = null;
+  private noteKiller(enemy: number, live: boolean, kind: string, source: string): void {
+    const e = this.enemies;
+    if (!live) { this.towerKiller = { killer: source }; return; }
+    const bi = e.bossId[enemy];
+    if (bi < 0) { this.towerKiller = { killer: kind }; return; }
+    // boss clones / adds carry the boss id; the phase is the true boss's (the one flagged Boss) when alive
+    let phase = e.bossPhase[enemy];
+    for (let i = 0; i < e.count; i++) if ((e.flags[i] & (EnemyFlag.Boss | EnemyFlag.Dead)) === EnemyFlag.Boss) { phase = e.bossPhase[i]; break; }
+    this.towerKiller = { killer: BOSS_LIST[bi] ?? 'boss', boss: true, bossPhase: phase };
   }
   healTower(amount: number, cause: number): void {
     const t = this.tower;

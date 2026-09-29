@@ -5,10 +5,13 @@
  *  - layer 4: aux0 = hp fraction (bar drawn when 0 < aux0 < 0.999), aux1 = StateBit mask (status icons)
  *  - layer 5: the enemy's own shape as outline; layer 6: the shape again, pulsed by the renderer
  *  - Line: (x,y)→(aux0,aux1), half-width = radius
+ *  - Ring: aux0 = ring thickness as a fraction of the radius (0 = ~1.25 px)
+ *  - layer 7 Ring with aux1 = RETICLE_MARK: the designation reticle around each live designated
+ *    (tower.designated / designated2, gen-checked) or Hunter-marked enemy; app/overlay.ts enlarges these
  */
 import type { InstanceWriter } from './system';
 import type { RenderSnapshot } from './types';
-import { INSTANCE_FLOATS, FX_FLOATS, Shape, FxKind, Ev, EnemyFlag, ProjFlag, ARENA_RADIUS, TOWER_RADIUS } from './types';
+import { INSTANCE_FLOATS, FX_FLOATS, Shape, FxKind, Ev, EnemyFlag, ProjFlag, ARENA_RADIUS, TOWER_RADIUS, RETICLE_MARK } from './types';
 import type { WorldImpl } from './world-impl';
 import { enemyDefByIndex, bossDefByIndex, bossIndex, kindIndex, KIND_LIST } from './content';
 import { ROLE_CLONE } from '../enemies/behaviors/kinds';
@@ -25,6 +28,10 @@ const SOURCE_COLORS: [number, number, number][] = [
 ];
 const HOSTILE_COLOR: [number, number, number] = [1, 0.3, 0.3];
 const WHITE: [number, number, number] = [1, 1, 1];
+/** Designation reticle (layer 7): the designated outline's red, lifted a little so it reads over the outline. */
+const RETICLE_COLOR: [number, number, number] = [1, 0.42, 0.42];
+const RETICLE_GAP = 6;          // world units outside the body
+const RETICLE_THICKNESS = 0.12; // fraction of the ring radius
 const ELEMENT_COLORS: [number, number, number][] = [[1, 0.5, 0.15], [0.6, 0.8, 1], [0.5, 1, 0.3], [0.7, 0.95, 1]];
 const HAZARD_COLORS: Record<string, [number, number, number]> = {
   fire_zone: [1, 0.45, 0.1], firestorm: [1, 0.35, 0.05], toxic_cloud: [0.45, 1, 0.25], ice_patch: [0.6, 0.9, 1],
@@ -121,6 +128,15 @@ export function writeScene(w: WorldImpl, out: SnapshotWriter, fromEvent: number,
     const shape = (f & EnemyFlag.Boss) ? bossDefByIndex(e.bossId[i], w.run.wave).shape : enemyDefByIndex(e.kind[i]).shape;
     const weak = (f & EnemyFlag.WeakPointOpen) !== 0;
     out.push(e.x[i], e.y[i], e.radius[i] * 1.8, e.angle[i], shape, 1, weak ? 0.9 : 0.25, weak ? 0.2 : 0.2, 0.6, 6);
+  }
+  // layer 7: designation reticle (UX review S1), so the UI never has to infer designation from outline colours
+  const d1 = t.designated >= 0 && t.designated < e.count && e.gen[t.designated] === t.designatedGen ? t.designated : -1;
+  const d2 = t.designated2 >= 0 && t.designated2 < e.count && e.gen[t.designated2] === t.designated2Gen ? t.designated2 : -1;
+  for (let i = 0; i < e.count; i++) {
+    if (e.flags[i] & EnemyFlag.Dead) continue;
+    if (i !== d1 && i !== d2 && e.markedT[i] === 0) continue;
+    const c = RETICLE_COLOR;
+    out.push(e.x[i], e.y[i], e.radius[i] + RETICLE_GAP, 0, Shape.Ring, c[0], c[1], c[2], 0.95, 7, RETICLE_THICKNESS, RETICLE_MARK);
   }
   // system visuals
   for (const s of w.systems) s.render?.(w, out);

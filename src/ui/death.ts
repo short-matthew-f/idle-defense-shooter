@@ -1,15 +1,16 @@
 /**
  * Death card (design pillar 3, "failure creates progress"): when the tower falls it says where and
  * what happens next, and offers three purchases that could help (open slot, Doctrine fork, best
- * affordable buys, or what you are saving toward with an ETA). Non-modal: the machine restarts on
+ * affordable buys, or what you are saving toward with an ETA). It names the killer from the Ev.TowerDeath
+ * payload and the source of most damage taken this attempt (UiState.run.attemptDamageTaken). Non-modal: the machine restarts on
  * its own; the card stays until dismissed, the next wave is cleared, or the next death replaces it.
  */
 import '../styles/death.css';
-import type { UiState } from '@sim/core/types';
+import type { SimEvent, UiState } from '@sim/core/types';
 import { button, h, text, clear } from './dom';
 import { icon } from './icons';
 import { fmtDuration, fmtNum } from './format';
-import { deathHeadline, suggestPurchases, type Category, type Suggestion } from './advice';
+import { damageSourceName, deathHeadline, killerName, suggestPurchases, topDamageSource, type Category, type Suggestion } from './advice';
 import { BOSS_BY_ID, TREE_LABEL } from './content';
 import type { UiCtx } from './ctx';
 
@@ -17,6 +18,8 @@ export class DeathCard {
   readonly el: HTMLElement;
   private readonly title = h('div', { class: 'dc-title' });
   private readonly sub = h('p', { class: 'dc-sub' });
+  private readonly cause = h('p', { class: 'dc-sub dc-cause' });
+  private bossId: string | null = null;
   private readonly lead = h('p', { class: 'dc-lead' });
   private readonly list = h('div', { class: 'dc-list' });
   private key = '';
@@ -27,18 +30,21 @@ export class DeathCard {
   constructor(private readonly ctx: UiCtx, private readonly rate: () => number) {
     const close = button(icon('close'), () => this.hide(), { class: 'btn icon-btn ghost dc-close', label: 'Dismiss' });
     this.el = h('section', { class: 'death-card', attrs: { role: 'status', 'aria-live': 'polite', 'aria-label': 'Tower destroyed' } },
-      h('div', { class: 'dc-head' }, icon('skull', 'ico'), this.title, close), this.sub, this.lead, this.list);
+      h('div', { class: 'dc-head' }, icon('skull', 'ico'), this.title, close), this.sub, this.cause, this.lead, this.list);
     this.el.hidden = true;
   }
 
   get visible(): boolean { return !this.el.hidden; }
 
-  /** Ev.TowerDeath: `wave` is where the tower fell. */
-  show(wave: number, ui: UiState): void {
-    const boss = ui.wave.isBoss && ui.wave.bossId ? BOSS_BY_ID.get(ui.wave.bossId)?.name ?? null : null;
-    const hd = deathHeadline(wave, ui.run.checkpoint, boss);
+  /** Ev.TowerDeath: `wave` is where the tower fell; `data` its payload ({ killer, boss?, bossPhase? }). */
+  show(wave: number, ui: UiState, data?: SimEvent['data']): void {
+    this.bossId = ui.wave.isBoss ? ui.wave.bossId : null;
+    // the sim names the killer; older events without a payload fall back to the wave's boss
+    const boss = this.bossId ? BOSS_BY_ID.get(this.bossId as never)?.name ?? null : null;
+    const hd = deathHeadline(wave, ui.run.checkpoint, killerName(data) ?? boss);
     text(this.title, hd.title);
     text(this.sub, hd.sub);
+    this.showCause(ui);
     this.bought.clear();
     this.key = '';
     this.el.hidden = false;
@@ -47,8 +53,16 @@ export class DeathCard {
 
   hide(): void { this.el.hidden = true; }
 
+  /** "Most damage this attempt: The Breaker (62%)" from the attempt's damage-taken ledger. */
+  private showCause(ui: UiState): void {
+    const top = topDamageSource(ui.run.attemptDamageTaken ?? {});
+    text(this.cause, top ? `Most damage this attempt: ${damageSourceName(top.source, this.bossId)} (${Math.round(top.share * 100)}%)` : '');
+    this.cause.hidden = !top;
+  }
+
   update(ui: UiState): void {
     if (this.el.hidden) return;
+    if (ui.run.phase === 'dead') this.showCause(ui);   // the ledger resets when the next attempt starts
     const sugg = suggestPurchases(ui, this.rate(), 3);
     text(this.lead, sugg.length ? `You have ${fmtNum(ui.run.scrap)} Scrap. These could help:` : `You have ${fmtNum(ui.run.scrap)} Scrap.`);
     // Rebuild only when the suggestions change (never under a finger at 10 Hz); ETAs refresh with them.

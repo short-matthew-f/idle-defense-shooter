@@ -38,4 +38,27 @@ describe('event log', () => {
     expect(log.chain(k).sentence).toBe('The gun killed the enemy.');
     expect(log.longestKillChain).toBe(1);
   });
+
+  it('never repeats a triggered thing or a clause (UX review S4)', () => {
+    const log = new EventLogImpl();
+    // gun hit → loaded dice re-roll (twice in a row) → gun kill
+    const h = log.pushRaw(Ev.Hit, 1, 'ballistics', 0, 10, 0, 0, 0, -1);
+    const d1 = log.pushRaw(Ev.Anomaly, 1, 'anomaly.loaded_dice', 0, 0, 0, 0, 0, h);
+    const d2 = log.pushRaw(Ev.Anomaly, 1, 'anomaly.loaded_dice', 0, 0, 0, 0, 0, d1);
+    const k = log.pushRaw(Ev.Kill, 1, 'ballistics', 0, 1, StateBit.Burning, 0, 0, d2);
+    const { sentence } = log.chain(k);
+    expect(sentence).toBe('The gun shot the enemy, which triggered the loaded dice, which caused the gun to kill the burning enemy.');
+    expect(sentence).not.toMatch(/loaded dice to trigger loaded dice/);
+    // repeated identical DoT links collapse to one clause
+    const b = log.pushRaw(Ev.StatusApply, 2, 'fire', 1, 1, STATUS_INDEX.burn, 0, 0, -1);
+    const t1 = log.pushRaw(Ev.StatusTick, 2, 'burn', 1, 5, StateBit.Burning << 8, 0, 0, b);
+    const t2 = log.pushRaw(Ev.StatusTick, 3, 'burn', 1, 5, StateBit.Burning << 8, 0, 0, t1);
+    const k2 = log.pushRaw(Ev.Kill, 3, 'burn', 1, 1, StateBit.Burning, 0, 0, t2);
+    const s2 = log.chain(k2).sentence;
+    expect(s2).toBe('The fire ignited the enemy, which wore down the burning enemy, which killed the burning enemy.');
+    // a triggered Fusion as the root and a Linkage mid-chain
+    const f = log.pushRaw(Ev.Fusion, 4, 'fusion.plasma', 2, 1, 0, 0, 0, -1);
+    const l = log.pushRaw(Ev.Linkage, 4, 'link.blade+laser', 2, 1, 0, 0, 0, f);
+    expect(log.chain(l).sentence).toBe('The plasma triggered, which triggered the blade-laser link.');
+  });
 });

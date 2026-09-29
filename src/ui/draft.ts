@@ -6,6 +6,7 @@
 import '../styles/draft.css';
 import type { AnomalyId, AnomalyRarity } from '@sim/core/ids';
 import type { UiState } from '@sim/core/types';
+import { TICK_RATE } from '@sim/core/types';
 import { button, h, text } from './dom';
 import { rarityIcon } from './icons';
 import { ANOMALY_BY_ID, TREE_LABEL } from './content';
@@ -30,30 +31,26 @@ export function anomalyCard(id: AnomalyId, ui: UiState | null, extra?: HTMLEleme
     extra ?? null);
 }
 
-/** The sim auto-picks the first offer after 30 s in the draft phase (run/machine.ts PHASE_TICKS.draftAuto). */
-export const DRAFT_AUTO_TICKS = 30 * 60;
-
-/** Seconds left before the auto-pick (pure). `draftStart` = tick the draft phase began, or null if not yet. */
-export function draftSecondsLeft(tick: number, draftStart: number | null): number {
-  if (draftStart === null) return DRAFT_AUTO_TICKS / 60;
-  return Math.max(0, Math.ceil((DRAFT_AUTO_TICKS - (tick - draftStart)) / 60));
+/** Whole seconds left before the sim auto-picks (pure), from UiState.run.draftTicksLeft; null = no countdown running. */
+export function draftSecondsLeft(ticksLeft: number | null): number | null {
+  return ticksLeft === null ? null : Math.max(0, Math.ceil(ticksLeft / TICK_RATE));
 }
 
 export class DraftModal {
   private modal: ModalHandle | null = null;
   private key = '';
-  private draftStart: number | null = null;
   private readonly countdown = h('p', { class: 'draft-timer', attrs: { 'aria-live': 'off' } });
   constructor(private readonly ctx: UiCtx) {}
 
   update(ui: UiState): void {
     const d = ui.run.pendingDraft;
-    // Unattended towers never stall: say so, with the time left, instead of silently auto-picking.
-    if (!d) this.draftStart = null;
-    else if (ui.run.phase === 'draft' && this.draftStart === null) this.draftStart = ui.tick;
+    // Unattended towers never stall: say so, with the time left (the sim's own deadline), instead of silently auto-picking.
     if (d && d.length) {
       const first = ANOMALY_BY_ID.get(d[0])?.name ?? titleCase(d[0]);
-      text(this.countdown, `If you don't choose, ${first} is picked automatically in ${draftSecondsLeft(ui.tick, this.draftStart)}s.`);
+      const secs = draftSecondsLeft(ui.run.draftTicksLeft);
+      text(this.countdown, secs === null
+        ? `If you don't choose, ${first} is picked automatically 30s after the current wave ends.`
+        : `If you don't choose, ${first} is picked automatically in ${secs}s.`);
     }
     const key = d ? d.join(',') + `|${ui.run.cores}|${ui.build.anomalies.join(',')}` : '';
     if (key === this.key && (!!this.modal?.open === !!d)) return;

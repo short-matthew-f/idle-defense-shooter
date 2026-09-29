@@ -8,10 +8,14 @@
  *             checkpoint on boss waves (Ev.Checkpoint), slot opening, Anomaly draft on the first
  *             clear of waves 10, 20 … 100
  *  draft      waits for pick_anomaly / reroll_anomaly (auto-picks the first offer after 30 s so an
- *             unattended tower never stalls)
+ *             unattended tower never stalls; run/draft.ts draftTicksLeft is the countdown)
  *  dead       1.5 s, then a new attempt at checkpoint+1 with full HP and empty CE (attempts++)
  * Push advances wave by wave; Patrol loops checkpoint+1 … checkpoint+4 and never fights a boss,
- * measuring run.patrolScrapPerSecond for offline returns.
+ * measuring run.patrolScrapPerSecond for offline returns. Until Patrol has measured it, every non-boss
+ * Push clear re-estimates it from the last PATROL_ESTIMATE_CLEARS such clears (first-clear bonus removed).
+ * Wave-100 gate (design §15, code-health M2): before Ascension V (deepWavesUnlocked) waves past 100 never
+ * start. Once wave 100 is cleared, Push holds at wave 100 in `between` (the Ascend prompt) and Patrol loops
+ * waves 96–99; a death or restart returns to the same place.
  * Past the enemy cap, grunt/swarm spawns merge into a Clump (hp summed, clumpCount).
  */
 import type { WorldImpl } from '../core/world-impl';
@@ -25,12 +29,15 @@ import { enemyDef } from '../core/content';
 import { enemyHp } from '../economy/curves';
 import { betweenWaveHeal } from '../systems/tower';
 import { updateSlots } from './slots';
-import { rollDraft } from './draft';
+import { DRAFT_AUTO_TICKS, rollDraft } from './draft';
+import { ASCENSION_WAVE, deepWavesUnlocked } from '../economy/ascension';
 import { trialWave } from './trials';                 // WP8
 import { trialHas } from '../economy/prestige';       // WP8
 import { ARENA_RADIUS } from '../core/types';
 
-export const PHASE_TICKS = { between: 2 * TICK_RATE, wave_clear: 1.5 * TICK_RATE, dead: 1.5 * TICK_RATE, draftAuto: 30 * TICK_RATE } as const;
+export const PHASE_TICKS = { between: 2 * TICK_RATE, wave_clear: 1.5 * TICK_RATE, dead: 1.5 * TICK_RATE, draftAuto: DRAFT_AUTO_TICKS } as const;
+/** Non-boss Push clears the offline Patrol estimate averages over (one checkpoint cycle: checkpoint+1..+4). */
+export const PATROL_ESTIMATE_CLEARS = 4;
 const CLUMP_MARGIN = 20;
 const WAVE_OVERHEAD_S = (PHASE_TICKS.between + PHASE_TICKS.wave_clear) / TICK_RATE;
 const SCR = new Float32Array(2);
@@ -60,8 +67,10 @@ export class RunMachine {
     w.clearCombat();
     w.wave = null;
     this.cursor = 0; this.bossIndex = NO_ENTITY; this.clumpIndex = NO_ENTITY;
-    run.wave = run.checkpoint + 1;
+    run.wave = this.firstWave();
     run.attemptTick = 0; run.waveTick = 0;
+    run.attemptDamageTaken = {};
+    w.towerKiller = null;
     if (countAttempt) {
       run.attempts++;
       const k = Math.floor(run.checkpoint / 5);
@@ -80,6 +89,31 @@ export class RunMachine {
 
   setPhase(p: WorldImpl['run']['phase']): void { this.w.run.phase = p; this.w.run.phaseTicks = 0; }
 
+  // -------------------------------------------------------------------------
+  // Wave-100 gate (Deep Waves open at Ascension V)
+  // -------------------------------------------------------------------------
+  /** True when wave 100 has been cleared and waves past it are still locked (no Ascension V). */
+  atDeepWaveGate(): boolean {
+    const run = this.w.run;
+    return run.deepestCleared >= ASCENSION_WAVE && !deepWavesUnlocked(this.w);
+  }
+  /** Checkpoint the Patrol loop hangs off: the real checkpoint, or 95 at the gate (loop 96–99). */
+  private patrolBase(): number {
+    const cp = this.w.run.checkpoint;
+    return this.atDeepWaveGate() && cp >= ASCENSION_WAVE ? ASCENSION_WAVE - 5 : cp;
+  }
+  /** Wave an attempt starts on: checkpoint+1, or at the gate wave 100 (Push, held) / 96 (Patrol). */
+  private firstWave(): number {
+    const run = this.w.run;
+    if (this.atDeepWaveGate() && run.checkpoint >= ASCENSION_WAVE) return run.mode === 'patrol' ? this.patrolBase() + 1 : ASCENSION_WAVE;
+    return run.checkpoint + 1;
+  }
+  /** Push is parked at wave 100 in `between` until the player Ascends (or switches to Patrol). */
+  heldAtGate(): boolean {
+    const run = this.w.run;
+    return run.mode === 'push' && run.wave >= ASCENSION_WAVE && this.atDeepWaveGate();
+  }
+
   private enterBetween(): void {
     const w = this.w;
     this.setPhase('between');
@@ -93,7 +127,7 @@ export class RunMachine {
   preTick(): void {
     const w = this.w, run = w.run;
     switch (run.phase) {
-      case 'between': if (run.phaseTicks >= PHASE_TICKS.between) this.startWave(); break;
+      case 'between': if (run.phaseTicks >= PHASE_TICKS.between && !this.heldAtGate()) this.startWave(); break;
       case 'wave_clear':
         if (run.phaseTicks >= PHASE_TICKS.wave_clear) {
           if (run.pendingDraft && run.pendingDraft.length > 0) this.setPhase('draft');
@@ -196,12 +230,17 @@ export class RunMachine {
     if (run.longestChain > meta.records.longestChain) meta.records.longestChain = run.longestChain;
     const clearId = w.emit(Ev.WaveClear, w.wave?.sector ?? 'run', wv, w.waveScrap, 0, 0, -1);
     if (w.waveScrap > 0) w.emit(Ev.ScrapGain, first ? 'first_clear' : 'wave', wv, w.waveScrap, 0, 0, clearId);
-    // Patrol rate: measured in Patrol; seeded from Push waves (without the first-clear bonus) until then.
+    // Patrol rate: measured in Patrol; until then estimated from the recent non-boss Push clears
+    // (without the first-clear bonus: Patrol replays), so an offline return pays something sensible
+    // to players who never Patrol (UX review S7). Offline still pays only a fraction of it (economy/curves.ts).
     const waveSeconds = run.waveTick / TICK_RATE + WAVE_OVERHEAD_S;
     if (run.mode === 'patrol') {
-      if (this.patrolTicks > 0) run.patrolScrapPerSecond = this.patrolScrap / (this.patrolTicks / TICK_RATE);
-    } else if (wv % 5 !== 0 && run.patrolScrapPerSecond === 0 && waveSeconds > 0) {
-      run.patrolScrapPerSecond = (w.waveScrap / (first ? Math.max(1, w.stats.get('economy.first_clear_mul')) : 1)) / waveSeconds;
+      if (this.patrolTicks > 0) { run.patrolScrapPerSecond = this.patrolScrap / (this.patrolTicks / TICK_RATE); run.patrolMeasured = true; }
+    } else if (wv % 5 !== 0 && waveSeconds > 0) {
+      const log = run.recentClears ?? (run.recentClears = []);
+      log.push({ wave: wv, scrap: w.waveScrap / (first ? Math.max(1, w.stats.get('economy.first_clear_mul')) : 1), seconds: waveSeconds });
+      if (log.length > PATROL_ESTIMATE_CLEARS) log.shift();
+      if (!run.patrolMeasured) run.patrolScrapPerSecond = patrolEstimate(log);
     }
     if (wv % 5 === 0 && run.mode === 'push' && wv > run.checkpoint) {
       run.checkpoint = wv;
@@ -225,9 +264,9 @@ export class RunMachine {
     run.pendingDraft = null;
     w.wave = null;
     if (run.mode === 'patrol') {
-      const next = run.wave + 1;
-      run.wave = next > run.checkpoint + 4 || next <= run.checkpoint || next % 5 === 0 ? run.checkpoint + 1 : next;
-    } else run.wave = run.wave + 1;
+      const next = run.wave + 1, base = this.patrolBase();
+      run.wave = next > base + 4 || next <= base || next % 5 === 0 ? base + 1 : next;
+    } else run.wave = this.atDeepWaveGate() && run.wave >= ASCENSION_WAVE ? ASCENSION_WAVE : run.wave + 1;   // held at the gate
     this.enterBetween();
   }
 
@@ -237,9 +276,10 @@ export class RunMachine {
     if (run.mode === mode) return;
     run.mode = mode;
     this.patrolScrap = 0; this.patrolTicks = 0; this.scrapMark = w.scrapEarned;
-    if (mode === 'patrol' && (run.wave % 5 === 0 || run.wave > run.checkpoint + 4) && run.phase !== 'dead') {
+    const base = this.patrolBase();
+    if (mode === 'patrol' && (run.wave % 5 === 0 || run.wave > base + 4) && run.phase !== 'dead') {
       w.clearCombat(); w.wave = null; this.cursor = 0; this.bossIndex = NO_ENTITY;
-      run.wave = run.checkpoint + 1;
+      run.wave = base + 1;
       run.pendingDraft = null;
       this.setPhase('between');
     }
@@ -290,4 +330,11 @@ export class RunMachine {
 
   /** Live boss index (or NO_ENTITY). */
   boss(): number { return this.w.resolveEnemy(this.bossIndex, this.bossGen); }
+}
+
+/** Scrap per second over the logged clears (pure; 0 when there is nothing to go on). */
+export function patrolEstimate(log: readonly { scrap: number; seconds: number }[]): number {
+  let scrap = 0, secs = 0;
+  for (const c of log) { scrap += c.scrap; secs += c.seconds; }
+  return secs > 0 ? scrap / secs : 0;
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ShopEntry } from '../../src/sim/core/types';
-import { deathHeadline, entryValue, etaSeconds, nextPurchase, openForks, openSlots, suggestPurchases, type AdviceState } from '../../src/ui/advice';
-import { draftSecondsLeft, DRAFT_AUTO_TICKS } from '../../src/ui/draft';
+import { damageSourceName, deathHeadline, killerName, topDamageSource, entryValue, etaSeconds, nextPurchase, openForks, openSlots, suggestPurchases, type AdviceState } from '../../src/ui/advice';
+import { draftSecondsLeft } from '../../src/ui/draft';
 import { tellPrompt } from '../../src/ui/hud';
 
 const entry = (node: string, cost: number, extra: Partial<ShopEntry> = {}): ShopEntry => ({
@@ -66,10 +66,26 @@ describe('purchase advice', () => {
     expect(deathHeadline(18, 15, null).sub).toContain('wave 16 (checkpoint 15)');
   });
 
+  it('names the killer from the TowerDeath payload and the top damage source (sim S3)', () => {
+    expect(killerName({ killer: 'breaker', boss: true, bossPhase: 1 })).toBe('The Breaker (phase 2 of 2)');
+    expect(killerName({ killer: 'brute' })).toBe('A Brute');
+    expect(killerName({ killer: 'artillery' })).toBe('An Artillery');
+    expect(killerName({ killer: 'hazard' })).toBe('A hazard zone');
+    expect(killerName({ killer: 'enemy' })).toBeNull();
+    expect(killerName(undefined)).toBeNull();
+    expect(deathHeadline(7, 5, killerName({ killer: 'brute' })).title).toBe('A Brute destroyed the tower on wave 7');
+    expect(topDamageSource({})).toBeNull();
+    expect(topDamageSource({ grunt: 10, boss: 30, hazard: 0 })).toEqual({ source: 'boss', share: 0.75 });
+    expect(damageSourceName('boss', 'breaker')).toBe('The Breaker');
+    expect(damageSourceName('grunt', null)).toBe('Grunt');
+  });
+
   it('draft auto-pick countdown', () => {
-    expect(draftSecondsLeft(1000, null)).toBe(DRAFT_AUTO_TICKS / 60);
-    expect(draftSecondsLeft(1000 + 600, 1000)).toBe(20);
-    expect(draftSecondsLeft(1000 + 5000, 1000)).toBe(0);
+    expect(draftSecondsLeft(null)).toBeNull();
+    expect(draftSecondsLeft(1800)).toBe(30);
+    expect(draftSecondsLeft(1200)).toBe(20);
+    expect(draftSecondsLeft(1)).toBe(1);
+    expect(draftSecondsLeft(0)).toBe(0);
   });
 
   it('boss tell prompt: equip, wait or cast the Counter', () => {

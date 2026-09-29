@@ -274,6 +274,17 @@ export interface RunState {
   discountTree?: TreeId | null;
   /** playSeconds at the first reach of each checkpoint (index = checkpoint / 5), for the Reclimb estimate. */
   checkpointSeconds?: number[];
+  // --- UX-review additions ---
+  /**
+   * Tower damage taken this attempt by source (after armor/resistance, before shield/barrier): an enemy kind,
+   * 'boss' (the boss and its clones/adds scripted by it), 'hazard', 'self' (own Anomalies) or 'enemy' (unknown
+   * shooter). Reset at every attempt start; never saved (live combat is never saved).
+   */
+  attemptDamageTaken: Record<string, number>;
+  /** True once patrolScrapPerSecond was measured in Patrol (until then Push clears estimate it). Saved. */
+  patrolMeasured?: boolean;
+  /** The last few non-boss Push clears (Scrap without the first-clear bonus, seconds incl. phase overhead) for the Patrol estimate. Not saved. */
+  recentClears?: { wave: number; scrap: number; seconds: number }[];
 }
 
 export interface MetaState {
@@ -413,6 +424,12 @@ export interface EventLog {
 // ---------------------------------------------------------------------------
 // Snapshots for the renderer and UI (sim → main thread)
 // ---------------------------------------------------------------------------
+/**
+ * aux1 of the layer-7 Ring the snapshot draws around each live designated (gen-checked) or Hunter-marked
+ * enemy (core/snapshot.ts). The field overlay (app/overlay.ts) enlarges exactly these to a thumb-sized reticle.
+ */
+export const RETICLE_MARK = 1;
+
 export const enum Shape { Circle = 0, Ring = 1, Triangle = 2, Square = 3, Diamond = 4, Hex = 5, Star = 6, Capsule = 7, Line = 8, Shard = 9, Cross = 10, Crescent = 11 }
 
 /**
@@ -440,7 +457,10 @@ export const enum FxKind { Hit = 0, Kill = 1, Explosion = 2, Spark = 3, Ember = 
 export interface UiState {
   tick: number;
   run: Pick<RunState, 'wave' | 'checkpoint' | 'deepestCleared' | 'mode' | 'phase' | 'scrap' | 'cores' | 'attempts' | 'threatDial' | 'speedMultiplier' | 'playSeconds' | 'pendingDraft' | 'hardpointSlotsOpen' | 'attunementSlotsOpen' | 'longestChain'
-    /* integration additions */ | 'patrolScrapPerSecond' | 'minThreatDial'>;
+    /* integration additions */ | 'patrolScrapPerSecond' | 'minThreatDial' /* UX-review additions */ | 'attemptDamageTaken'> & {
+    /** Ticks until the Anomaly draft auto-picks its first offer (run/draft.ts draftTicksLeft), or null when no countdown runs. */
+    draftTicksLeft: number | null;
+  };
   /** Integration additions: the Trial being played (meta.activeTrial), or null. */
   activeTrial: TrialId | null;
   /** Wave whose clear opens the next hardpoint / attunement slot (run/slots.ts), or null when no more can open. */
@@ -507,6 +527,8 @@ export interface RunSave {
   /** WP8 additions (see RunState). */
   plannedHardpoints?: HardpointId[]; plannedAttunements?: ElementId[]; plannedDoctrines?: Partial<Record<TreeId, DoctrineId>>;
   minThreatDial?: number; discountTree?: TreeId | null; checkpointSeconds?: number[];
+  /** UX-review addition (see RunState.patrolMeasured). */
+  patrolMeasured?: boolean;
   /** Code-health addition: an Anomaly draft offered but not yet picked (restored on load; it was lost before). */
   pendingDraft?: AnomalyId[];
 }

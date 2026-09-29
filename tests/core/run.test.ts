@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { Ev } from '../../src/sim/core/types';
 import { strongSim, runUntil } from './helpers';
+import { patrolEstimate, PATROL_ESTIMATE_CLEARS } from '../../src/sim/run/machine';
+import { offlineScrap } from '../../src/sim/economy/curves';
 
 const MIN = 3600;
 
@@ -64,11 +66,49 @@ describe('run state machine', () => {
     expect(loops).toBeGreaterThanOrEqual(1);
     expect(run.checkpoint).toBe(5);
     expect(run.patrolScrapPerSecond).toBeGreaterThan(0);
+    expect(run.patrolMeasured).toBe(true);
     // offline return pays patrol rate × time × 40%
     const scrap = run.scrap;
     sim.command({ type: 'offline_return', elapsedSeconds: 3600 });
     sim.step();
     expect(run.scrap - scrap).toBeGreaterThanOrEqual(Math.floor(run.patrolScrapPerSecond * 3600 * 0.4) - 1);
+    // a measured Patrol rate is not overwritten by later Push clears (and survives a save)
+    const measured = run.patrolScrapPerSecond;
+    sim.command({ type: 'set_mode', mode: 'push' });
+    runUntil(sim, () => run.deepestCleared >= 11, 12 * MIN);
+    expect(run.patrolScrapPerSecond).toBe(measured);
+    expect(sim.save().run.patrolMeasured).toBe(true);
+  });
+
+  it('estimates the Patrol rate from recent Push clears for players who never Patrol (UX review S7)', () => {
+    const sim = strongSim(6);
+    const run = sim.world.run;
+    runUntil(sim, () => run.deepestCleared >= 1 && run.phase !== 'combat', 4 * MIN);
+    const wave1Rate = run.patrolScrapPerSecond;
+    expect(wave1Rate).toBeGreaterThan(0);
+    runUntil(sim, () => run.deepestCleared >= 13, 20 * MIN);
+    expect(run.patrolMeasured).toBeFalsy();
+    const log = run.recentClears!;
+    expect(log.length).toBe(PATROL_ESTIMATE_CLEARS);
+    expect(log.every((c) => c.wave % 5 !== 0 && c.scrap > 0 && c.seconds > 0)).toBe(true);
+    expect(log.map((c) => c.wave)).toEqual([9, 11, 12, 13]);           // the most recent non-boss clears
+    expect(run.patrolScrapPerSecond).toBeCloseTo(patrolEstimate(log), 9);
+    // it follows progress instead of freezing at the first clear (the review saw 1.13/s at wave 62)
+    expect(run.patrolScrapPerSecond).toBeGreaterThan(wave1Rate * 1.5);
+    // replays are not first clears: the ×3 first-clear bonus is taken out of the estimate
+    const wave13 = sim.events.recent(0).filter((e) => e.type === Ev.ScrapGain && e.a === 13).pop()!;
+    expect(wave13.src).toBe('first_clear');
+    expect(log[3].scrap).toBeCloseTo(wave13.b / sim.world.stats.get('economy.first_clear_mul'), 6);
+    // offline pays at most 40% of that rate and never clears a boss
+    const scrap = run.scrap, cp = run.checkpoint, deepest = run.deepestCleared;
+    sim.command({ type: 'offline_return', elapsedSeconds: 3600 });
+    sim.step();
+    const paid = run.scrap - scrap;
+    expect(paid).toBeGreaterThan(0);
+    expect(paid).toBe(offlineScrap(run.patrolScrapPerSecond, 3600, false));
+    expect(paid).toBeLessThanOrEqual(run.patrolScrapPerSecond * 3600 * 0.4 + 1);
+    expect(run.checkpoint).toBe(cp);
+    expect(run.deepestCleared).toBe(deepest);
   });
 
   it('switching to Patrol on a boss wave returns to checkpoint+1 without an attempt', () => {

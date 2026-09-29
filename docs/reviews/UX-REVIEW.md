@@ -120,7 +120,7 @@ Fixes:
   every designated or marked enemy, and an aim line from the tower while holding. `src/app/overlay.ts:21`,
   `Renderer.setOverlay` (`src/render/renderer.ts:229`), built each frame in `src/app/game.ts:180`.
   Tests: `tests/render/overlay.test.ts`.
-**Fixed** (the reticle infers designation from the outline colour; see sim request S1).
+**Fixed** (the reticle is now driven by the sim's layer-7 marker, S1; the outline-colour guess is gone).
 
 **M4. The Counter prompt is not actionable** · `j1-11-boss-tell-0.png` → `j9-03-tell-unequipped.png`, `j9-04-tell-equipped.png`
 The Breaker's tell arrives at about 1:40 into the first session with both ability slots empty. The text named
@@ -143,8 +143,8 @@ that opens the slot picker (and expands the sheet).
 The run machine picks the first offer after 30 s in the draft phase so an idle tower never stalls. The modal
 did not say so, and at ×1 a player comparing cards can lose the choice.
 Fix: a countdown line under the cards, naming the card that will be picked.
-**Fixed**: `src/ui/draft.ts:37,56`. Tests: `draftSecondsLeft` in `tests/ui/advice.test.ts`. (S2 asks for the
-real deadline from the sim.)
+**Fixed**: `src/ui/draft.ts:37,56`. Tests: `draftSecondsLeft` in `tests/ui/advice.test.ts`. The countdown now reads
+the sim's deadline (`UiState.run.draftTicksLeft`, S2).
 
 **M7. The "Nothing affordable yet" dead end** · `j1-04-first-view.png`, `j2-01-peek.png`, `j6-before-clarity-0.png` (wave 61)
 Early on it leaves nothing to look at. At the wall it is wrong: the wave-62 save has 2.4M Scrap and every Scrap
@@ -169,15 +169,15 @@ Fix: a "Tap to buy" coach label and a pulse on the first chip until three purcha
 | m3 | Armed-ability hint said "Tap the field to cast X". It now reads "X armed: tap the field to cast". Cancel works by re-tapping the slot, the Cancel pill, or Esc. | `j3-02-armed` | **Fixed** `src/ui/abilities.ts` `renderArmed` |
 | m4 | The Inspector footer told phone players "Space resumes". The "6.6s ago" label was clipped at 390 px. | `j4-phone-11-inspector` | **Fixed** `src/ui/inspector.ts:88`, `src/styles/inspector.css` (source chip ellipsizes) |
 | m5 | The Forecast "peak 25K/h" label was clipped at the chart's right edge. | `j4-phone-02-forecast` | **Fixed** `src/ui/forecast.ts:109` (anchors away from the edge) |
-| m6 | The Forecast chart's peak (25K/h) disagrees with the "Peak 34.6K/h" readout above it. | `j4-phone-02-forecast` | **Open**, sim-side (S5), 0.5 h |
-| m7 | The Codex shows no hints at wave 62 (`ui.hints` is empty with 79 entries undiscovered), so "???" cards give no lead. | `j4-phone-09-codex` | **Open**, sim-side (S6). A UI fallback that shows the recipe for Fusions/Linkages ("Fire + Frost") is about 1 h. |
-| m8 | Welcome-back credit at wave 62 is 4.8K Scrap for 3 h against a 2.4M bank and ~5K/s live income: `patrolScrapPerSecond` is 1.13/s because it is only measured while patrolling. The modal is honest but the number is meaningless. | `j4-phone-01-offline-return` | **Open**, sim-side (S7) |
+| m6 | The Forecast chart's peak (25K/h) disagrees with the "Peak 34.6K/h" readout above it. | `j4-phone-02-forecast` | **Fixed** sim-side (S5) |
+| m7 | The Codex shows no hints at wave 62 (`ui.hints` is empty with 79 entries undiscovered), so "???" cards give no lead. | `j4-phone-09-codex` | **Fixed** sim-side (S6). A UI fallback that shows the recipe for Fusions/Linkages ("Fire + Frost") is still about 1 h. |
+| m8 | Welcome-back credit at wave 62 is 4.8K Scrap for 3 h against a 2.4M bank and ~5K/s live income: `patrolScrapPerSecond` is 1.13/s because it is only measured while patrolling. The modal is honest but the number is meaningless. | `j4-phone-01-offline-return` | **Fixed** sim-side (S7) |
 | m9 | HUD boss name truncates to "Boss: The B…" on a phone (the boss bar shows it in full). | `j1-06-death` | **Open**, 15 min (hide `.wave-boss` when the boss bar is visible) |
 | m10 | The side panel's quick-buy row is clipped by the close button at 300–360 px (it scrolls, but the clip hides that). | `j7-after-land844` | **Open**, 20 min (fade mask on the row's right edge) |
 
 ### Polish (open)
 
-- Inspector sentences repeat themselves ("…caused the loaded dice to trigger loaded dice…", `j4-phone-11`). Sim-side (S4).
+- ~~Inspector sentences repeat themselves ("…caused the loaded dice to trigger loaded dice…", `j4-phone-11`).~~ Fixed sim-side (S4).
 - The threat-halo pulse and white-hot explosions still dominate at wave 40+ on a phone even at Clarity 1
   (`j6-after-clarity-1`); a per-kind particle cap for Kill/Explosion fx under Clarity would help (renderer, 1–2 h).
 - Undiscovered Codex cards could show their group's recipe shape instead of bare "???" (1 h).
@@ -221,6 +221,19 @@ at 8.6K particles while only one enemy is alive. Worth a check on a real phone b
 | S7 | Estimate `patrolScrapPerSecond` for players who never Patrol (e.g. from the last cleared checkpoint cycle's kill Scrap without first-clear ×3), or say "estimate unavailable". | The offline return reads 4.8K for 3 h on a 2.4M bank. |
 | S8 | Balance observations: (a) a quick-chip idle player needs 26–33 min and 14–20 deaths from checkpoint 5 to 10 (design: 8–20 min median per checkpoint); (b) the active Generalist reaches wave 12 in 5.5 min, a far larger edge than 15–30%; (c) at wave 62 every Scrap node is maxed with 2.4M Scrap banked, so "only stat ranks remain" (§3) does not hold. | For the balance owner; no UI change needed beyond M7. |
 | S9 | Consider starting builds with the two tactical slots filled (e.g. Repulsor Pulse and Bombardment) or a `default loadout` in data. | The first boss's Counter needs an ability the player has never been told about; M4 works around it in the UI. |
+
+### Sim-side follow-ups (done)
+
+| # | Change | Where | Tests |
+| --- | --- | --- | --- |
+| S1 | The snapshot draws a layer-7 Ring tagged `aux1 = RETICLE_MARK` around every live designated (gen-checked) or Hunter-marked enemy; the overlay enlarges exactly those. | `core/snapshot.ts`, `core/types.ts` (`RETICLE_MARK`), `app/overlay.ts` (`isReticle`) | `tests/core/ux-sim.test.ts`, `tests/render/overlay.test.ts` |
+| S2 | `UiState.run.draftTicksLeft` (null without a running countdown); the draft modal reads it. | `run/draft.ts` (`draftTicksLeft`, `DRAFT_AUTO_TICKS`), `ui/draft.ts` | `ux-sim.test.ts`, `tests/ui/advice.test.ts` |
+| S3 | `Ev.TowerDeath.data = { killer, boss?, bossPhase? }`; `RunState/UiState.run.attemptDamageTaken` by source (enemy kind, `boss`, `hazard`, `self`, `enemy`). The death card names the killer and the top damage source. | `core/world-impl.ts` (`damageTower`, `towerKiller`), `systems/tower.ts`, `ui/advice.ts`, `ui/death.ts` | `ux-sim.test.ts`, `advice.test.ts` |
+| S4 | Triggered Fusions/Linkages/Infusions/Anomalies read "which triggered the X"; consecutive identical clauses collapse. | `core/events.ts` (`chainSentence`) | `tests/core/events.test.ts` |
+| S5 | The Forecast curve ends at the current point and `peakRate = max(curve.rate)`. | `economy/forecast.ts` | `tests/progression/forecast-codex.test.ts` |
+| S6 | Hints also cover chassis Linkages, Infusions, socketed firing Anomalies and bosses met but not countered, with a group fallback. The Codex's Counters group also accepts the sim's `counter.boss.<id>` ids. | `economy/codex.ts`, `ui/codex.ts` | `forecast-codex.test.ts` |
+| S7 | Until Patrol measures it, `patrolScrapPerSecond` is re-estimated at every non-boss Push clear from the last 4 such clears (first-clear bonus removed); `patrolMeasured` is saved. | `run/machine.ts` (`patrolEstimate`) | `tests/core/run.test.ts` |
+| S9 | New builds (new games and new Prestiges) start with Repulsor Pulse and Hunter Mark slotted; saves keep theirs. | `run/state.ts` (`DEFAULT_ABILITIES`) | `ux-sim.test.ts` |
 
 ## Verification
 

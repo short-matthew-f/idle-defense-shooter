@@ -15,7 +15,7 @@
 import type { MetaState, SimEvent } from '../core/types';
 import type { WorldImpl } from '../core/world-impl';
 import { Ev } from '../core/types';
-import { FUSIONS, TRIADS, WEAPON_LINKAGES } from '../data/index';
+import { ANOMALIES, BOSSES, CHASSIS_LINKAGES, FUSIONS, INFUSIONS, TRIADS, WEAPON_LINKAGES } from '../data/index';
 
 export const CODEX_BONUS_PER_ENTRY = 0.0025;
 export const CHAIN_TIERS = [3, 5, 8, 12] as const;
@@ -87,38 +87,91 @@ export function scanCodexEvent(w: WorldImpl, e: SimEvent): boolean {
 const ADJ: Record<string, string> = { fire: 'burning', lightning: 'shocked', poison: 'poisoned', frost: 'frozen' };
 const NOUN: Record<string, string> = {
   fire: 'fire', lightning: 'lightning', poison: 'poison', frost: 'frost', primary: 'gun', ordnance: 'missiles',
-  drones: 'drones', blade: 'blade', laser: 'laser', gravitics: 'gravity well',
+  drones: 'drones', blade: 'blade', laser: 'laser', gravitics: 'gravity well', bastion: 'armour', reactor: 'reactor',
 };
 
-/** Hints for undiscovered entries within reach of the current build (≤ 3; UI only, allocates). */
+/**
+ * Anomalies whose mechanic emits Ev.Anomaly (`anomaly.<id>`; systems/anomalies.ts, core/projectiles.ts), so
+ * socketing them can discover a Codex entry. Stat-shaped Anomalies never fire and get no hint.
+ */
+export const FIRING_ANOMALIES: ReadonlySet<string> = new Set([
+  'loaded_dice', 'seventh_shot', 'pinball', 'stormglass', 'clockwork_blade', 'ghost_protocol', 'rogue_moon',
+  'unstable_isotope', 'tithe', 'hungry_core', 'afterimage_round', 'echo_chamber', 'feedback_loop', 'rot_bloom', 'martyr_plating',
+]);
+
+/** A boss Counter is recorded as `counter.boss.<id>` (Ev.BossCounter src); `counter.<id>` is accepted too. */
+export function bossCountered(codex: Record<string, number>, bossId: string): boolean {
+  return codex[`counter.boss.${bossId}`] > 0 || codex[`counter.${bossId}`] > 0;
+}
+
+export const MAX_HINTS = 3;
+
+/**
+ * Hints for undiscovered entries within reach of the current build (≤ MAX_HINTS; UI only, allocates).
+ * Non-empty whenever the build can reach an undiscovered entry (UX review S6): attuned pairs without their
+ * Fusion (Triads from Ascension II), mounted pairs without their Linkage (weapon and chassis), mounted +
+ * attuned without the Infusion, socketed firing Anomalies not yet fired, bosses met but never countered,
+ * and the next kill-chain tier. When none of those applies but entries remain, it falls back to the
+ * nearest undiscovered group (attune / mount more).
+ */
 export function codexHints(w: WorldImpl): string[] {
   const out: string[] = [];
   const s = w.stats, codex = w.meta.codex;
+  const full = (): boolean => out.length >= MAX_HINTS;
+  const seen = (id: string): boolean => codex[id] > 0;
   for (const f of FUSIONS) {
-    if (out.length >= 3) return out;
-    if (codex[f.node.id] > 0) continue;
+    if (full()) return out;
+    if (seen(f.node.id)) continue;
     const [a, b] = f.elements;
     if (s.attuned(a) && s.attuned(b)) out.push(`Something happens when ${NOUN[a]} meets a ${ADJ[b]} enemy.`);
   }
   if (w.meta.ascension >= 2) {
     for (const t of TRIADS) {
-      if (out.length >= 3) return out;
-      if (codex[t.node.id] > 0) continue;
+      if (full()) return out;
+      if (seen(t.node.id)) continue;
       const [a, b, c] = t.elements;
       if ([a, b, c].filter((x) => s.attuned(x)).length >= 2) out.push(`Three elements answer each other: ${NOUN[a]}, ${NOUN[b]} and ${NOUN[c]}.`);
     }
   }
   for (const l of WEAPON_LINKAGES) {
-    if (out.length >= 3) return out;
-    if (codex[l.node.id] > 0) continue;
+    if (full()) return out;
+    if (seen(l.node.id)) continue;
     const [a, b] = l.pair;
     if (s.mounted(a as never) && s.mounted(b as never)) out.push(`Something happens when the ${NOUN[a] ?? a} and the ${NOUN[b] ?? b} work the same target.`);
   }
+  for (const l of CHASSIS_LINKAGES) {
+    if (full()) return out;
+    if (seen(l.node.id)) continue;
+    const [c, hp] = l.pair;
+    if (s.mounted(hp as never)) out.push(`The ${NOUN[c] ?? c} and the ${NOUN[hp] ?? hp} could do more together.`);
+  }
+  for (const inf of INFUSIONS) {
+    if (full()) return out;
+    if (seen(inf.node.id)) continue;
+    if (s.mounted(inf.system) && s.attuned(inf.element)) out.push(`The ${NOUN[inf.system] ?? inf.system} could carry ${NOUN[inf.element] ?? inf.element}.`);
+  }
+  for (const a of ANOMALIES) {
+    if (full()) return out;
+    if (!FIRING_ANOMALIES.has(a.id) || !w.build.anomalies.includes(a.id) || seen(`anomaly.${a.id}`) || seen(a.id)) continue;
+    out.push(`${a.name} has not shown what it can do yet.`);
+  }
+  const met = w.run.deepestCleared + 5;
+  for (const b of BOSSES) {
+    if (full()) return out;
+    if (b.wave > met || bossCountered(codex, b.id)) continue;
+    out.push(`${b.name} can be answered during its ${b.tell.name.toLowerCase()}.`);
+  }
   for (const t of CHAIN_TIERS) {
-    if (out.length >= 3) return out;
-    if (codex[`chain.${t}`] > 0) continue;
+    if (full()) return out;
+    if (seen(`chain.${t}`)) continue;
     out.push(`A single kill can be caused by ${t} different things in a row.`);
     break;
+  }
+  if (out.length === 0) {
+    // nothing in reach: point at the nearest undiscovered group
+    if (FUSIONS.some((f) => !seen(f.node.id))) out.push('Two attuned elements can fuse into something new.');
+    if (WEAPON_LINKAGES.some((l) => !seen(l.node.id))) out.push('Two mounted weapon systems can learn to work together.');
+    if (INFUSIONS.some((i) => !seen(i.node.id))) out.push('An element can ride a weapon system.');
   }
   return out;
 }

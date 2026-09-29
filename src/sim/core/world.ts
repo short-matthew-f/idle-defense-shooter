@@ -78,7 +78,11 @@ export interface World {
     /** WP1 addition: hpScale already includes the elite HP multiplier (generator spawns); skip the ×2.5. */ eliteHpIncluded?: boolean }): number;
   explode(x: number, y: number, radius: number, damage: number, opts: { source: HitInfo['source']; srcTag: string; element?: ElementId | null; cause: number; falloff?: boolean; /** cap each target's damage at this × its max HP */ maxHpCap?: number }): void;
   addHazard(h: Hazard): void;
-  damageTower(amount: number, enemy: number, cause: number): void;
+  /**
+   * `source` (UX-review addition) attributes damage with no attacking enemy (enemy < 0) in
+   * run.attemptDamageTaken and the TowerDeath killer: 'hazard', 'self' (own Anomalies); default 'enemy'.
+   */
+  damageTower(amount: number, enemy: number, cause: number, source?: 'hazard' | 'self' | 'enemy'): void;
   healTower(amount: number, cause: number): void;
   /**
    * Integration addition (code-health pass): restore an enemy's HP, capped at max HP. Emits Ev.Heal

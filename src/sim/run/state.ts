@@ -1,7 +1,7 @@
 /** Fresh game / run / tower state constructors. */
 import type { BuildState, MetaState, RunState, TowerState } from '../core/types';
 import { NO_ENTITY } from '../core/types';
-import type { FrameId } from '../core/ids';
+import type { AbilityId, FrameId } from '../core/ids';
 
 export const WAVE_TABLE_SIZE = 256;
 
@@ -15,10 +15,17 @@ export function newMeta(): MetaState {
   };
 }
 
+/**
+ * Tactical slots a new build starts with (UX review S9): both cheap, and Repulsor Pulse is the Counter
+ * for the wave-5 boss (The Breaker), so the first boss tell names an ability the player already has.
+ * Saves keep whatever they stored (save/serialize.ts only falls back to this for a missing array).
+ */
+export const DEFAULT_ABILITIES: readonly AbilityId[] = ['repulsor_pulse', 'hunter_mark'];
+
 export function newBuild(frame: FrameId = 'standard'): BuildState {
   return {
     frame, hardpoints: [], attunements: [], doctrines: {}, secondDoctrines: {}, ranks: {},
-    anomalies: [], anomalySockets: 3, targeting: {}, abilities: [null, null],
+    anomalies: [], anomalySockets: 3, targeting: {}, abilities: [...DEFAULT_ABILITIES],
   };
 }
 
@@ -29,7 +36,7 @@ export function newRun(prestigeSeed: number): RunState {
     tick: 0, attemptTick: 0, waveTick: 0, scrap: 0, cores: 0, coresDroppedByBoss: new Uint8Array(WAVE_TABLE_SIZE),
     threatDial: 0, attempts: 0, attemptsPerCheckpoint: [], prestigeStartedAt: 0, playSeconds: 0, echoRateHistory: [],
     pendingDraft: null, anomaliesOfferedAt: new Uint8Array(32), hardpointSlotsOpen: 0, attunementSlotsOpen: 0,
-    speedMultiplier: 1, patrolScrapPerSecond: 0, longestChain: 0, spentByTree: {},
+    speedMultiplier: 1, patrolScrapPerSecond: 0, longestChain: 0, spentByTree: {}, attemptDamageTaken: {},
   };
 }
 
