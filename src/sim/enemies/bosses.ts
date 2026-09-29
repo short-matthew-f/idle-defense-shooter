@@ -33,7 +33,7 @@ import { abilityDef } from '../core/content';
 import { cos, sin } from '../math/lut';
 import { ELEMENT_ORDER } from '../data/index';
 import { bossState, ctrlAt, resetBossState } from './bosses/state';
-import { initCtrl, moveBoss, openWeakPoint, releaseCtrl, updateCtrl } from './bosses/controller';
+import { blockProjectiles, initCtrl, moveBoss, openWeakPoint, releaseCtrl, updateCtrl } from './bosses/controller';
 import { segDist } from './bosses/common';
 import { TELLS } from './bosses/registry';
 import { ROLE_GEN, K } from './behaviors/kinds';
@@ -200,9 +200,10 @@ export class BossSystem implements System {
     tell.ability = null; tell.ticksLeft = 0; tell.bossIndex = NO_ENTITY;
     for (const c of s.ctrls) {
       if (!c.active) continue;
-      if (!updateCtrl(w, s, c)) { releaseCtrl(w, c); continue; }
+      if (!updateCtrl(w, c)) { releaseCtrl(w, c); continue; }
       if (c.tellActive && tell.ability === null) { tell.ability = c.tellCounter; tell.ticksLeft = c.tellTicks; tell.bossIndex = c.index; }
     }
+    if (s.walls > 0) blockProjectiles(w, s);   // Architect walls outlive their builder until they expire
   }
 
   onCommand(w: World, cmd: Command): boolean {

@@ -125,7 +125,7 @@ function refocus(w: World, b: number, c: BossCtrl): void {
 }
 
 /** One tick of one boss (World.update phase). Returns false when the boss is gone. */
-export function updateCtrl(w: World, s: BossState, c: BossCtrl): boolean {
+export function updateCtrl(w: World, c: BossCtrl): boolean {
   const b = w.resolveEnemy(c.index, c.gen);
   if (b < 0) return false;
   c.index = b;
@@ -148,7 +148,7 @@ export function updateCtrl(w: World, s: BossState, c: BossCtrl): boolean {
     c.tellActive = false; c.move = MOVE_NONE; c.staggerCd = 240;
     w.emit(Ev.Fx, c.src, -1, c.phase, e.x[b], e.y[b], c.tellEv >= 0 ? c.tellEv : e.spawnEv[b]);
   }
-  continuous(w, s, b, c);
+  continuous(w, b, c);
   if (c.stunT > 0) { c.stunT--; return true; }
   // tell loop
   if (c.tellActive) {
@@ -171,7 +171,7 @@ export function updateCtrl(w: World, s: BossState, c: BossCtrl): boolean {
   return true;
 }
 
-function continuous(w: World, s: BossState, b: number, c: BossCtrl): void {
+function continuous(w: World, b: number, c: BossCtrl): void {
   const e = w.enemies, tick = w.tick;
   if (c.tetherT > 0) {
     c.tetherT--;
@@ -191,7 +191,6 @@ function continuous(w: World, s: BossState, b: number, c: BossCtrl): void {
     for (let j = 0; j < e.count; j++) if (e.kind[j] === K.bossAdd && e.aiB[j] === ROLE_GEN && !(e.flags[j] & EnemyFlag.Dead)) gens++;
     if (gens > 0) addShield(w, b, e.maxHp[b] * 0.002 * gens, 0.6);
   }
-  if (s.walls > 0) blockProjectiles(w, s);
 }
 
 /**
@@ -223,7 +222,7 @@ function bend(w: World, b: number, radius: number, k: number, drag: boolean): vo
  * the boss system's update, i.e. before projectiles move this tick, so we test each projectile's
  * NEXT step (position → position + v·dt) against every wall and free it on contact.
  */
-function blockProjectiles(w: World, s: BossState): void {
+export function blockProjectiles(w: World, s: BossState): void {
   const hz = w.hazards, p = w.projectiles;
   let walls = 0;
   for (let h = 0; h < hz.length; h++) {

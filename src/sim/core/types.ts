@@ -109,7 +109,7 @@ export interface EnemyPool {
   comboStart: Int32Array; comboMask: Uint8Array;
   /** Harmonic Lock: tick until which the enemy takes the +50% bonus. */
   harmonicUntil: Int32Array;
-  /** WP3 addition: ticks left on an open boss weak point (Kill Order extends it; boss scripts may read/close on 0). */
+  /** WP3 addition: extra weak-point exposure (ticks) banked by Kill Order; when the boss script closes the weak point, systems/ordnance.ts holds it open for this long. */
   weakPointT: Uint16Array;
 }
 

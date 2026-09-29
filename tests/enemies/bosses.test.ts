@@ -3,7 +3,7 @@ import { Sim } from '../../src/sim/index';
 import { bossHp } from '../../src/sim/economy/curves';
 import { bossDef, BOSS_LIST } from '../../src/sim/core/content';
 import { BOSSES, TELL_COUNTERS, graftSources } from '../../src/sim/data/bosses';
-import { EnemyFlag, Ev } from '../../src/sim/core/types';
+import { EnemyFlag, Ev, ProjFlag, ProjKind } from '../../src/sim/core/types';
 import type { Command } from '../../src/sim/core/types';
 import type { AbilityId, BossId } from '../../src/sim/core/ids';
 import { ATTACKS, ATTACK_IDS, TELLS } from '../../src/sim/enemies/bosses/registry';
@@ -211,6 +211,81 @@ describe('tell → Counter', () => {
     expect(w.bossTell.ability).toBeNull();
     const c = bossCtrlOf(w, sim.machine.boss())!;
     expect(c.staggerCd).toBeGreaterThan(200);
+  }, 30_000);
+});
+
+describe('boss specifics', () => {
+  it('The Architect: an enemy wall blocks player projectiles crossing it', () => {
+    const sim = bossSim('architect', 85, 6, 4000);
+    const w = sim.world;
+    let t = 0;
+    const wall = () => w.hazards.find((h) => h.kind === 'barrier_field' && h.owner === 'enemy' && h.x2 !== undefined);
+    while (!wall() && t < 60 * 60) { sim.step(); t++; }
+    const h = wall()!;
+    expect(h).toBeDefined();
+    // a round fired from the tower through the wall's midpoint
+    const mx = (h.x + h.x2!) / 2, my = (h.y + h.y2!) / 2, d = Math.hypot(mx, my);
+    const sx = (mx / d) * (d - 12), sy = (my / d) * (d - 12);
+    const p = w.spawnProjectile({ kind: ProjKind.Bullet, x: sx, y: sy, vx: (mx / d) * 600, vy: (my / d) * 600, damage: 1, life: 600, srcTag: 'ballistics' });
+    const gen = w.projectiles.gen[p];
+    sim.step();
+    let alive = false;
+    for (let j = 0; j < w.projectiles.count; j++) if (w.projectiles.gen[j] === gen && !(w.projectiles.flags[j] & ProjFlag.Dead)) alive = true;
+    expect(alive).toBe(false);
+  }, 30_000);
+
+  it('Mirror Hive: clones share the boss look (bossId) and the true one is revealed during the shuffle', () => {
+    const sim = bossSim('mirror_hive', 30, 6, 4000);
+    const w = sim.world, e = w.enemies;
+    let t = 0;
+    while (w.bossTell.ability === null && t < 3600) { sim.step(); t++; }
+    const b = sim.machine.boss();
+    let clones = 0;
+    for (let i = 0; i < e.count; i++) if (i !== b && e.bossId[i] === e.bossId[b] && !(e.flags[i] & EnemyFlag.Boss)) clones++;
+    expect(clones).toBeGreaterThanOrEqual(2);
+    expect(bossCtrlOf(w, b)!.revealT).toBeGreaterThan(0);
+    const snap = sim.snapshot();
+    let bossShaped = 0;
+    const shape = bossDef('mirror_hive', 30).shape;
+    for (let k = 0; k < snap.instanceCount; k++) { const o = k * 12; if (snap.instances[o + 9] === 4 && snap.instances[o + 4] === shape) bossShaped++; }
+    expect(bossShaped).toBeGreaterThanOrEqual(3);
+  }, 30_000);
+
+  it('Null Engine resists one damage type (70% less) and rotates it on the tell', () => {
+    const sim = bossSim('null_engine', 55, 6, 4000);
+    const w = sim.world;
+    sim.run(10);
+    const b = sim.machine.boss();
+    const c = bossCtrlOf(w, b)!;
+    c.invulnT = 0;
+    expect(w.damageModifier!(b, 'fire', 'fire', 'primary')).toBeCloseTo(0.3, 5);
+    expect(w.damageModifier!(b, 'frost', 'frost', 'primary')).toBe(1);
+    let t = 0;
+    while (w.bossTell.ability === null && t < 3600) { sim.step(); t++; }
+    const left = w.bossTell.ticksLeft;
+    sim.run(left + 1);
+    expect(bossCtrlOf(w, sim.machine.boss())!.resisted).toBe(2);   // fire → lightning
+  }, 30_000);
+
+  it('Event Horizon: inhale bends player projectiles near it', () => {
+    const sim = bossSim('event_horizon', 80, 6, 4000);
+    const w = sim.world;
+    sim.run(5);
+    const b = sim.machine.boss();
+    const c = bossCtrlOf(w, b)!;
+    c.inhaleT = 60;
+    const e = w.enemies;
+    const d = Math.hypot(e.x[b], e.y[b]);
+    const px = e.x[b] * (1 - 150 / d), py = e.y[b] * (1 - 150 / d);
+    const p = w.spawnProjectile({ kind: ProjKind.Bullet, x: px, y: py, vx: (e.x[b] / d) * 300, vy: (e.y[b] / d) * 300, damage: 1, life: 600, srcTag: 'ballistics' });
+    const vx0 = w.projectiles.vx[p], vy0 = w.projectiles.vy[p];
+    const gen = w.projectiles.gen[p];
+    sim.step();
+    let j = -1;
+    for (let k = 0; k < w.projectiles.count; k++) if (w.projectiles.gen[k] === gen) j = k;
+    expect(j).toBeGreaterThanOrEqual(0);
+    const dot = (w.projectiles.vx[j] * vx0 + w.projectiles.vy[j] * vy0) / (300 * 300);
+    expect(dot).toBeLessThan(0.9999);
   }, 30_000);
 });
 

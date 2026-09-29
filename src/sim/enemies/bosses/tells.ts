@@ -132,7 +132,7 @@ export const TELLS: Record<string, TellScript> = {
   hazard_ring: {
     start: focusBoss,
     fire(w, _b, _c, cause) {
-      for (let k = 0; k < 8; k++) { const a = (k * TAU) / 8; enemyHazard(w, cos(a) * 40, sin(a) * 40, 26, 3, bossDmg(w, 4), cause); }
+      for (let k = 0; k < 8; k++) { const a = (k * TAU) / 8; enemyHazard(w, cos(a) * 40, sin(a) * 40, 26, 3, bossDmg(w, 1.5), cause); }
     },
   },
   halo_charge: {
