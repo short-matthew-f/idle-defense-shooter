@@ -160,7 +160,7 @@ export class OptimizerAgent extends BalancedAgent {
     const ctx = makeCtx(sim, new Prng(0x0b7), 'idle');
     if (draft && pick) {
       sim.world.run.pendingDraft = [...draft];
-      if (sim.machine.pickAnomaly(pick, sim.world.build.anomalies.length >= sim.world.build.anomalySockets ? 0 : undefined)) return -Infinity;
+      if (sim.machine.pickAnomaly(pick, sim.world.build.anomalies.length >= sim.world.build.anomalySockets ? this.replaceIndex(ctx) : undefined)) return -Infinity;
     }
     for (const a of seq) if (ctx.apply(a.cmd)) return -Infinity;
     const c = this.completer;

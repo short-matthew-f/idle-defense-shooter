@@ -8,7 +8,7 @@ import { GeneralistAgent } from './generalist';
 import { RandomAgent } from './random';
 import { HardpointAgent } from './hardpoint';
 import { OptimizerAgent } from './optimizer';
-import { doctrineProbe } from './probe';
+import { doctrineProbe, PurePrimaryAgent } from './probe';
 
 export const BASE_AGENTS = ['greedy', 'survival', 'elemental', 'generalist', 'random', 'hp_ordnance', 'hp_drones', 'hp_blade', 'hp_laser', 'hp_gravitics', 'optimizer'] as const;
 export const HARDPOINT_AGENTS = ['hp_ordnance', 'hp_drones', 'hp_blade', 'hp_laser', 'hp_gravitics'] as const;
@@ -27,6 +27,7 @@ export function makeAgent(id: string): Agent {
     case 'random': return new RandomAgent();
     case 'optimizer': return new OptimizerAgent(true);
     case 'optimizer_lite': return new OptimizerAgent(false);
+    case 'pure_ballistics': return new PurePrimaryAgent();
     default: throw new Error(`Unknown agent '${id}'`);
   }
 }

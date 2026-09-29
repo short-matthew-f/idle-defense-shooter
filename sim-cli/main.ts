@@ -19,7 +19,7 @@ import { BASE_AGENTS } from './agents/index';
 import { runJobs } from './pool';
 import type { Job } from './jobs';
 import { OUT_DIR, runMarkdown, summaryMarkdown, writeJson, writeRun, writeText } from './report';
-import { aggregateDifficulty, difficultyJobs, difficultyMarkdown, FULL_DIFF, QUICK_DIFF, type DiffJobResult } from './difficulty';
+import { aggregateDifficulty, difficultyJobs, difficultyMarkdown, FULL_DIFF, QUICK_DIFF, type ArchetypeSnapshots, type DiffJobResult } from './difficulty';
 import { runAttempt } from './runner';
 import { Sim } from '../src/sim/index';
 import { round } from './metrics';
@@ -34,8 +34,10 @@ async function main(): Promise<void> {
 
   if (a.difficulty) {
     const opts = a.quick ? QUICK_DIFF : FULL_DIFF;
-    const js = difficultyJobs(opts);
     const t0 = performance.now();
+    const snaps = await runJobs<ArchetypeSnapshots>(opts.archetypes.map((archetype) => ({ kind: 'diffclimb', archetype, bands: opts.bands })), jobsN,
+      (_i, r, done) => console.error(`  climb ${done}/${opts.archetypes.length}: ${r.archetype} reached ${r.reached} (${round(r.wallSeconds, 0)} s)`));
+    const js = difficultyJobs(opts, snaps);
     const res = await runJobs<DiffJobResult>(js.map((job) => ({ kind: 'diff', job })), jobsN, (_i, _r, done) => { if (done % 10 === 0) console.error(`  ${done}/${js.length}`); });
     const d = aggregateDifficulty(opts, js.map((job, i) => ({ job, res: res[i] })), (performance.now() - t0) / 1000);
     const suffix = a.quick ? '-quick' : '';

@@ -107,7 +107,16 @@ export function attemptsUpTo(r: RunResult, cp: number): number {
   return s;
 }
 
-/** Recommendation wave: the Forecast's when present, else the computed Echo-rate rule, else the peak. */
+/**
+ * Game recommendation: the Forecast's when it exists in the build (null if it never fired);
+ * the computed Echo-rate rule only when the Forecast is absent.
+ */
+export function gameRecommendation(r: RunResult): { wave: number; seconds: number; source: 'forecast' | 'computed' } | null {
+  if (r.forecastPresent) return r.forecastRecommended ? { ...r.forecastRecommended, source: 'forecast' } : null;
+  return r.computedRecommended ? { ...r.computedRecommended, source: 'computed' } : null;
+}
+
+/** Recommendation wave for reports: the Forecast's when present, else the computed Echo-rate rule, else the peak. */
 export function recommendation(r: RunResult): { wave: number; seconds: number; source: 'forecast' | 'computed' | 'peak' | 'none' } {
   if (r.forecastRecommended) return { ...r.forecastRecommended, source: 'forecast' };
   if (r.computedRecommended) return { ...r.computedRecommended, source: 'computed' };

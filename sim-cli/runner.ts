@@ -108,10 +108,14 @@ export class Climber {
   private forcedDone = false;
   private echoMul = 1;
 
+  /** Optional per-tick observer (after each step); return true to stop the climb. */
+  onTick: ((c: Climber) => boolean | void) | null = null;
+
   constructor(sim: Sim, cfg: RunConfig, agent?: Agent, policy?: Policy) {
     this.sim = sim; this.cfg = cfg;
     this.agent = agent ?? makeAgent(cfg.agent);
     this.agent.setDoctrineOverrides(cfg.doctrineOverrides);
+    if (cfg.forceAnomaly && cfg.forceAnomaly !== 'skip') this.agent.keepAnomaly = cfg.forceAnomaly;
     this.policy = policy ?? makePolicy(cfg.policy);
     this.ctx = makeCtx(sim, new Prng(agentSeed(cfg.seed, cfg.agent)), cfg.policy);
     this.acc = instrument(sim.world);
@@ -239,7 +243,11 @@ export class Climber {
     if (prevPhase === 'combat') this.onPhase('between', 'combat');
     for (; n < maxTicks; n++) {
       const run = w.run;
-      if (cfg.forceAnomaly && run.pendingDraft && !this.forcedDone) { run.pendingDraft = [cfg.forceAnomaly as AnomalyId]; this.forcedDone = true; }
+      if (cfg.forceAnomaly && run.pendingDraft && !this.forcedDone) {
+        this.forcedDone = true;
+        if (cfg.forceAnomaly === 'skip') { if (applyCommand(sim.machine, { type: 'pick_anomaly', anomaly: null })) this.notes.push('forced skip rejected'); }
+        else run.pendingDraft = [cfg.forceAnomaly as AnomalyId];
+      }
       agent.tick(ctx);
       policy.tick(sim);
       sim.step();
@@ -253,6 +261,7 @@ export class Climber {
         if (cfg.stopAtRecommendation && (this.forecastPresent ? this.forecastRec : this.computedRec)) { stop = 'recommended'; n++; break; }
       }
       if (cfg.stopAtWave && r2.deepestCleared >= cfg.stopAtWave) { stop = 'stop_wave'; n++; break; }
+      if (this.onTick && this.onTick(this)) { stop = 'stop_wave'; n++; break; }
       if (cfg.mode !== 'patrol' && this.playSeconds - this.lastCpAt > wallSec) { stop = 'wall'; n++; break; }
     }
     if (cfg.mode === 'patrol' && stop === 'max_time') stop = 'patrol_done';
@@ -309,10 +318,13 @@ const ECHO_PRIORITY = [
 export function spendEchoes(sim: Sim): string[] {
   const w = sim.world, bought: string[] = [];
   const known = new Set(PRESTIGE_NODES.map((p) => p.id));
-  for (let guard = 0; guard < 500; guard++) {
+  // priority list first (cheapest-first within it), then every other node in data order
+  const order = [...ECHO_PRIORITY, ...PRESTIGE_NODES.map((p) => p.id).filter((id) => !ECHO_PRIORITY.includes(id))];
+  const blocked = new Set<string>();
+  for (let guard = 0; guard < 2000; guard++) {
     let best: string | null = null, bestCost = Infinity;
-    for (const id of ECHO_PRIORITY) {
-      if (!known.has(id)) continue;
+    for (const id of order) {
+      if (!known.has(id) || blocked.has(id)) continue;
       const info = nodeInfo(id);
       if (!info) continue;
       const r = w.meta.prestigeRanks[id] | 0;
@@ -323,7 +335,7 @@ export function spendEchoes(sim: Sim): string[] {
     if (!best) break;
     const before = w.meta.echoes;
     const err = applyCommand(sim.machine, { type: 'buy_prestige', node: best });
-    if (err || w.meta.echoes === before) break;
+    if (err || w.meta.echoes === before) { blocked.add(best); continue; }
     bought.push(best);
   }
   return bought;
@@ -357,7 +369,7 @@ export function runPrestige(cfg: RunConfig, n: number): PrestigeChainResult {
       break;
     }
     const bought = spendEchoes(sim);
-    out.notes.push(`prestige ${i + 1}: deepest ${deep}, echoes +${sim.world.meta.echoes - echoesBefore + 0} (bank ${Math.floor(sim.world.meta.echoes)}), bought ${bought.length} nodes`);
+    out.notes.push(`prestige ${i + 1} (run stopped: ${out.runs[i].stopReason}): deepest ${deep}, echoes +${sim.world.meta.echoes - echoesBefore + 0} (bank ${Math.floor(sim.world.meta.echoes)}), bought ${bought.length} nodes`);
   }
   return out;
 }

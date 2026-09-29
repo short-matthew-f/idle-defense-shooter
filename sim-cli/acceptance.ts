@@ -8,7 +8,7 @@
  *  - full  (npm run sim:accept): 3 seeds × {Generalist idle/active/directive, Greedy, Survival}
  *          at 4 sim-hours per climb (stop at wave 100 or the 40-min wall); Elemental, Random, the
  *          five hardpoint agents (4 h) and the beam Optimizer (2 h) on seed 1; every Doctrine probe
- *          (1 h); the Optimizer-lite with every base-pool Anomaly forced (0.75 h); a 3-Prestige
+ *          (1 h); the Optimizer-lite with every base-pool Anomaly forced (40 min, 3 seeds); a 3-Prestige
  *          chain; Offline; Determinism; the full Difficulty grid (10 bands × 10 archetypes × 2
  *          seeds). ~180 jobs, ~20 min on 4 cores. The balance gate.
  *  - quick (npm run sim:accept -- --quick, and tests/accept): 1 seed, 0.5 h climbs, two hardpoint
@@ -28,8 +28,9 @@
  *  - Active edge: attempts summed over the checkpoints both policies reached; idle "clears every
  *    boss" = in the same sim time, idle's checkpoint is at most one boss behind active's.
  *  - Directive gap: (A_idle − A_directive) / (A_idle − A_active) over common checkpoints.
- *  - Anomaly cap: depth of the Optimizer with each base-pool Anomaly forced at the first draft vs
- *    its natural drafts, same seed and time. Uses `optimizer_lite` (lookahead 1) — the beam
+ *  - Anomaly cap: mean depth (over the seeds) of the Optimizer with each base-pool Anomaly forced
+ *    at the first draft (and never replaced) vs the same Optimizer skipping that draft (later
+ *    drafts natural in both), same seeds and time. Uses `optimizer_lite` (lookahead 1) — the beam
  *    Optimizer is ~9× slower; see the report.
  *  - Spend efficiency: judged on damage trees only (Bastion, Reactor, ability ranks buy survival /
  *    utility, not damage share); over every idle agent run.
@@ -40,8 +41,8 @@ import { ANOMALIES } from '../src/sim/data/index';
 import type { AcceptRow, OfflineResult, PrestigeChainResult, RunConfig, RunResult } from './types';
 import type { Job } from './jobs';
 import { runJobs } from './pool';
-import { aggregateDifficulty, difficultyJobs, FULL_DIFF, QUICK_DIFF, type DiffJobResult, type DifficultyResult } from './difficulty';
-import { attemptsUpTo, checkpointMinutes, checkpointOdds, counterRate, depthAt, median, NON_DAMAGE_TREES, pct, recommendation, round, spendVsEffect, timeToWave } from './metrics';
+import { aggregateDifficulty, difficultyJobs, FULL_DIFF, QUICK_DIFF, type ArchetypeSnapshots, type DiffJobResult, type DifficultyResult } from './difficulty';
+import { attemptsUpTo, checkpointMinutes, checkpointOdds, counterRate, depthAt, gameRecommendation, mean, median, NON_DAMAGE_TREES, pct, round, spendVsEffect, timeToWave } from './metrics';
 import { HARDPOINT_AGENTS } from './agents/index';
 
 export type Mode = 'quick' | 'full';
@@ -99,18 +100,21 @@ export function plan(mode: Mode, seeds: number[], hours: number): Plan[] {
       att(`doctrine-${t.id}.${d.id}-s${s0}`, { seed: s0, agent: `doctrine:${t.id}.${d.id}`, policy: 'idle', maxSimSeconds: docH });
     }
   }
-  // Anomaly cap
-  const anH = quick ? Math.min(H, 1200) : Math.min(H, 0.75 * 3600);
+  // Anomaly cap: every base-pool Anomaly forced at the first draft vs skipping it, on each seed
+  const anH = quick ? Math.min(H, 1800) : Math.min(H, 2400);
   const pool = ANOMALIES.filter((a) => a.pool === 'base').map((a) => a.id);
   const forced = quick ? pool.filter((a) => ['loaded_dice', 'glass_cannon'].includes(a)) : pool;
-  att(`anomaly-none-s${s0}`, { seed: s0, agent: 'optimizer_lite', policy: 'idle', maxSimSeconds: anH, hashes: false });
-  for (const a of forced) att(`anomaly-${a}-s${s0}`, { seed: s0, agent: 'optimizer_lite', policy: 'idle', maxSimSeconds: anH, forceAnomaly: a, hashes: false });
+  for (const seed of quick ? [s0] : seeds) {
+    att(`anomaly-none-s${seed}`, { seed, agent: 'optimizer_lite', policy: 'idle', maxSimSeconds: anH, forceAnomaly: 'skip', hashes: false });
+    for (const a of forced) att(`anomaly-${a}-s${seed}`, { seed, agent: 'optimizer_lite', policy: 'idle', maxSimSeconds: anH, forceAnomaly: a, hashes: false });
+  }
   // Prestige chain, offline, determinism
   out.push({ key: 'chain', job: { kind: 'chain', cfg: { name: `chain-generalist-s${s0}`, seed: s0, agent: 'generalist', policy: 'idle', maxSimSeconds: quick ? 3600 : H }, n: quick ? 2 : 3 } });
   out.push({ key: 'offline', job: { kind: 'offline', cfg: { name: 'offline', seed: s0, agent: 'generalist', policy: 'idle', maxSimSeconds: 3600, stopAtWave: 19 }, patrolSeconds: quick ? 600 : 1800 } });
   for (const k of ['a', 'b']) att(`determinism-${k}`, { seed: 7, agent: 'greedy', policy: 'active', maxSimSeconds: quick ? 600 : 1800 });
-  // Difficulty
-  for (const j of difficultyJobs(quick ? QUICK_DIFF : FULL_DIFF)) out.push({ key: `diff-${j.archetype}-${j.band}`, job: { kind: 'diff', job: j } });
+  // Difficulty phase 1: archetype climbs (phase 2 — one job per archetype × band — runs after)
+  const dopts = quick ? QUICK_DIFF : FULL_DIFF;
+  for (const a of dopts.archetypes) out.push({ key: `diffclimb-${a}`, job: { kind: 'diffclimb', archetype: a, bands: dopts.bands } });
   return out;
 }
 
@@ -121,7 +125,7 @@ export async function gather(opts: AcceptOptions): Promise<AcceptData> {
   const log = opts.log ?? (() => {});
   const p = plan(mode, seeds, hours);
   // Longest jobs first so the pool drains evenly.
-  const weight = (x: Plan): number => (x.job.kind === 'chain' ? 4 : x.job.kind === 'diff' ? 0.5 : x.key.startsWith('optimizer') ? 5 : x.key.startsWith('anomaly') ? 2 : 1);
+  const weight = (x: Plan): number => (x.job.kind === 'chain' ? 4 : x.job.kind === 'diffclimb' ? 3 : x.key.startsWith('optimizer') ? 5 : x.key.startsWith('anomaly') ? 2 : 1);
   const order = p.map((x, i) => i).sort((a, b) => weight(p[b]) - weight(p[a]) || a - b);
   const t0 = performance.now();
   log(`acceptance ${mode}: ${p.length} jobs, seeds ${seeds.join(',')}, ${hours} sim-h per climb, ${opts.parallel ?? 'auto'} parallel`);
@@ -131,11 +135,17 @@ export async function gather(opts: AcceptOptions): Promise<AcceptData> {
   const byKey: Record<string, unknown> = {};
   order.forEach((pi, k) => { byKey[p[pi].key] = res[k]; });
   const runs: Record<string, RunResult> = {};
-  const diffJobs: { job: import('./difficulty').DiffJob; res: DiffJobResult }[] = [];
+  const snaps: ArchetypeSnapshots[] = [];
   for (const x of p) {
     if (x.job.kind === 'attempt') runs[x.key] = byKey[x.key] as RunResult;
-    else if (x.job.kind === 'diff') diffJobs.push({ job: x.job.job, res: byKey[x.key] as DiffJobResult });
+    else if (x.job.kind === 'diffclimb') snaps.push(byKey[x.key] as ArchetypeSnapshots);
   }
+  // Difficulty phase 2
+  const dopts = mode === 'quick' ? QUICK_DIFF : FULL_DIFF;
+  const dj = difficultyJobs(dopts, snaps);
+  log(`  difficulty: ${dj.length} archetype×band jobs (archetype depths ${snaps.map((s) => `${s.archetype} ${s.reached}`).join(', ')})`);
+  const dres = await runJobs<DiffJobResult>(dj.map((job) => ({ kind: 'diff', job })), opts.parallel, (_i, _r, done) => { if (done % 20 === 0 || done === dj.length) log(`  difficulty ${done}/${dj.length} (${round((performance.now() - t0) / 1000, 0)} s)`); });
+  const diffJobs = dj.map((job, i) => ({ job, res: dres[i] }));
   const wall = (performance.now() - t0) / 1000;
   return {
     mode, seeds, hours, runs,
@@ -168,13 +178,14 @@ export function testCheckpointTime(d: AcceptData): AcceptRow {
 
 export function testFirstWall(d: AcceptData): AcceptRow {
   const runs = series(d, 'generalist-idle');
-  const recs = runs.map(recommendation);
-  const waves = recs.map((r) => r.wave).filter(Number.isFinite);
-  const med = median(waves);
-  const src = [...new Set(recs.map((r) => r.source))].join('/');
-  return { name: 'First wall', pass: waves.length === runs.length && inRange(med, 22, 28), value: `wave ${waves.join(', ') || '—'} (median ${round(med, 1)}; ${src})`,
+  const recs = runs.map(gameRecommendation);
+  const waves = recs.map((r) => (r ? r.wave : NaN));
+  const med = median(waves.filter(Number.isFinite));
+  const forecast = runs.some((r) => r.forecastPresent);
+  return { name: 'First wall', pass: waves.every(Number.isFinite) && waves.every((w) => inRange(w, 22, 28)),
+    value: `wave ${waves.map((w) => (Number.isFinite(w) ? String(w) : 'never')).join(', ')}${Number.isFinite(med) ? ` (median ${round(med, 1)})` : ''}`,
     target: 'Prestige recommended at wave 22–28 on run 1',
-    notes: `${runs.some((r) => r.forecastPresent) ? 'UiState.forecast.recommended' : 'Forecast absent: computed §3 rule'}; walls: ${runs.map((r) => r.wallWave ?? `none(${r.stopReason})`).join(', ')}` };
+    notes: `${forecast ? 'UiState.forecast.recommended' : 'Forecast absent: computed §3 rule'}; computed rule ${runs.map((r) => r.computedRecommended?.wave ?? '—').join('/')}; Echo-rate peak ${runs.map((r) => r.echoPeak?.wave ?? '—').join('/')}; stop ${runs.map((r) => r.wallWave !== null ? `wall@${r.wallWave}` : r.stopReason).join(', ')}` };
 }
 
 export function testReclimb(d: AcceptData): AcceptRow {
@@ -204,14 +215,15 @@ export function testPush(d: AcceptData): AcceptRow {
 
 export function testForecast(d: AcceptData): AcceptRow {
   const runs = series(d, 'generalist-idle');
-  const errs = runs.map((r) => {
-    const rec = recommendation(r);
-    return r.echoPeak ? Math.abs(rec.wave - r.echoPeak.wave) / r.echoPeak.wave : NaN;
-  });
-  const worst = Math.max(...errs.map((e) => (Number.isFinite(e) ? e : Infinity)));
   const present = runs.some((r) => r.forecastPresent);
-  const row: AcceptRow = { name: 'Forecast', pass: present && worst <= 0.1, value: `worst ${pct(worst)} off the peak wave`, target: 'recommendation within 10% of the true Echo-rate peak',
-    notes: runs.map((r) => `rec ${recommendation(r).wave} vs peak ${r.echoPeak?.wave ?? '—'}`).join('; ') };
+  const errs = runs.map((r) => {
+    const rec = gameRecommendation(r);
+    return rec && r.echoPeak ? Math.abs(rec.wave - r.echoPeak.wave) / r.echoPeak.wave : NaN;
+  });
+  const worst = errs.some((e) => !Number.isFinite(e)) ? Infinity : Math.max(...errs);
+  const row: AcceptRow = { name: 'Forecast', pass: present && worst <= 0.1, value: Number.isFinite(worst) ? `worst ${pct(worst)} off the peak wave` : 'no recommendation in ≥ 1 run',
+    target: 'recommendation within 10% of the true Echo-rate peak',
+    notes: runs.map((r) => `rec ${gameRecommendation(r)?.wave ?? 'never'} vs peak ${r.echoPeak?.wave ?? '—'} (${r.echoPeak ? round(r.echoPeak.rate, 0) : '—'}/h)`).join('; ') };
   if (!present) row.skipped = 'Forecast not implemented (value uses the computed rule)';
   return row;
 }
@@ -323,24 +335,32 @@ export function testFormationFairness(d: AcceptData): AcceptRow {
 }
 
 export function testAnomalyCap(d: AcceptData): AcceptRow {
-  const s0 = d.seeds[0];
-  const base = d.runs[`anomaly-none-s${s0}`];
-  if (!base) return { name: 'Anomaly cap', pass: false, skipped: 'no baseline', value: '—', target: '≤ 15% (Paradox ≤ 25%)', notes: '' };
+  const seeds = d.seeds.filter((s) => d.runs[`anomaly-none-s${s}`]);
+  if (!seeds.length) return { name: 'Anomaly cap', pass: false, skipped: 'no baseline', value: '—', target: '≤ 15% (Paradox ≤ 25%)', notes: '' };
+  const baseDepths = seeds.map((s) => d.runs[`anomaly-none-s${s}`].deepestCleared);
+  const base = mean(baseDepths);
   const over: string[] = [];
   const parts: string[] = [];
-  let worst = -Infinity, worstName = '';
+  let worst = -Infinity, worstName = '', socketed = 0;
   for (const a of ANOMALIES) {
-    const r = d.runs[`anomaly-${a.id}-s${s0}`];
-    if (!r) continue;
-    const got = r.build.anomalies.includes(a.id as AnomalyId) || r.anomaliesPicked.includes(a.id);
-    const raise = r.deepestCleared / Math.max(1, base.deepestCleared) - 1;
+    const rs = seeds.map((s) => d.runs[`anomaly-${a.id}-s${s}`]).filter(Boolean);
+    if (!rs.length) continue;
+    const ok = rs.filter((r) => r.build.anomalies.includes(a.id as AnomalyId) || r.anomaliesPicked.includes(a.id));
+    if (!ok.length) { parts.push(`${a.id} (never socketed)`); continue; }
+    socketed++;
+    const raise = mean(ok.map((r) => r.deepestCleared)) / Math.max(1, base) - 1;
     const cap = a.rarity === 'paradox' ? 0.25 : 0.15;
-    parts.push(`${a.id} ${raise >= 0 ? '+' : ''}${pct(raise, 0)}${got ? '' : '(not socketed)'}`);
+    parts.push(`${a.id} ${raise >= 0 ? '+' : ''}${pct(raise, 0)}`);
     if (raise > worst) { worst = raise; worstName = a.id; }
     if (raise > cap) over.push(`${a.id} +${pct(raise)}`);
   }
-  return { name: 'Anomaly cap', pass: parts.length > 0 && over.length === 0, value: `max +${pct(worst)} (${worstName}); baseline depth ${base.deepestCleared}`,
-    target: 'no Anomaly raises Optimizer depth > 15% (Paradox > 25%)', notes: `optimizer_lite, ${round(base.simSeconds / 3600, 2)} sim-h; ${parts.join(', ')}` };
+  const H = round(d.runs[`anomaly-none-s${seeds[0]}`].simSeconds / 3600, 2);
+  if (socketed === 0) return { name: 'Anomaly cap', pass: false, skipped: `first draft (wave 10) not reached in ${H} sim-h`, value: `baseline depth ${round(base, 1)}`,
+    target: 'no Anomaly raises Optimizer depth > 15% (Paradox > 25%)', notes: parts.join(', ') };
+  const spread = baseDepths.length > 1 ? `${Math.min(...baseDepths)}–${Math.max(...baseDepths)}` : String(baseDepths[0]);
+  return { name: 'Anomaly cap', pass: over.length === 0, value: `max +${pct(worst)} (${worstName}); baseline (first draft skipped) depth ${round(base, 1)}`,
+    target: 'no Anomaly raises Optimizer depth > 15% (Paradox > 25%)',
+    notes: `optimizer_lite, ${H} sim-h, mean over ${seeds.length} seed(s) (baseline range ${spread}); over cap: ${over.join(', ') || 'none'}; all: ${parts.join(', ')}` };
 }
 
 export function testOffline(d: AcceptData): AcceptRow {

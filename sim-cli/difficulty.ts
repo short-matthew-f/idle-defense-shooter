@@ -3,11 +3,14 @@
  *
  * For every launch template × archetype × 10-wave band:
  *  1. Archetype build at the band's probe wave w = 10·band + 7 (never a boss or pre-boss wave):
- *     a fresh Sim with the archetype's system mounted / element attuned, a Scrap budget of
- *     `scrapBudget(w)` (first-clear Scrap of waves 1..w × BUDGET_MUL, see below), spent cheapest-first — 60% in the archetype's
- *     tree and 40% in Ballistics (100% Ballistics for the Ballistics archetype) with the
- *     archetype's default Doctrine. The tower is made unkillable (`stats.override` max HP 1e9,
- *     regeneration 0) and effective damage taken is measured instead.
+ *     a real climb of the archetype's agent (Ballistics → pure primary, no hardpoints or
+ *     attunements, Multishot; elements →
+ *     that element's focused probe; hardpoints → the hardpoint agent), snapshotted with
+ *     `sim.save()` the first time it reaches wave w (purchases scripted by the agent, so the build
+ *     has the chassis, Doctrines, exotics and Anomalies a real player of that archetype would).
+ *     Bands the archetype's climb never reaches are reported as "not reached".
+ *     The tower is made unkillable (`stats.override` max HP 1e9, regeneration 0) and effective
+ *     damage taken is measured instead; it is normalized by the build's real max HP.
  *  2. Wave: `generateWave` is pure and the template's layout function is private, so the WaveDef
  *     comes from searching Prestige seeds until `generateWave(seed, w)` picks that template
  *     (`seedsPerCell` hits, default 2). The generator spends budget / median(template); every
@@ -17,7 +20,7 @@
  *  3. The WaveDef is injected into the run machine (world.wave / cursor / phase = combat) and the
  *     Sim steps until the wave clears or `maxWaveSeconds`.
  *  4. Multiplier M = sqrt(timeRatio · damageRatio) against radial_ring for the same build, where
- *     damageRatio = (dmg + ε) / (dmgRadial + ε), ε = 5 grunt contact hits at w.
+ *     damageRatio = (1 + dmg/maxHp) / (1 + dmgRadial/maxHp).
  *
  * Output: sim-out/difficulty.json with every cell, the per-band tables, the median over bands per
  * template × archetype, deltas vs the seeded tables in data/formations.ts, and the §12 rule-2
@@ -25,18 +28,14 @@
  */
 import { Sim } from '../src/sim/index';
 import type { WaveDef, SaveState } from '../src/sim/core/types';
-import type { DoctrineId, ElementId, FormationId, HardpointId, TreeId } from '../src/sim/core/ids';
+import type { FormationId } from '../src/sim/core/ids';
 import { NO_ENTITY, TICK_RATE } from '../src/sim/core/types';
 import { generateWave } from '../src/sim/enemies/generator';
 import { FORMATIONS, FORMATION_BY_ID, ARCHETYPES, medianDifficulty, type Archetype } from '../src/sim/data/formations';
 import { ENEMY_BY_KIND } from '../src/sim/data/enemies';
-import { scrapPerKill, contactDamage } from '../src/sim/economy/curves';
-import { applyCommand } from '../src/sim/run/commands';
-import { buildShop } from '../src/sim/economy/shop';
-import { entryKey } from './agents/base';
-import { instrument } from './runner';
-import { median, round } from './metrics';
-import { BEST_LOOKING } from './agents/hardpoint';
+import { scrapPerKill } from '../src/sim/economy/curves';
+import { Climber, instrument, newSim } from './runner';
+import { median, round, tagSystem } from './metrics';
 
 export interface DiffCell {
   template: FormationId; archetype: Archetype; band: number; wave: number; seeds: number[];
@@ -61,17 +60,11 @@ export interface DiffOptions { bands: number[]; archetypes: Archetype[]; seedsPe
 export const FULL_DIFF: DiffOptions = { bands: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], archetypes: [...ARCHETYPES], seedsPerCell: 2, maxWaveSeconds: 150 };
 export const QUICK_DIFF: DiffOptions = { bands: [0, 2], archetypes: ['ballistics', 'fire', 'ordnance'], seedsPerCell: 1, maxWaveSeconds: 90 };
 
-const ARCH_DOCTRINE: Record<string, DoctrineId> = {
-  ballistics: 'multishot', fire: 'inferno', lightning: 'chain', poison: 'venom', frost: 'shatter', ...BEST_LOOKING,
-};
-const HARDPOINTS = ['ordnance', 'drones', 'blade', 'laser', 'gravitics'];
-const ELEMENTS = ['fire', 'lightning', 'poison', 'frost'];
-
 export function probeWave(band: number): number { return 10 * band + 7; }
 
 const budgetCache = new Map<number, number>();
 /**
- * Build budget at wave w: first-clear Scrap of waves 1..w (×3, from the generator's spawns for
+ * Reference Scrap budget at wave w (reported only; builds come from agent climbs): first-clear Scrap of waves 1..w (×3, from the generator's spawns for
  * seed 1) × BUDGET_MUL. The multiplier accounts for repeat-clear income from failed attempts; it is
  * calibrated to the idle Generalist, whose total spend on first reaching a wave is ≈ 6× the
  * first-clear sum.
@@ -108,52 +101,41 @@ export function templateWaves(template: FormationId, w: number, n: number, searc
   return out;
 }
 
-/** Spend `scrap` cheapest-first within `tree`, taking the archetype Doctrine when the fork opens. */
-function spendIn(sim: Sim, tree: string, scrap: number, doctrine: DoctrineId | undefined): void {
-  const w = sim.world;
-  w.run.scrap = scrap;
-  for (let guard = 0; guard < 2000; guard++) {
-    const shop = buildShop(w);
-    const doc = shop.find((e) => e.kind === 'doctrine' && e.tree === tree && !e.locked && e.cost === 0 && !w.build.doctrines[tree as TreeId]);
-    if (doc) {
-      const want = doctrine && shop.some((e) => e.node === `${tree}.${doctrine}`) ? doctrine : (doc.node.slice(tree.length + 1) as DoctrineId);
-      applyCommand(sim.machine, { type: 'choose_doctrine', tree: tree as TreeId, doctrine: want });
-      continue;
-    }
-    let best = null as null | { node: string; cost: number };
-    for (const e of shop) {
-      if (e.currency !== 'scrap' || e.locked || e.kind === 'doctrine' || e.kind === 'ability') continue;
-      if (entryKey(e) !== tree) continue;
-      if (e.cost <= w.run.scrap && (!best || e.cost < best.cost)) best = e;
-    }
-    if (!best || applyCommand(sim.machine, { type: 'buy', node: best.node })) break;
-  }
-  w.run.scrap = 0;
-}
+/** Agent whose climb defines each archetype's build. */
+export const ARCH_AGENT: Record<Archetype, string> = {
+  ballistics: 'pure_ballistics', fire: 'doctrine:fire.inferno', lightning: 'doctrine:lightning.chain',
+  poison: 'doctrine:poison.venom', frost: 'doctrine:frost.shatter',
+  ordnance: 'hp_ordnance', drones: 'hp_drones', blade: 'hp_blade', laser: 'hp_laser', gravitics: 'hp_gravitics',
+};
+export const ARCH_SEED = 11;
 
-/** Archetype build at probe wave w, returned as a save (restore per template). */
-export function archetypeSave(arch: Archetype, w: number): { save: SaveState; note: string } {
-  const sim = new Sim(null, 0xd1ff);
-  const W = sim.world;
-  let note = '';
-  if (HARDPOINTS.includes(arch)) { W.run.hardpointSlotsOpen = 1; W.build.hardpoints = [arch as HardpointId]; }
-  if (ELEMENTS.includes(arch)) { W.run.attunementSlotsOpen = 1; W.build.attunements = [arch as ElementId]; }
-  W.rebuildStats();
-  const budget = scrapBudget(w);
-  if (arch === 'ballistics') spendIn(sim, 'ballistics', budget, 'multishot');
-  else {
-    spendIn(sim, arch, budget * 0.6, ARCH_DOCTRINE[arch]);
-    spendIn(sim, 'ballistics', budget * 0.4, 'multishot');
-  }
-  const spent = W.run.spentByTree[arch] ?? 0;
-  if (arch !== 'ballistics' && spent < budget * 0.05) note = `only ${Math.round(spent)} of ${Math.round(budget * 0.6)} Scrap could be spent in ${arch}`;
-  return { save: sim.save(), note };
+export interface ArchetypeSnapshots { archetype: Archetype; agent: string; saves: Record<string, SaveState | null>; reached: number; wallSeconds: number }
+
+/** Climb the archetype's agent and snapshot the build the first time it reaches each band's probe wave. */
+export function archetypeClimb(archetype: Archetype, bands: number[], maxSimSeconds = 4 * 3600): ArchetypeSnapshots {
+  const t0 = performance.now();
+  const agent = ARCH_AGENT[archetype];
+  const cfg = { seed: ARCH_SEED, agent: agent as never, policy: 'idle' as const, maxSimSeconds, hashes: false, name: `arch-${archetype}` };
+  const sim = newSim(cfg);
+  const c = new Climber(sim, cfg);
+  const want = [...bands].sort((x, y) => x - y).map((b) => ({ b, w: probeWave(b) }));
+  const saves: Record<string, SaveState | null> = {};
+  for (const x of want) saves[String(x.b)] = null;
+  let k = 0;
+  c.onTick = () => {
+    const run = sim.world.run;
+    while (k < want.length && run.phase === 'between' && run.wave >= want[k].w) { saves[String(want[k].b)] = sim.save(); k++; }
+    return k >= want.length;
+  };
+  const r = c.run();
+  return { archetype, agent, saves, reached: r.deepestCleared, wallSeconds: (performance.now() - t0) / 1000 };
 }
 
 /** Inject `def` as the live wave and run it. */
-export function runInjectedWave(save: SaveState, def: WaveDef, maxSeconds: number): { seconds: number; towerDamage: number; cleared: boolean } {
+export function runInjectedWave(save: SaveState, def: WaveDef, maxSeconds: number, archetype?: string): { seconds: number; towerDamage: number; cleared: boolean; share: number; maxHp: number } {
   const sim = new Sim(structuredClone(save));
   const w = sim.world, m = sim.machine;
+  const maxHp = w.tower.maxHp;
   w.stats.override('bastion.max_hp', 1e9);
   w.stats.override('bastion.regeneration', 0);
   w.rebuildStats();
@@ -167,39 +149,48 @@ export function runInjectedWave(save: SaveState, def: WaveDef, maxSeconds: numbe
   m.setPhase('combat');
   for (const s of w.systems) s.onWaveStart?.(w);
   acc.tower = 0;
+  acc.dmg.clear();
   const max = Math.round(maxSeconds * TICK_RATE);
   let t = 0;
   for (; t < max && w.run.phase === 'combat'; t++) sim.step();
-  return { seconds: t / TICK_RATE, towerDamage: acc.tower, cleared: w.run.phase !== 'combat' };
+  let mine = 0, all = 0;
+  for (const [tag, v] of acc.dmg) { all += v; if (archetype && tagSystem(tag) === archetype) mine += v; }
+  return { seconds: t / TICK_RATE, towerDamage: acc.tower, cleared: w.run.phase !== 'combat', share: all > 0 ? mine / all : 0, maxHp };
 }
 
-export interface DiffJob { archetype: Archetype; band: number; opts: DiffOptions }
-export interface DiffJobResult { cells: DiffCell[]; notLive: string[]; note: string }
+export interface DiffJob { archetype: Archetype; band: number; opts: DiffOptions; save: SaveState | null; agent: string }
+export interface DiffJobResult { cells: DiffCell[]; notLive: string[]; note: string; share: number }
 
 /** All templates for one (archetype, band): the unit of parallel work. */
 export function runDiffJob(job: DiffJob): DiffJobResult {
-  const { archetype, band, opts } = job;
+  const { archetype, band, opts, save } = job;
   const w = probeWave(band);
-  const { save, note } = archetypeSave(archetype, w);
-  const eps = contactDamage(ENEMY_BY_KIND.grunt.contactDamage, w) * 5;
+  if (!save) return { cells: [], notLive: [], note: `${job.agent} never reached wave ${w}`, share: NaN };
   const templates = (opts.templates ?? FORMATIONS.filter((f) => !f.spatial).map((f) => f.id)).filter((t) => FORMATION_BY_ID[t].minWave <= w);
   const raw: { t: FormationId; seconds: number; dmg: number; cleared: boolean; seeds: number[] }[] = [];
   const notLive: string[] = [];
+  let shareSum = 0, shareN = 0, maxHp = 1;
   for (const t of templates) {
     const waves = templateWaves(t, w, opts.seedsPerCell);
     if (waves.length === 0) { notLive.push(t); continue; }
     let s = 0, d = 0, c = true;
-    for (const { def } of waves) { const r = runInjectedWave(save, def, opts.maxWaveSeconds); s += r.seconds; d += r.towerDamage; c = c && r.cleared; }
+    for (const { def } of waves) {
+      const r = runInjectedWave(save, def, opts.maxWaveSeconds, archetype);
+      s += r.seconds; d += r.towerDamage; c = c && r.cleared; shareSum += r.share; shareN++; maxHp = r.maxHp;
+    }
     raw.push({ t, seconds: s / waves.length, dmg: d / waves.length, cleared: c, seeds: waves.map((x) => x.seed) });
   }
   const base = raw.find((r) => r.t === 'radial_ring');
   const cells: DiffCell[] = raw.map((r) => {
     const timeRatio = base ? r.seconds / Math.max(1e-6, base.seconds) : NaN;
-    const dmgRatio = base ? (r.dmg + eps) / (base.dmg + eps) : NaN;
+    const dmgRatio = base ? (1 + r.dmg / maxHp) / (1 + base.dmg / maxHp) : NaN;
     return { template: r.t, archetype, band, wave: w, seeds: r.seeds, clearSeconds: round(r.seconds, 2), towerDamage: round(r.dmg, 1), cleared: r.cleared,
       timeRatio: round(timeRatio, 3), dmgRatio: round(dmgRatio, 3), mult: round(Math.sqrt(timeRatio * dmgRatio), 3) };
   });
-  return { cells, notLive, note };
+  const share = shareN ? shareSum / shareN : NaN;
+  const uncleared = cells.filter((c) => !c.cleared).length;
+  const note = `${job.agent} build (max HP ${Math.round(maxHp)}): ${archetype} deals ${round(share * 100, 0)}% of damage${uncleared ? `; ${uncleared} template(s) hit the ${opts.maxWaveSeconds} s cap` : ''}`;
+  return { cells, notLive, note, share };
 }
 
 /** Aggregate job results into the DifficultyResult tables. */
@@ -240,16 +231,21 @@ export function aggregateDifficulty(opts: DiffOptions, jobs: { job: DiffJob; res
   return { config: opts, cells, bands, median: medianT, deltas, notLive, fairness, archetypeNotes, wallSeconds };
 }
 
-export function difficultyJobs(opts: DiffOptions): DiffJob[] {
+/** Phase 2 jobs: one per (archetype, band), carrying the archetype's snapshot for that band. */
+export function difficultyJobs(opts: DiffOptions, snaps: ArchetypeSnapshots[]): DiffJob[] {
   const out: DiffJob[] = [];
-  for (const band of opts.bands) for (const archetype of opts.archetypes) out.push({ archetype, band, opts });
+  for (const band of opts.bands) for (const archetype of opts.archetypes) {
+    const sn = snaps.find((x) => x.archetype === archetype);
+    out.push({ archetype, band, opts, save: sn?.saves[String(band)] ?? null, agent: sn?.agent ?? ARCH_AGENT[archetype] });
+  }
   return out;
 }
 
-/** Sequential convenience (tests / --quick). */
+/** Sequential convenience. */
 export function measureDifficulty(opts: DiffOptions): DifficultyResult {
   const t0 = performance.now();
-  const jobs = difficultyJobs(opts).map((job) => ({ job, res: runDiffJob(job) }));
+  const snaps = opts.archetypes.map((a) => archetypeClimb(a, opts.bands));
+  const jobs = difficultyJobs(opts, snaps).map((job) => ({ job, res: runDiffJob(job) }));
   return aggregateDifficulty(opts, jobs, (performance.now() - t0) / 1000);
 }
 

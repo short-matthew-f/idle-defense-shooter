@@ -12,7 +12,7 @@ export type PolicyId = 'idle' | 'directive' | 'active';
 export type AgentId =
   | 'greedy' | 'survival' | 'elemental' | 'generalist' | 'random'
   | 'hp_ordnance' | 'hp_drones' | 'hp_blade' | 'hp_laser' | 'hp_gravitics'
-  | 'optimizer' | 'optimizer_lite'
+  | 'optimizer' | 'optimizer_lite' | 'pure_ballistics'
   /** Doctrine probe: `doctrine:<tree>.<doctrine>` (see agents/index.ts). */
   | `doctrine:${string}`;
 
@@ -35,8 +35,8 @@ export interface RunConfig {
   wallMinutes?: number;
   /** Stop when the Prestige recommendation fires (Forecast, or the computed Echo-rate rule). */
   stopAtRecommendation?: boolean;
-  /** Force this Anomaly at the first draft (Anomaly cap test). */
-  forceAnomaly?: AnomalyId;
+  /** Force this Anomaly at the first draft, or 'skip' it (Anomaly cap test). */
+  forceAnomaly?: AnomalyId | 'skip';
   /** Doctrine overrides (doctrine health probes). */
   doctrineOverrides?: Partial<Record<TreeId, DoctrineId>>;
   /** Run mode (Patrol for the offline test). */

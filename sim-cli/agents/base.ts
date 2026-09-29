@@ -175,12 +175,26 @@ export abstract class Agent {
   }
 
   /** Draft: the offer with the most matching `needs`; ties keep offer order; avoided ones last. */
+  /** Never replace this socketed Anomaly (the Anomaly cap test's forced pick). */
+  keepAnomaly: AnomalyId | null = null;
+
   handleDraft(ctx: AgentCtx): void {
     const w = ctx.w, offers = w.run.pendingDraft as AnomalyId[];
     const pick = this.pickAnomaly(ctx, offers);
-    const replace = w.build.anomalies.length >= w.build.anomalySockets ? 0 : undefined;
+    const replace = w.build.anomalies.length >= w.build.anomalySockets ? this.replaceIndex(ctx) : undefined;
     const err = ctx.apply({ type: 'pick_anomaly', anomaly: pick, ...(replace !== undefined ? { replace } : {}) });
     if (err) ctx.apply({ type: 'pick_anomaly', anomaly: null });
+  }
+  /** Socket to overwrite when full: the worst-matching Anomaly (latest on ties), never `keepAnomaly`. */
+  replaceIndex(ctx: AgentCtx): number {
+    const a = ctx.w.build.anomalies;
+    let idx = -1, worst = Infinity;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] === this.keepAnomaly) continue;
+      const sc = anomalyMatchScore(ctx.w, a[i]);
+      if (sc <= worst) { worst = sc; idx = i; }
+    }
+    return Math.max(0, idx);
   }
   pickAnomaly(ctx: AgentCtx, offers: AnomalyId[]): AnomalyId | null {
     let best: AnomalyId | null = null, bestScore = -Infinity;

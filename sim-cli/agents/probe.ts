@@ -13,7 +13,7 @@ import { BalancedAgent } from './optimizer';
 const HARDPOINTS = ['ordnance', 'drones', 'blade', 'laser', 'gravitics'];
 const ELEMENTS = ['fire', 'lightning', 'poison', 'frost'];
 
-class TreeFocusAgent extends BalancedAgent {
+export class TreeFocusAgent extends BalancedAgent {
   override readonly id: string;
   constructor(readonly tree: TreeId, doctrine: DoctrineId) {
     super();
@@ -35,4 +35,11 @@ export function doctrineProbe(tree: TreeId, doctrine: DoctrineId): Agent {
     return a;
   }
   return new TreeFocusAgent(tree, doctrine);
+}
+
+/** Pure primary build (Ballistics archetype for the Difficulty Multiplier): never mounts or attunes. */
+export class PurePrimaryAgent extends TreeFocusAgent {
+  constructor() { super('ballistics', 'multishot'); (this as { id: string }).id = 'pure_ballistics'; }
+  override fillSlots(): void { /* slots stay empty */ }
+  protected override slotsPending(): boolean { return false; }
 }
