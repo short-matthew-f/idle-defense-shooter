@@ -3,8 +3,6 @@ import type { UiState } from './types';
 import { EnemyFlag, Ev, TICK_RATE } from './types';
 import type { WorldImpl } from './world-impl';
 import type { RunMachine } from '../run/machine';
-import { PHASE_TICKS } from '../run/machine';
-import { draftTicksLeft } from '../run/draft';
 import { buildShop } from '../economy/shop';
 import { abilityUi } from '../systems/abilities';
 import { bossDef, bossDefByIndex } from './content';
@@ -39,7 +37,7 @@ export function buildUiState(w: WorldImpl, m: RunMachine): UiState {
       playSeconds: run.playSeconds, pendingDraft: run.pendingDraft ? [...run.pendingDraft] : null,
       hardpointSlotsOpen: run.hardpointSlotsOpen, attunementSlotsOpen: run.attunementSlotsOpen, longestChain: run.longestChain,
       patrolScrapPerSecond: run.patrolScrapPerSecond, ...(run.minThreatDial !== undefined ? { minThreatDial: run.minThreatDial } : {}),
-      attemptDamageTaken: { ...run.attemptDamageTaken }, draftTicksLeft: draftTicksLeft(run, PHASE_TICKS.wave_clear),
+      attemptDamageTaken: { ...run.attemptDamageTaken },
     },
     activeTrial: w.meta.activeTrial ?? null,
     nextHardpointWave: slots.hardpoint,

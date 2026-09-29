@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ShopEntry } from '../../src/sim/core/types';
 import { damageSourceName, deathHeadline, killerName, topDamageSource, entryValue, etaSeconds, nextPurchase, openForks, openSlots, suggestPurchases, type AdviceState } from '../../src/ui/advice';
-import { draftSecondsLeft } from '../../src/ui/draft';
 import { tellPrompt } from '../../src/ui/hud';
 
 const entry = (node: string, cost: number, extra: Partial<ShopEntry> = {}): ShopEntry => ({
@@ -80,13 +79,6 @@ describe('purchase advice', () => {
     expect(damageSourceName('grunt', null)).toBe('Grunt');
   });
 
-  it('draft auto-pick countdown', () => {
-    expect(draftSecondsLeft(null)).toBeNull();
-    expect(draftSecondsLeft(1800)).toBe(30);
-    expect(draftSecondsLeft(1200)).toBe(20);
-    expect(draftSecondsLeft(1)).toBe(1);
-    expect(draftSecondsLeft(0)).toBe(0);
-  });
 
   it('boss tell prompt: equip, wait or cast the Counter', () => {
     const base = { build: { abilities: [null, null] }, abilities: [], tower: { ce: 0 } } as unknown as Parameters<typeof tellPrompt>[1];

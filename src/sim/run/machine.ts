@@ -7,8 +7,8 @@
  *  wave_clear 1.5 s: first-clear bookkeeping (kills during a not-yet-cleared wave already paid ×3),
  *             checkpoint on boss waves (Ev.Checkpoint), slot opening, Anomaly draft on the first
  *             clear of waves 10, 20 … 100
- *  draft      waits for pick_anomaly / reroll_anomaly (auto-picks the first offer after 30 s so an
- *             unattended tower never stalls; run/draft.ts draftTicksLeft is the countdown)
+ *  draft      (legacy phase, no longer entered) — drafts never block: the offer waits in run.pendingDraft
+ *             while the run continues, and later draft waves queue in run.draftQueue
  *  dead       1.5 s, then a new attempt at checkpoint+1 with full HP and empty CE (attempts++)
  * Push advances wave by wave; Patrol loops checkpoint+1 … checkpoint+4 and never fights a boss,
  * measuring run.patrolScrapPerSecond for offline returns. Until Patrol has measured it, every non-boss
@@ -29,13 +29,13 @@ import { enemyDef } from '../core/content';
 import { enemyHp } from '../economy/curves';
 import { betweenWaveHeal } from '../systems/tower';
 import { updateSlots } from './slots';
-import { DRAFT_AUTO_TICKS, rollDraft } from './draft';
+import { rollDraft } from './draft';
 import { ASCENSION_WAVE, deepWavesUnlocked } from '../economy/ascension';
 import { trialWave } from './trials';                 // WP8
 import { trialHas } from '../economy/prestige';       // WP8
 import { ARENA_RADIUS } from '../core/types';
 
-export const PHASE_TICKS = { between: 2 * TICK_RATE, wave_clear: 1.5 * TICK_RATE, dead: 1.5 * TICK_RATE, draftAuto: DRAFT_AUTO_TICKS } as const;
+export const PHASE_TICKS = { between: 2 * TICK_RATE, wave_clear: 1.5 * TICK_RATE, dead: 1.5 * TICK_RATE } as const;
 /** Non-boss Push clears the offline Patrol estimate averages over (one checkpoint cycle: checkpoint+1..+4). */
 export const PATROL_ESTIMATE_CLEARS = 4;
 const CLUMP_MARGIN = 20;
@@ -129,15 +129,9 @@ export class RunMachine {
     switch (run.phase) {
       case 'between': if (run.phaseTicks >= PHASE_TICKS.between && !this.heldAtGate()) this.startWave(); break;
       case 'wave_clear':
-        if (run.phaseTicks >= PHASE_TICKS.wave_clear) {
-          if (run.pendingDraft && run.pendingDraft.length > 0) this.setPhase('draft');
-          else this.advanceWave();
-        }
+        if (run.phaseTicks >= PHASE_TICKS.wave_clear) this.advanceWave();
         break;
-      case 'draft':
-        if (!run.pendingDraft || run.pendingDraft.length === 0) this.advanceWave();
-        else if (run.phaseTicks >= PHASE_TICKS.draftAuto) this.pickAnomaly(run.pendingDraft[0], undefined);
-        break;
+      case 'draft': this.advanceWave(); break;   // legacy saves only
       case 'dead': if (run.phaseTicks >= PHASE_TICKS.dead) this.startAttempt(true); break;
       case 'combat': break;
     }
@@ -250,18 +244,34 @@ export class RunMachine {
     if (first && wv % 10 === 0 && wv <= 100) {
       const k = wv / 10;
       if (!run.anomaliesOfferedAt[k]) {
-        this.draftRerolls = 0;
-        const offers = rollDraft(w, wv, 0);
-        if (offers.length > 0) { run.anomaliesOfferedAt[k] = 1; run.pendingDraft = offers; }
+        run.anomaliesOfferedAt[k] = 1;
+        if (run.pendingDraft && run.pendingDraft.length > 0) run.draftQueue.push(wv);   // decide the earlier one first
+        else this.openDraft(wv);
       }
     }
     for (const s of w.systems) s.onWaveEnd?.(w);
     this.setPhase('wave_clear');
   }
 
+  /** Offer the draft for `wave` (three rolled cards); the player picks, skips or rerolls whenever they like. */
+  private openDraft(wave: number): void {
+    const run = this.w.run;
+    this.draftRerolls = 0;
+    const offers = rollDraft(this.w, wave, 0);
+    if (offers.length > 0) { run.pendingDraft = offers; run.draftWave = wave; }
+    else this.nextDraft();
+  }
+
+  /** After a draft resolves, bring up the next queued one (if any). */
+  private nextDraft(): void {
+    const run = this.w.run;
+    run.pendingDraft = null;
+    const next = run.draftQueue.shift();
+    if (next !== undefined) this.openDraft(next);
+  }
+
   advanceWave(): void {
     const w = this.w, run = w.run;
-    run.pendingDraft = null;
     w.wave = null;
     if (run.mode === 'patrol') {
       const next = run.wave + 1, base = this.patrolBase();
@@ -280,7 +290,6 @@ export class RunMachine {
     if (mode === 'patrol' && (run.wave % 5 === 0 || run.wave > base + 4) && run.phase !== 'dead') {
       w.clearCombat(); w.wave = null; this.cursor = 0; this.bossIndex = NO_ENTITY;
       run.wave = base + 1;
-      run.pendingDraft = null;
       this.setPhase('between');
     }
   }
@@ -299,8 +308,7 @@ export class RunMachine {
       w.emit(Ev.AnomalyPicked, id, a.length, 0, 0, 0, -1);
       w.rebuildStats();
     }
-    run.pendingDraft = null;
-    if (run.phase === 'draft') this.advanceWave();
+    this.nextDraft();
     return null;
   }
 
@@ -310,7 +318,7 @@ export class RunMachine {
     if (run.cores < 1) return 'Not enough Cores';
     run.cores -= 1;
     this.draftRerolls++;
-    const offers = rollDraft(w, run.wave, this.draftRerolls);
+    const offers = rollDraft(w, run.draftWave, this.draftRerolls);
     if (offers.length > 0) run.pendingDraft = offers;
     return null;
   }

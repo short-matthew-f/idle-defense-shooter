@@ -49,7 +49,8 @@ export function toRunSave(run: RunState, build: BuildState, prngState: [number, 
     patrolScrapPerSecond: run.patrolScrapPerSecond, longestChain: run.longestChain,
     build: clone(build), prngState: [...prngState] as [number, number, number, number], spentByTree: { ...run.spentByTree },
   } as RunSave, runExtras(run),   // WP8: progression extras
-  run.pendingDraft && run.pendingDraft.length ? { pendingDraft: [...run.pendingDraft] } : {});
+  run.pendingDraft && run.pendingDraft.length ? { pendingDraft: [...run.pendingDraft], draftWave: run.draftWave } : {},
+  run.draftQueue.length ? { draftQueue: [...run.draftQueue] } : {});
 }
 
 export function toSave(sim: Serializable): SaveState {
@@ -71,7 +72,8 @@ export function fromRunSave(s: RunSave): { run: RunState; build: BuildState; prn
   run.patrolScrapPerSecond = s.patrolScrapPerSecond; run.longestChain = s.longestChain;
   run.spentByTree = { ...(s.spentByTree ?? {}) };
   Object.assign(run, runExtras(s));   // WP8: progression extras
-  if (Array.isArray(s.pendingDraft) && s.pendingDraft.length) run.pendingDraft = [...s.pendingDraft];
+  if (Array.isArray(s.pendingDraft) && s.pendingDraft.length) { run.pendingDraft = [...s.pendingDraft]; run.draftWave = typeof s.draftWave === 'number' ? s.draftWave : run.checkpoint; }
+  if (Array.isArray(s.draftQueue)) run.draftQueue = s.draftQueue.filter((v): v is number => typeof v === 'number' && v > 0 && v % 10 === 0);
   return { run, build: clone(s.build), prngState: [...s.prngState] as [number, number, number, number] };
 }
 

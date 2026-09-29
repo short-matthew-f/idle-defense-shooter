@@ -254,6 +254,8 @@ export interface RunState {
   playSeconds: number;          // accumulated simulated seconds (ticks / 60)
   echoRateHistory: { seconds: number; echoes: number; /** WP8: deepest wave cleared at the sample */ wave?: number }[];
   pendingDraft: AnomalyId[] | null;
+  /** Wave whose draft is pending (rerolls stay reproducible), and further draft waves waiting behind it. */
+  draftWave: number; draftQueue: number[];
   anomaliesOfferedAt: Uint8Array; // per wave/10
   hardpointSlotsOpen: number;
   attunementSlotsOpen: number;
@@ -458,8 +460,6 @@ export interface UiState {
   tick: number;
   run: Pick<RunState, 'wave' | 'checkpoint' | 'deepestCleared' | 'mode' | 'phase' | 'scrap' | 'cores' | 'attempts' | 'threatDial' | 'speedMultiplier' | 'playSeconds' | 'pendingDraft' | 'hardpointSlotsOpen' | 'attunementSlotsOpen' | 'longestChain'
     /* integration additions */ | 'patrolScrapPerSecond' | 'minThreatDial' /* UX-review additions */ | 'attemptDamageTaken'> & {
-    /** Ticks until the Anomaly draft auto-picks its first offer (run/draft.ts draftTicksLeft), or null when no countdown runs. */
-    draftTicksLeft: number | null;
   };
   /** Integration additions: the Trial being played (meta.activeTrial), or null. */
   activeTrial: TrialId | null;
@@ -531,6 +531,7 @@ export interface RunSave {
   patrolMeasured?: boolean;
   /** Code-health addition: an Anomaly draft offered but not yet picked (restored on load; it was lost before). */
   pendingDraft?: AnomalyId[];
+  draftWave?: number; draftQueue?: number[];
 }
 
 // ---------------------------------------------------------------------------

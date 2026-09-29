@@ -6,7 +6,6 @@ import { describe, it, expect } from 'vitest';
 import { Sim } from '../../src/sim/index';
 import { Ev, INSTANCE_FLOATS, RETICLE_MARK, Shape } from '../../src/sim/core/types';
 import { DEFAULT_ABILITIES } from '../../src/sim/run/state';
-import { DRAFT_AUTO_TICKS } from '../../src/sim/run/draft';
 import { PHASE_TICKS } from '../../src/sim/run/machine';
 import { strongSim, runUntil, quietSim } from './helpers';
 
@@ -43,22 +42,45 @@ describe('S1: designation reticle in the snapshot', () => {
   });
 });
 
-describe('S2: UiState.run.draftTicksLeft', () => {
-  it('counts down the sim auto-pick deadline and is null without a draft', () => {
-    const sim = quietSim(12);
+describe('S2: drafts never auto-pick; the run continues and later drafts queue', () => {
+  it('keeps the offer pending across waves, queues the next draft wave, and rerolls the pending wave', () => {
+    const sim = strongSim(21);
     const run = sim.world.run;
-    expect(sim.uiState().run.draftTicksLeft).toBeNull();
-    run.pendingDraft = ['loaded_dice', 'pinball', 'tithe'];
-    run.phase = 'wave_clear'; run.phaseTicks = 0;
-    expect(sim.uiState().run.draftTicksLeft).toBe(DRAFT_AUTO_TICKS + PHASE_TICKS.wave_clear);
-    runUntil(sim, () => run.phase === 'draft', 200);
-    const t0 = sim.uiState().run.draftTicksLeft!;
-    expect(t0).toBeLessThanOrEqual(DRAFT_AUTO_TICKS);
-    sim.run(600);
-    expect(sim.uiState().run.draftTicksLeft).toBe(t0 - 600);
-    runUntil(sim, () => run.pendingDraft === null, DRAFT_AUTO_TICKS + 5);
-    expect(sim.world.build.anomalies).toContain('loaded_dice');       // the first offer, on time
-    expect(sim.uiState().run.draftTicksLeft).toBeNull();
+    runUntil(sim, () => run.deepestCleared >= 10 && run.phase === 'between', 60 * 60 * 20);
+    expect(run.pendingDraft?.length).toBe(3);
+    expect(run.draftWave).toBe(10);
+    const offersAt10 = [...run.pendingDraft!];
+    // The run does not wait: waves keep clearing with the draft still pending.
+    runUntil(sim, () => run.deepestCleared >= 20 && run.phase === 'between', 60 * 60 * 30);
+    expect(run.pendingDraft).toEqual(offersAt10);
+    expect(run.draftQueue).toEqual([20]);
+    // Resolving the wave-10 draft brings up the wave-20 offer.
+    sim.command({ type: 'pick_anomaly', anomaly: null });
+    sim.step();
+    expect(run.draftWave).toBe(20);
+    expect(run.pendingDraft?.length).toBe(3);
+    expect(run.draftQueue).toEqual([]);
+    // A reroll re-rolls the pending wave's offer, not the current wave's.
+    run.cores += 1;
+    const before = [...run.pendingDraft!];
+    sim.command({ type: 'reroll_anomaly' });
+    sim.step();
+    expect(run.draftWave).toBe(20);
+    expect(run.pendingDraft).not.toEqual(before);
+    sim.command({ type: 'pick_anomaly', anomaly: run.pendingDraft![0] });
+    sim.step();
+    expect(run.pendingDraft).toBeNull();
+    expect(sim.world.build.anomalies.length).toBe(1);
+  });
+  it('a pending draft and its queue survive save and load', () => {
+    const sim = strongSim(22);
+    const run = sim.world.run;
+    runUntil(sim, () => run.deepestCleared >= 20 && run.phase === 'between', 60 * 60 * 40);
+    expect(run.pendingDraft?.length).toBe(3);
+    const loaded = new Sim(sim.save());
+    expect(loaded.world.run.pendingDraft).toEqual(run.pendingDraft);
+    expect(loaded.world.run.draftWave).toBe(run.draftWave);
+    expect(loaded.world.run.draftQueue).toEqual(run.draftQueue);
   });
 });
 

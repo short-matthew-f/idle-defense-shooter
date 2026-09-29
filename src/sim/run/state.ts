@@ -35,7 +35,7 @@ export function newRun(prestigeSeed: number): RunState {
     firstClears: new Uint8Array(WAVE_TABLE_SIZE), mode: 'push', phase: 'between', phaseTicks: 0,
     tick: 0, attemptTick: 0, waveTick: 0, scrap: 0, cores: 0, coresDroppedByBoss: new Uint8Array(WAVE_TABLE_SIZE),
     threatDial: 0, attempts: 0, attemptsPerCheckpoint: [], prestigeStartedAt: 0, playSeconds: 0, echoRateHistory: [],
-    pendingDraft: null, anomaliesOfferedAt: new Uint8Array(32), hardpointSlotsOpen: 0, attunementSlotsOpen: 0,
+    pendingDraft: null, draftWave: 0, draftQueue: [], anomaliesOfferedAt: new Uint8Array(32), hardpointSlotsOpen: 0, attunementSlotsOpen: 0,
     speedMultiplier: 1, patrolScrapPerSecond: 0, longestChain: 0, spentByTree: {}, attemptDamageTaken: {},
   };
 }
