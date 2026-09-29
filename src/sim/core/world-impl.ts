@@ -153,8 +153,8 @@ export class WorldImpl implements World {
   // Queries
   // -------------------------------------------------------------------------
   queryRadius(x: number, y: number, r: number, out: Int32Array): number { return this.spatial.queryRadius(x, y, r, out); }
-  nearestEnemy(x: number, y: number, maxR: number, profile: TargetingProfile, _system: WeaponSystemId): number {
-    return selectTarget(this.enemies, this.spatial, this.tower, x, y, maxR, profile);
+  nearestEnemy(x: number, y: number, maxR: number, profile: TargetingProfile, _system: WeaponSystemId, prev: number = NO_ENTITY): number {
+    return selectTarget(this.enemies, this.spatial, this.tower, x, y, maxR, profile, prev);
   }
   nearestExcluding(x: number, y: number, maxR: number, exclude: Int32Array, excludeCount: number): number {
     return this.spatial.nearest(x, y, maxR, exclude, excludeCount);

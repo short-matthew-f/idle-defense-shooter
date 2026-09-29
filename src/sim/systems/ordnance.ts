@@ -147,8 +147,14 @@ export class OrdnanceSystem implements System {
       SCRATCH.pop();
       if (best >= 0) return best;
     }
-    return w.nearestEnemy(0, 0, this.range, this.profile, 'ordnance');
+    const e = w.enemies;
+    const prev = this.mainTgt >= 0 && this.mainTgt < e.count && e.gen[this.mainTgt] === this.mainGen ? this.mainTgt : NO_ENTITY;
+    const t = w.nearestEnemy(0, 0, this.range, this.profile, 'ordnance', prev);
+    this.mainTgt = t; this.mainGen = t >= 0 ? e.gen[t] : 0;
+    return t;
   }
+  /** The rack's current main target (index + generation), kept across ticks unless something materially better appears. */
+  private mainTgt = NO_ENTITY; private mainGen = 0;
 
   /** Fire one salvo; returns false when there is nothing to shoot at. */
   private salvo(w: World): boolean {
@@ -376,6 +382,7 @@ export class OrdnanceSystem implements System {
   private koOwned = new Uint8Array(MAX_ENEMIES);
 
   onCompact(w: World, remap: Int32Array, oldCount: number): void {
+    if (this.mainTgt >= 0) this.mainTgt = this.mainTgt < oldCount ? remap[this.mainTgt] : NO_ENTITY;
     remapArray(this.koExt, remap, oldCount, w.enemies.count, 0);
     remapArray(this.koOwned, remap, oldCount, w.enemies.count, 0);
   }

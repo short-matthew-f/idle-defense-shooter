@@ -65,25 +65,38 @@ export function clear(el: Element): void { while (el.firstChild) el.removeChild(
  * Keyboard activation (click with detail 0) fires once.
  */
 export function holdRepeat(btn: HTMLButtonElement, fire: () => void): void {
-  let timer = 0, delay = 0, pressed = false;
-  const stop = (): void => { pressed = false; if (timer) { clearTimeout(timer); timer = 0; } };
+  let timer = 0, delay = 0, pressed = false, fired = 0;
+  const stop = (): void => {
+    pressed = false;
+    if (timer) { clearTimeout(timer); timer = 0; }
+    window.removeEventListener('pointerup', stop, true);
+    window.removeEventListener('pointercancel', stop, true);
+  };
   const tick = (): void => {
-    if (!pressed || btn.disabled) { stop(); return; }
-    fire();
+    // The button may be re-rendered or removed while held (e.g. a quick-buy chip that became unaffordable):
+    // without a pointerup it would repeat forever, so stop when it is disconnected, disabled, or after a bound.
+    if (!pressed || btn.disabled || !btn.isConnected || fired >= MAX_HOLD_FIRES) { stop(); return; }
+    fire(); fired++;
     delay = Math.max(40, delay * 0.82);
     timer = window.setTimeout(tick, delay);
   };
   btn.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || btn.disabled) return;
-    pressed = true;
+    stop();
+    pressed = true; fired = 1;
     fire();
     delay = 160;
     timer = window.setTimeout(tick, 380);
+    // Listen on the window (capture) so releasing over another element, or after the button was replaced, still stops it.
+    window.addEventListener('pointerup', stop, true);
+    window.addEventListener('pointercancel', stop, true);
   });
   for (const ev of ['pointerup', 'pointerleave', 'pointercancel', 'blur'] as const) btn.addEventListener(ev, stop);
   btn.addEventListener('click', (e) => { if (e.detail === 0) fire(); });
   btn.addEventListener('contextmenu', (e) => e.preventDefault());
 }
+/** Upper bound on repeats from one press (~6 s at the fastest cadence). */
+const MAX_HOLD_FIRES = 150;
 
 /** Long-press detector (ms); returns true from `consumed()` right after a long press so the click can be ignored. */
 export function longPress(el: HTMLElement, ms: number, onLong: () => void): { consumed(): boolean } {

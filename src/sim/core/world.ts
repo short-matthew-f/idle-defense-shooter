@@ -64,7 +64,8 @@ export interface World {
   wave: WaveDef | null;
   /** Spatial hash over live enemies, rebuilt each tick before systems run. */
   queryRadius(x: number, y: number, r: number, out: Int32Array): number;   // returns count written
-  nearestEnemy(x: number, y: number, maxR: number, profile: TargetingProfile, system: WeaponSystemId): number;
+  /** `prev`: the caller's current target index (already remapped via onCompact); kept unless a materially better target exists. */
+  nearestEnemy(x: number, y: number, maxR: number, profile: TargetingProfile, system: WeaponSystemId, prev?: number): number;
   /** Apply damage through armor/shields; emits Hit (and Kill) events; fires hooks. Returns HitInfo. */
   damage(enemy: number, amount: number, opts: { source: HitInfo['source']; srcTag: string; crit?: boolean; element?: ElementId | null; projectile?: number; cause: number; x?: number; y?: number; ignoreArmor?: boolean; trueDamage?: boolean;
     /** WP1 addition: no Hit event (DoT pulses); hooks still run with eventId = cause; a kill still emits Kill. */ silent?: boolean }): HitInfo;

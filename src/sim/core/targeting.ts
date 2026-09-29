@@ -26,10 +26,20 @@ export function designatedInRange(p: EnemyPool, tower: TowerState, x: number, y:
   return NO_ENTITY;
 }
 
-export function selectTarget(p: EnemyPool, hash: SpatialHash, tower: TowerState, x: number, y: number, maxR: number, profile: TargetingProfile): number {
+/**
+ * Pick a target, with stickiness: when `prev` (the caller's current target) is still live, targetable and in
+ * range, it is kept unless the new best is materially better for the profile (20% closer, 20% lower/higher HP,
+ * a strictly better priority class). Equidistant enemies therefore never cause the turret to flip-flop.
+ */
+export function selectTarget(p: EnemyPool, hash: SpatialHash, tower: TowerState, x: number, y: number, maxR: number, profile: TargetingProfile, prev: number = NO_ENTITY): number {
   const des = designatedInRange(p, tower, x, y, maxR);
   if (des !== NO_ENTITY) return des;
-  if (profile === 'nearest' || profile === 'designated') return hash.nearest(x, y, maxR);
+  const prevOk = prev >= 0 && prev < p.count && targetable(p, prev) && inRange(p, prev, x, y, maxR);
+  if (profile === 'nearest' || profile === 'designated') {
+    const best = hash.nearest(x, y, maxR);
+    if (!prevOk || best === NO_ENTITY || best === prev) return best;
+    return dist2(p, best, x, y) < dist2(p, prev, x, y) * STICKY_DIST2 ? best : prev;
+  }
   const n = hash.queryRadius(x, y, maxR, SCRATCH);
   let best = NO_ENTITY, bestK1 = Infinity, bestK2 = Infinity;
   for (let k = 0; k < n; k++) {
@@ -49,5 +59,18 @@ export function selectTarget(p: EnemyPool, hash: SpatialHash, tower: TowerState,
     }
     if (k1 < bestK1 || (k1 === bestK1 && (k2 < bestK2 || (k2 === bestK2 && i < best)))) { best = i; bestK1 = k1; bestK2 = k2; }
   }
-  return best;
+  if (!prevOk || best === NO_ENTITY || best === prev) return best;
+  switch (profile) {
+    case 'closest_to_tower': return dist2(p, best, 0, 0) < dist2(p, prev, 0, 0) * STICKY_DIST2 ? best : prev;
+    case 'lowest_hp': return p.hp[best] < p.hp[prev] * 0.8 ? best : prev;
+    case 'highest_hp': return p.hp[best] > p.hp[prev] * 1.25 ? best : prev;
+    case 'fastest': return p.speed[best] * p.speedMul[best] > p.speed[prev] * p.speedMul[prev] * 1.25 ? best : prev;
+    case 'elites': return (p.flags[best] & PRIORITY) !== 0 && (p.flags[prev] & PRIORITY) === 0 ? best : prev;
+    case 'support': return (p.flags[best] & SUPPORT) !== 0 && (p.flags[prev] & SUPPORT) === 0 ? best : prev;
+    default: return best;
+  }
 }
+
+/** A new target must be at least 20% closer (0.8² on squared distance) to displace the current one. */
+const STICKY_DIST2 = 0.64;
+function dist2(p: EnemyPool, i: number, x: number, y: number): number { const dx = p.x[i] - x, dy = p.y[i] - y; return dx * dx + dy * dy; }

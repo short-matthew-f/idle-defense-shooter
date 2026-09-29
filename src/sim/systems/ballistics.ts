@@ -41,9 +41,15 @@ export class BallisticsSystem implements System {
   private radius = 3; private knock = 0; private stagger = false;
   private execBonus = 0; private execRefund = 0; private gunstorm = false;
   private picked = new Int32Array(8);
+  /** Current target (index + generation) so equidistant enemies don't make the turret flip-flop. */
+  private tgt = NO_ENTITY; private tgtGen = 0;
 
   init(w: World): void { this.rebuild(w); this.timer = 0; this.attacks = 0; this.aim = w.tower.aimAngle; }
-  onAttemptStart(): void { this.timer = 0; this.attacks = 0; }
+  onAttemptStart(): void { this.timer = 0; this.attacks = 0; this.tgt = NO_ENTITY; this.tgtGen = 0; }
+  onWaveStart(): void { this.tgt = NO_ENTITY; this.tgtGen = 0; }
+  onCompact(_w: World, remap: Int32Array, oldCount: number): void {
+    if (this.tgt >= 0) this.tgt = this.tgt < oldCount ? remap[this.tgt] : NO_ENTITY;
+  }
 
   rebuild(w: World): void {
     const s = w.stats;
@@ -91,7 +97,10 @@ export class BallisticsSystem implements System {
     const t = w.tower;
     const manual = t.manualAim;
     const profile = w.build.targeting.primary ?? 'nearest';
-    const target = manual || w.trial === 'commander' ? NO_ENTITY : w.nearestEnemy(0, 0, this.range, profile, 'primary');   // WP8: Commander Trial — no automatic fire
+    const e = w.enemies;
+    const prev = this.tgt >= 0 && this.tgt < e.count && e.gen[this.tgt] === this.tgtGen ? this.tgt : NO_ENTITY;
+    const target = manual || w.trial === 'commander' ? NO_ENTITY : w.nearestEnemy(0, 0, this.range, profile, 'primary', prev);   // WP8: Commander Trial — no automatic fire
+    this.tgt = target; this.tgtGen = target >= 0 ? e.gen[target] : 0;
     let desired = this.aim;
     if (manual) desired = t.manualAngle;
     else if (target >= 0) desired = this.leadAngle(w, target);
