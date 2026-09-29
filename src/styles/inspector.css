@@ -34,3 +34,4 @@
 .chip-src.c-anomaly { --cc: var(--r-cursed); }
 .chip-src.c-system { --cc: var(--text); }
 .chip-src.c-enemy { --cc: var(--bad); }
+.insp-item .chip-src { min-width: 0; overflow: hidden; text-overflow: ellipsis; }

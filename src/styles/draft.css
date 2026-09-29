@@ -10,3 +10,4 @@
 .an-needs { display: flex; flex-wrap: wrap; gap: 4px; }
 .tag.missing { color: var(--warn); border-color: var(--warn); }
 .anomaly-card .btn { margin-top: 4px; }
+.draft-timer { margin: 10px 0 0; font-size: 14px; color: var(--text-dim); }

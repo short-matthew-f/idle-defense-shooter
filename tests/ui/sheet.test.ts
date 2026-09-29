@@ -42,3 +42,24 @@ describe('sheet snap logic', () => {
     expect(t.half).toBeLessThan(t.full);
   });
 });
+
+describe('landscape phone layout', () => {
+  it('uses the side panel on short landscape screens only', async () => {
+    const { layoutMode, isCompactLandscape, panelWidth, COMPACT_PANEL_WIDTH, SIDE_PANEL_WIDTH } = await import('../../src/ui/sheet-logic');
+    expect(layoutMode(844, 390)).toBe('side');
+    expect(isCompactLandscape(844, 390)).toBe(true);
+    expect(panelWidth(844, 390)).toBe(COMPACT_PANEL_WIDTH);
+    expect(layoutMode(390, 844)).toBe('sheet');
+    expect(layoutMode(740, 360)).toBe('side');
+    expect(layoutMode(560, 320)).toBe('sheet');          // too narrow for a side panel
+    expect(layoutMode(1280, 800)).toBe('side');
+    expect(panelWidth(1280, 800)).toBe(SIDE_PANEL_WIDTH);
+    expect(isCompactLandscape(1280, 800)).toBe(false);
+  });
+  it('moves the ability inset to the left in compact landscape', async () => {
+    const { arenaInsets, snapHeights } = await import('../../src/ui/sheet-logic');
+    const s = snapHeights(390, 120);
+    expect(arenaInsets('side', 'peek', s, 120, 72, true, 300, 70)).toEqual({ top: 120, right: 300, bottom: 0, left: 70 });
+    expect(arenaInsets('side', 'peek', s, 120, 72, false, 300, 0)).toEqual({ top: 120, right: 0, bottom: 72, left: 0 });
+  });
+});

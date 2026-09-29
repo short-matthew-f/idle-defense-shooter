@@ -11,10 +11,12 @@ export interface Prefs {
   shopTree: string;
   /** The Trial the player started (UiState does not report the active Trial; see report). */
   activeTrial: TrialId | null;
+  /** Purchases made while the first-purchase coach was showing (it retires after 3). */
+  buyCoach: number;
 }
 
 const KEY = 'citadel.prefs.v1';
-const DEFAULTS: Prefs = { onboarded: false, bloom: true, affordableFirst: false, sheetSnap: 'peek', panelOpen: true, shopCategory: 'chassis', shopTree: 'ballistics', activeTrial: null };
+const DEFAULTS: Prefs = { onboarded: false, bloom: true, affordableFirst: false, sheetSnap: 'peek', panelOpen: true, shopCategory: 'chassis', shopTree: 'ballistics', activeTrial: null, buyCoach: 0 };
 
 let cache: Prefs | null = null;
 

@@ -6,7 +6,7 @@
 import '../styles/sheet.css';
 import { button, h } from './dom';
 import { icon } from './icons';
-import { arenaInsets, clampHeight, layoutMode, nextSnap, snapHeights, snapTarget, type LayoutMode, type SnapHeights, type SnapName } from './sheet-logic';
+import { arenaInsets, clampHeight, isCompactLandscape, layoutMode, nextSnap, panelWidth, snapHeights, snapTarget, type LayoutMode, type SnapHeights, type SnapName } from './sheet-logic';
 import { prefs, setPref } from './prefs';
 
 export class Sheet {
@@ -19,6 +19,9 @@ export class Sheet {
   heights: SnapHeights = { peek: 132, half: 400, full: 700 };
   onLayout: (() => void) | null = null;
   private height = 132;
+  /** Short landscape phone: side panel, compact HUD, ability column on the left. */
+  compact = false;
+  panelW = 360;
   private hudHeight = 0;
 
   constructor(quick: HTMLElement, content: HTMLElement) {
@@ -38,7 +41,11 @@ export class Sheet {
   /** Recompute layout for the viewport (call on resize and when the HUD height changes). */
   layout(hudHeight: number): void {
     this.hudHeight = hudHeight;
-    this.mode = layoutMode(window.innerWidth);
+    this.mode = layoutMode(window.innerWidth, window.innerHeight);
+    this.compact = isCompactLandscape(window.innerWidth, window.innerHeight);
+    this.panelW = panelWidth(window.innerWidth, window.innerHeight);
+    document.documentElement.style.setProperty('--panel-w', `${this.panelW}px`);
+    document.body.classList.toggle('layout-compact', this.compact);
     this.el.classList.toggle('side', this.mode === 'side');
     this.el.classList.toggle('bottom', this.mode === 'sheet');
     document.body.classList.toggle('layout-side', this.mode === 'side');
@@ -52,8 +59,14 @@ export class Sheet {
     document.body.classList.toggle('panel-closed', hidden);
   }
 
-  insets(abilityBar: number): { top: number; right: number; bottom: number; left: number } {
-    return arenaInsets(this.mode, this.snap, this.heights, this.hudHeight, abilityBar, this.panelOpen);
+  insets(abilityBar: number, abilityLeft = 0): { top: number; right: number; bottom: number; left: number } {
+    return arenaInsets(this.mode, this.snap, this.heights, this.hudHeight, abilityBar, this.panelOpen, this.panelW, abilityLeft);
+  }
+
+  /** Make the upgrades visible (a chip or the death card jumped to a tree): peek → half, reopen the side panel. */
+  reveal(): void {
+    if (this.mode === 'side') { if (!this.panelOpen) this.setPanelOpen(true); }
+    else if (this.snap === 'peek') this.setSnap('half');
   }
 
   /** Current covered height at the bottom (sheet mode) for placing the ability bar. */

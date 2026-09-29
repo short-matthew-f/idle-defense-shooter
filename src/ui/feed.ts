@@ -15,6 +15,7 @@ export class Feed {
   readonly el = h('div', { class: 'feed', attrs: { 'aria-live': 'polite', role: 'status' } });
   private lastDraft = '';
   private lastRec = false;
+  private lastSlots: { hp: number; at: number } | null = null;
 
   toast(msg: string, kind: ToastKind = 'info', ms = 3600): void {
     const t = h('div', { class: `toast ${kind}` }, icon(ICON[kind], 'ico tiny'), h('span', { text: msg }));
@@ -43,6 +44,13 @@ export class Feed {
     const d = ui.run.pendingDraft ? ui.run.pendingDraft.join(',') : '';
     if (d && d !== this.lastDraft) this.toast('Anomaly draft ready', 'info');
     this.lastDraft = d;
+    // A new slot is the biggest power step in the early game and nothing else announces it.
+    const hp = ui.run.hardpointSlotsOpen, at = ui.run.attunementSlotsOpen;
+    if (this.lastSlots) {
+      if (at > this.lastSlots.at && ui.build.attunements.filter(Boolean).length < at) this.toast('Attunement slot open: choose an element in Upgrades', 'good', 6000);
+      if (hp > this.lastSlots.hp && ui.build.hardpoints.filter(Boolean).length < hp) this.toast('Hardpoint slot open: mount a weapon system in Upgrades', 'good', 6000);
+    }
+    this.lastSlots = { hp, at };
     const rec = !!ui.forecast?.recommended;
     if (rec && !this.lastRec) this.toast('Prestige recommended: see the Forecast', 'warn', 6000);
     this.lastRec = rec;

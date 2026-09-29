@@ -13,6 +13,8 @@ import { AbilityArming, type ArmResult } from './arming';
 import { openModal } from './modal';
 import type { UiCtx } from './ctx';
 
+const MIN_ABILITY_COST = Math.min(...ABILITIES.map((a) => a.cost));
+
 interface Slot { el: HTMLButtonElement; ico: HTMLSpanElement; cost: HTMLSpanElement; key: HTMLSpanElement; ability: AbilityId | null | undefined }
 
 /** Remaining cooldown as a 0..1 fraction. UiState does not document the unit: seconds, or ticks if larger than the whole cooldown. */
@@ -25,7 +27,7 @@ export function cooldownFraction(remaining: number, total: number): number {
 export class AbilityBar {
   readonly el: HTMLElement;
   readonly arming = new AbilityArming();
-  private readonly row = h('div', { class: 'ability-row', attrs: { role: 'toolbar', 'aria-label': 'Tactical abilities' } });
+  readonly row = h('div', { class: 'ability-row', attrs: { role: 'toolbar', 'aria-label': 'Tactical abilities' } });
   private readonly hint = h('div', { class: 'arm-hint', attrs: { role: 'status' } });
   private readonly hintText = h('span');
   private slots: Slot[] = [];
@@ -65,7 +67,13 @@ export class AbilityBar {
         s.el.title = def ? `${def.name}: ${def.desc}\nHold or right-click to change.` : 'Choose an ability';
         s.el.classList.toggle('empty', !id);
       }
-      if (!id) { text(s.cost, ''); s.el.classList.remove('ready', 'cooling', 'counter'); return; }
+      if (!id) {
+        text(s.cost, ''); s.el.classList.remove('ready', 'cooling', 'counter');
+        // an empty slot pulses once there is enough CE for the cheapest ability: abilities are never explained otherwise
+        s.el.classList.toggle('suggest', ui.tower.ce >= MIN_ABILITY_COST);
+        return;
+      }
+      s.el.classList.remove('suggest');
       const a = info.get(id);
       const def = ABILITY_BY_ID.get(id);
       const cost = a?.cost ?? def?.cost ?? 0;
@@ -108,6 +116,19 @@ export class AbilityBar {
 
   cancel(): void { this.arming.cancel(); this.renderArmed(); }
 
+  /** Put `ability` in the first empty slot (or slot 1) — the boss-tell banner's "tap to equip". */
+  equip(ability: AbilityId): void {
+    const ui = this.ctx.state();
+    if (!ui || !ui.build.abilities.length) return;
+    let slot = ui.build.abilities.indexOf(null);
+    if (slot < 0) slot = 0;
+    this.ctx.host.send({ type: 'set_ability_slot', slot, ability });
+    this.ctx.toast(`${ABILITY_BY_ID.get(ability)?.name ?? ability} equipped in slot ${slot + 1}`, 'good');
+  }
+
+  /** Slot index holding `ability`, or -1. */
+  slotOf(ability: AbilityId): number { return this.ctx.state()?.build.abilities.indexOf(ability) ?? -1; }
+
   private handle(r: ArmResult): void {
     if (r.kind === 'command') this.ctx.host.send(r.cmd);
     this.renderArmed();
@@ -120,7 +141,7 @@ export class AbilityBar {
     document.body.classList.toggle('arming', armed);
     if (armed && this.arming.ability) {
       const def = ABILITY_BY_ID.get(this.arming.ability);
-      text(this.hintText, def?.targeted === 'enemy' ? `Tap an enemy for ${def.name}` : `Tap the field to cast ${def?.name ?? ''}`);
+      text(this.hintText, def?.targeted === 'enemy' ? `${def.name} armed: tap an enemy` : `${def?.name ?? 'Ability'} armed: tap the field to cast`);
     }
   }
 

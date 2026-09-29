@@ -26,6 +26,9 @@ export class SimClient {
   constructor(save: SaveState | null, opts: { seed?: number; worker?: Worker } = {}) {
     this.worker = opts.worker ?? new Worker(new URL('../worker/sim.worker.ts', import.meta.url), { type: 'module' });
     this.worker.onmessage = (ev: MessageEvent<FromWorker>) => this.receive(ev.data);
+    // A worker that fails to load or throws at top level never posts `error` itself; surface it.
+    this.worker.onerror = (ev: ErrorEvent) => { ev.preventDefault?.(); this.onError?.(`worker: ${ev.message || 'failed to start'}`); };
+    this.worker.onmessageerror = () => { this.onError?.('worker: a message could not be deserialized'); };
     this.post({ t: 'init', save, ...(opts.seed !== undefined ? { seedOverride: opts.seed } : {}) });
   }
 

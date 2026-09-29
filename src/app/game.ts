@@ -11,7 +11,8 @@ import { Ev, type RenderSnapshot, type SaveState, type UiState } from '@sim/core
 import { sectorIndexForWave } from '@sim/data/sectors';
 import { SimClient } from './sim-client';
 import { TickPacer, offlineSecondsOnReturn, HIDDEN_OFFLINE_AFTER_S } from './pacing';
-import { nearestEnemy } from './pick';
+import { nearestEnemy, tapReach } from './pick';
+import { FieldOverlay } from './overlay';
 import type { Command } from '@sim/core/types';
 import { clearSave, exportToString, importFromString, loadSave, parkSave, storeSave } from './storage';
 import { canInstall, initInstallPrompt, promptInstall } from './pwa';
@@ -175,7 +176,12 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
   }
 
   // ---------------------------------------------------------------- pacing
-  app.onFrame = (dt) => {
+  const overlay = new FieldOverlay();
+  app.onFrame = (dt, now) => {
+    const snap = app.snapshot;
+    const live = snap && snap.instances.buffer.byteLength > 0 ? snap : null;
+    const on = overlay.build(live ? live.instances : null, live ? live.instanceCount : 0, app.camera.scale, now / 1000, aiming ? aimAngle : null);
+    app.renderer.setOverlay(overlay.buf, on);
     if (!ready || paused || document.hidden) return;
     const n = pacer.step(dt, (latestUi?.run.speedMultiplier ?? 1) * fast);
     if (n > 0) client.tickBudget(n);
@@ -216,8 +222,10 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
     if (!ready) return;
     // The sim resolves which enemy a tap means (designate_at); the drawn snapshot only gates the tap
     // (was an enemy near?) and snaps ability casts onto the tapped enemy (aim assist).
+    // Reach is at least ~22 CSS px (a thumb), not 24 world units (under 8 px on a phone).
     const snap = app.snapshot;
-    const hit = snap && snap.instances.buffer.byteLength > 0 ? nearestEnemy(snap.instances, snap.instanceCount, x, y) : null;
+    const hit = snap && snap.instances.buffer.byteLength > 0 ? nearestEnemy(snap.instances, snap.instanceCount, x, y, tapReach(app.camera.scale)) : null;
+    if (!paused) overlay.tap(hit ? hit.x : x, hit ? hit.y : y, !!hit, performance.now() / 1000);
     ui.tapField(x, y, hit ? { x: hit.x, y: hit.y } : null);
   };
   app.input.onAimStart = (a) => {

@@ -22,6 +22,7 @@ import { DirectivesPanel } from './directives';
 import { TrialsPanel, activeTrial, trialName } from './trials';
 import { openSettings } from './settings';
 import { Feed } from './feed';
+import { DeathCard } from './death';
 import { maybeOnboard } from './onboard';
 import { showOfflineReturn } from './offline';
 import { openMenu } from './menu';
@@ -37,6 +38,7 @@ export class GameUi {
   readonly shop: Shop;
   readonly sheet: Sheet;
   readonly feed = new Feed();
+  readonly death: DeathCard;
   readonly inspector: Inspector;
   private readonly draft: DraftModal;
   private readonly forecast: ForecastPanel;
@@ -72,8 +74,17 @@ export class GameUi {
     this.constellation = new ConstellationPanel(this.ctx);
     this.directives = new DirectivesPanel(this.ctx);
     this.trials = new TrialsPanel(this.ctx);
+    this.death = new DeathCard(this.ctx, () => this.hud.lastRate);
+    this.death.reveal = (cat, tree) => this.shop.open(cat, tree);
+    this.shop.onReveal = () => this.sheet.reveal();
+    this.hud.onTell = (t) => {
+      if (t === 'designate') { this.feed.toast('Tap the boss where its weak point opens to designate it', 'info'); return; }
+      const i = this.abilities.slotOf(t);
+      if (i >= 0) this.abilities.press(i); else this.abilities.equip(t);
+    };
     this.topStack = h('div', { class: 'top-stack' }, this.hud.el, this.hud.bossBar.el);
-    root.prepend(this.topStack, this.abilities.el, this.sheet.el, this.sheet.reopen, this.feed.el);
+    const overlay = h('div', { class: 'top-overlay' }, this.death.el, this.feed.el);
+    root.prepend(this.topStack, this.abilities.el, this.sheet.el, this.sheet.reopen, overlay);
     this.sheet.onLayout = () => this.relayout();
 
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => this.relayout()) : null;
@@ -87,10 +98,12 @@ export class GameUi {
   /** Recompute sheet snap heights and camera insets. */
   relayout(): void {
     this.hudH = Math.ceil(this.hud.el.getBoundingClientRect().height);
-    this.abilityH = this.abilities.el.offsetParent ? Math.ceil(this.abilities.el.getBoundingClientRect().height) : 0;
     document.documentElement.style.setProperty('--hud-h', `${this.hudH}px`);
     this.sheet.layout(this.hudH);
-    const i = this.sheet.insets(this.abilityH ? this.abilityH + 12 : 0);
+    const ab = this.abilities.el.offsetParent ? this.abilities.el.getBoundingClientRect() : null;
+    this.abilityH = ab ? Math.ceil(ab.height) : 0;
+    const abW = ab && this.sheet.compact ? Math.ceil(this.abilities.row.getBoundingClientRect().width) + 16 : 0;
+    const i = this.sheet.insets(this.abilityH ? this.abilityH + 12 : 0, abW);
     this.host.setInsets(i.top + 4, i.right, i.bottom, i.left);
   }
 
@@ -114,7 +127,8 @@ export class GameUi {
     this.hud.update(ui);
     this.hud.setTrial(trialName(activeTrial(ui)));
     this.abilities.update(ui);
-    this.shop.update(ui);
+    this.shop.update(ui, this.hud.lastRate);
+    this.death.update(ui);
     this.feed.update(ui);
     this.draft.update(ui);
     this.forecast.update(ui);
@@ -128,6 +142,11 @@ export class GameUi {
   onEvents(events: readonly SimEvent[]): void {
     this.inspector.ring.push(events);
     this.feed.onEvents(events);
+    for (const e of events) {
+      if (e.type === Ev.TowerDeath && this.latest) this.death.show(e.a || this.latest.run.wave, this.latest);
+      else if (e.type === Ev.WaveClear || e.type === Ev.Prestige || e.type === Ev.Ascend) this.death.hide();
+      else if (e.type === Ev.Purchase) this.shop.noteBuy();
+    }
     if (events.some((e) => (e.type === Ev.ScrapGain && e.src === 'offline') || e.type === Ev.Prestige || e.type === Ev.Ascend)) this.hud.resetRate();
     if (this.pendingOffline) {
       const off = events.find((e) => e.type === Ev.ScrapGain && e.src === 'offline');

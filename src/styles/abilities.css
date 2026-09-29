@@ -48,3 +48,13 @@ body.arming #game { cursor: crosshair; }
 .abp-name { font-weight: 700; display: flex; gap: 8px; align-items: baseline; }
 .abp-cost { color: var(--ce); font-size: 14px; }
 .abp-desc, .abp-meta { font-size: 14px; color: var(--text-dim); }
+.btn.ability.suggest { border-color: var(--ce); animation: pulse 1.6s infinite; --warn: var(--ce); }
+
+/* Landscape phone: the abilities are a column on the left edge of the field. */
+body.layout-compact .abilities {
+  left: calc(8px + var(--safe-left)); top: calc(var(--hud-h) + 10px); bottom: auto; transform: none; align-items: flex-start;
+}
+body.layout-compact .ability-row { flex-direction: column; gap: 12px; }
+body.layout-compact .btn.ability { width: 52px; height: 52px; }
+body.layout-compact .ab-ico { width: 42px; height: 42px; }
+body.layout-compact .arm-hint { order: 2; }

@@ -12,6 +12,14 @@ export const PICK_RADIUS = 24;
 /** Extra reach beyond an enemy's radius (matches run/commands.ts enemyAt). */
 export const PICK_PAD = 8;
 
+/** Minimum tap reach in CSS pixels (a fingertip), whatever the zoom. */
+export const TAP_REACH_PX = 22;
+
+/** World-unit reach for a tap at `scale` CSS px per world unit: never below PICK_RADIUS. */
+export function tapReach(scale: number, px = TAP_REACH_PX): number {
+  return scale > 0 ? Math.max(PICK_RADIUS, px / scale) : PICK_RADIUS;
+}
+
 export interface PickResult { x: number; y: number; dist: number }
 
 export function nearestEnemy(instances: Float32Array, count: number, x: number, y: number, minReach = PICK_RADIUS): PickResult | null {

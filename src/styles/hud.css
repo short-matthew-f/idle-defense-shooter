@@ -107,3 +107,29 @@ body.layout-side:not(.panel-closed) .top-stack { right: calc(var(--panel-w) + va
 .tell-text { flex: 1; min-width: 0; }
 .tell-window { width: 90px; height: 8px; border-radius: 4px; background: var(--bg-3); overflow: hidden; flex: none; }
 .tell-fill { height: 100%; width: calc(var(--win, 1) * 100%); background: var(--warn); }
+
+/* Tower bars: HP on its own row, Shield and Barrier share a thinner row (saves a row on phones). */
+.tower-bars { grid-template-columns: 1fr 1fr; }
+.tower-bars .bar.hp { grid-column: 1 / -1; }
+.tower-bars .bar.thin { height: 16px; }
+.tower-bars .bar.thin .bar-label { font-size: 13px; line-height: 16px; padding: 0 6px; }
+
+/* Boss tell is a button: tap it to cast, arm or equip the Counter. */
+button.tell { width: 100%; min-height: var(--touch); background: color-mix(in srgb, var(--warn) 8%, transparent); text-align: left; cursor: pointer; font: inherit; font-size: 14px; font-weight: 600; color: var(--warn); }
+button.tell[data-action='cast'] { background: color-mix(in srgb, var(--warn) 18%, transparent); }
+
+/* Landscape phone: one control row beside the wave/resources row, compact paddings. */
+@media (max-height: 499px) and (min-width: 600px) and (orientation: landscape) {
+  .hud { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; column-gap: 10px; padding: 4px 8px 6px; }
+  .hud-top { grid-column: 1; grid-row: 1; }
+  .hud-controls { grid-column: 2; grid-row: 1; flex-wrap: nowrap; justify-content: flex-end; gap: 4px; }
+  .hud-progress { grid-column: 1 / -1; grid-row: 2; }
+  .hud-bars { grid-column: 1 / -1; grid-row: 3; }
+  .trial-banner { grid-column: 1 / -1; }
+  .mode-btn { min-width: 60px; padding: 0 10px; }
+  .wave-num { font-size: 18px; }
+  .speed-slot { width: var(--touch); height: var(--touch); }
+  .speed-slot .speed.open { position: absolute; right: 0; top: 0; z-index: 10; box-shadow: var(--shadow); background: var(--bg-2); }
+  .speed:not(.open) .seg-btn:not(.active) { display: none; }
+  .boss-bar { margin-top: 4px; padding: 4px 8px 6px; }
+}

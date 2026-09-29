@@ -33,3 +33,12 @@
 .chip.quick { border-color: color-mix(in srgb, var(--accent) 60%, var(--line-2)); }
 .qc-name { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 420px) { .sheet.bottom .quick-label { display: none; } }
+.quick-row.slots:empty { display: none; }
+.btn.chip.slot-chip { border-style: dashed; border-color: var(--accent); color: var(--accent); }
+.quick-coach { flex: none; font-size: 13px; font-weight: 600; color: var(--accent); white-space: nowrap; }
+.quick-row.coach .chip.quick:first-child { animation: pulse 1.6s infinite; --warn: var(--accent); }
+.btn.chip.next-chip { border-style: dashed; color: var(--text-dim); font-weight: 600; }
+.next-chip .qc-next { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); }
+.next-chip .qc-eta { font-size: 13px; color: var(--text-dim); font-weight: 400; }
+.next-chip .qc-eta:empty { display: none; }
+body.layout-compact .sheet.side .quick-label { display: none; }

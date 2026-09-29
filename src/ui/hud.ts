@@ -4,6 +4,7 @@
  * boss bar (phase marks, tell indicator with a shrinking window, weak-point flag).
  */
 import '../styles/hud.css';
+import type { AbilityId } from '@sim/core/ids';
 import type { UiState } from '@sim/core/types';
 import { Bar, button, h, show, text, disable, attr, styleVar } from './dom';
 import { abilityIcon, icon } from './icons';
@@ -60,8 +61,12 @@ export class Hud {
   private readonly trialBanner = h('div', { class: 'trial-banner' });
   private readonly trialName = h('span');
   private rate = new RateMeter();
+  /** Last measured Scrap income (per second), for ETAs elsewhere in the UI. */
+  lastRate = 0;
   private ceKey = '';
   readonly bossBar: BossBar;
+  /** Tapping the boss tell (arm / equip its Counter); GameUi wires it to the ability bar. */
+  onTell: ((tell: AbilityId | 'designate') => void) | null = null;
 
   constructor(private readonly ctx: UiCtx) {
     this.modeBtn = button('Push', () => {
@@ -112,16 +117,16 @@ export class Hud {
         this.ce.el),
       h('div', { class: 'hud-row hud-controls' }, this.modeBtn, h('div', { class: 'speed-slot' }, this.speedWrap), restart, this.pauseBtn, this.forecastBtn),
       this.trialBanner);
-    this.bossBar = new BossBar();
+    this.bossBar = new BossBar((t) => this.onTell?.(t));
     document.addEventListener('pointerdown', (e) => { if (!this.speedWrap.contains(e.target as Node)) this.speedWrap.classList.remove('open'); });
   }
 
   /** Forget income history (offline credit, Prestige) so the rate shows live income only. */
-  resetRate(): void { this.rate = new RateMeter(); }
+  resetRate(): void { this.rate = new RateMeter(); this.lastRate = 0; }
 
   private pickSpeed(sp: 1 | 2 | 4 | 8): void {
     const s = this.ctx.state(); if (!s) return;
-    const narrow = window.matchMedia('(max-width: 599px)').matches;
+    const narrow = window.matchMedia('(max-width: 599px), (max-height: 499px) and (min-width: 600px) and (orientation: landscape)').matches;
     if (narrow && !this.speedWrap.classList.contains('open')) { this.speedWrap.classList.add('open'); return; }
     this.speedWrap.classList.remove('open');
     if (sp !== s.run.speedMultiplier) this.ctx.host.send({ type: 'set_speed', speed: sp });
@@ -147,6 +152,7 @@ export class Hud {
 
     text(this.scrap, fmtNum(r.scrap));
     const rate = this.rate.push(r.playSeconds, r.scrap);
+    this.lastRate = rate;
     text(this.scrapRate, rate > 0 ? fmtRate(rate) : '');
     text(this.cores, fmtNum(r.cores));
 
@@ -200,7 +206,7 @@ export class BossBar {
   private readonly bar = new Bar('boss-hp', 'Boss health');
   private readonly marks = h('div', { class: 'boss-marks' });
   private readonly weak = h('span', { class: 'weak-flag' }, icon('target', 'ico tiny'), 'Weak point open');
-  private readonly tell = h('div', { class: 'tell' });
+  private readonly tell = h('button', { type: 'button', class: 'tell' });
   private readonly tellIcon = h('span', { class: 'tell-ico' });
   private readonly tellText = h('span', { class: 'tell-text' });
   private readonly tellWin = h('div', { class: 'tell-window' }, h('div', { class: 'tell-fill' }));
@@ -208,9 +214,12 @@ export class BossBar {
   private tellKey = '';
   private tellMax = 1;
 
-  constructor() {
+  private tellId: AbilityId | 'designate' | null = null;
+
+  constructor(onTell: (tell: AbilityId | 'designate') => void = () => {}) {
     this.bar.el.appendChild(this.marks);
     this.tell.append(this.tellIcon, this.tellText, this.tellWin);
+    this.tell.addEventListener('click', () => { if (this.tellId) onTell(this.tellId); });
     this.el = h('div', { class: 'boss-bar', attrs: { role: 'group', 'aria-label': 'Boss' } },
       h('div', { class: 'boss-head' }, icon('skull', 'ico tiny'), this.name, this.phase, this.weak), this.bar.el, this.tell);
     this.el.hidden = true;
@@ -235,17 +244,34 @@ export class BossBar {
     this.el.classList.toggle('weak-open', w.weakPointOpen);
 
     const tell = w.tellActive;
+    this.tellId = tell;
     show(this.tell, tell !== null);
     if (tell !== null) {
-      const key = `${tell}`;
+      const prompt = tellPrompt(tell, ui);
+      const key = `${tell}|${prompt.action}`;
       if (key !== this.tellKey || w.tellTicksLeft > this.tellMax) {
+        if (!this.tellKey.startsWith(`${tell}|`) || w.tellTicksLeft > this.tellMax) this.tellMax = Math.max(1, def ? Math.round(def.tell.windowSeconds * 60) : w.tellTicksLeft, w.tellTicksLeft);
         this.tellKey = key;
-        this.tellMax = Math.max(1, def ? Math.round(def.tell.windowSeconds * 60) : w.tellTicksLeft, w.tellTicksLeft);
         this.tellIcon.replaceChildren(abilityIcon(tell, 'ico'));
-        const counter = tell === 'designate' ? 'Designate the weak point' : ABILITY_BY_ID.get(tell)?.name ?? tell;
-        text(this.tellText, `${def?.tell.name ?? 'Tell'}: counter with ${counter}`);
+        text(this.tellText, `${def?.tell.name ?? 'Tell'}: ${prompt.text}`);
+        attr(this.tell, 'aria-label', `${def?.tell.name ?? 'Boss tell'}: ${prompt.text}`);
+        this.tell.dataset.action = prompt.action;
       }
       styleVar(this.tell, '--win', String(Math.max(0, Math.min(1, w.tellTicksLeft / this.tellMax))));
     } else this.tellKey = '';
   }
+}
+
+/**
+ * What the boss-tell banner asks for (pure). The Counter ability may not be slotted (a new player's
+ * slots start empty), may lack CE, or may be ready: the banner says which, and tapping it acts.
+ */
+export function tellPrompt(tell: AbilityId | 'designate', ui: Pick<UiState, 'build' | 'abilities' | 'tower'>): { text: string; action: 'designate' | 'cast' | 'equip' | 'wait' } {
+  if (tell === 'designate') return { text: 'tap the weak point to designate it', action: 'designate' };
+  const name = ABILITY_BY_ID.get(tell)?.name ?? tell;
+  if (!ui.build.abilities.includes(tell)) return { text: `${name} counters it. Tap to equip it`, action: 'equip' };
+  const a = ui.abilities.find((x) => x.id === tell);
+  if (a && a.ready) return { text: `tap to counter with ${name}`, action: 'cast' };
+  const cost = Math.round(a?.cost ?? ABILITY_BY_ID.get(tell)?.cost ?? 0);
+  return { text: ui.tower.ce < cost ? `counter with ${name} (needs ${cost} CE)` : `counter with ${name} (cooling down)`, action: 'wait' };
 }

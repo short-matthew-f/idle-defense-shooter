@@ -11,7 +11,25 @@ export const SIDE_PANEL_WIDTH = 360;
 export const PEEK_HEIGHT = 132;
 export const SNAP_ORDER: readonly SnapName[] = ['peek', 'half', 'full'];
 
-export function layoutMode(viewWidth: number): LayoutMode { return viewWidth >= SIDE_BREAKPOINT ? 'side' : 'sheet'; }
+/** Narrower side panel for landscape phones. */
+export const COMPACT_PANEL_WIDTH = 300;
+
+/**
+ * Short landscape (a phone on its side): a bottom sheet plus the HUD would leave no arena at all
+ * (844×390: 186 px HUD + 132 px peek), so it gets the side panel and a compact HUD instead.
+ */
+export function isCompactLandscape(viewWidth: number, viewHeight: number): boolean {
+  return viewHeight < 500 && viewWidth > viewHeight && viewWidth >= 600;
+}
+
+export function layoutMode(viewWidth: number, viewHeight = Infinity): LayoutMode {
+  return viewWidth >= SIDE_BREAKPOINT || isCompactLandscape(viewWidth, viewHeight) ? 'side' : 'sheet';
+}
+
+/** Side panel width for a viewport. */
+export function panelWidth(viewWidth: number, viewHeight = Infinity): number {
+  return viewWidth < SIDE_BREAKPOINT && isCompactLandscape(viewWidth, viewHeight) ? COMPACT_PANEL_WIDTH : SIDE_PANEL_WIDTH;
+}
 
 /** Snap heights (px from the bottom) for a viewport; `topReserved` keeps the HUD visible at full. */
 export function snapHeights(viewHeight: number, topReserved: number, peek = PEEK_HEIGHT): SnapHeights {
@@ -45,9 +63,11 @@ export function nextSnap(cur: SnapName): SnapName { return cur === 'peek' ? 'hal
  * Camera insets that keep the arena clear of the UI. At 'full' the sheet is an overlay, so the
  * arena keeps the 'half' inset instead of shrinking to nothing.
  */
-export function arenaInsets(mode: LayoutMode, snap: SnapName, s: SnapHeights, hudHeight: number, abilityBar: number, panelOpen = true):
+export function arenaInsets(mode: LayoutMode, snap: SnapName, s: SnapHeights, hudHeight: number, abilityBar: number, panelOpen = true,
+  panelW = SIDE_PANEL_WIDTH, abilityLeft = 0):
   { top: number; right: number; bottom: number; left: number } {
-  if (mode === 'side') return { top: hudHeight, right: panelOpen ? SIDE_PANEL_WIDTH : 0, bottom: abilityBar, left: 0 };
+  // compact landscape: the ability bar is a column on the left edge instead of a row at the bottom
+  if (mode === 'side') return { top: hudHeight, right: panelOpen ? panelW : 0, bottom: abilityLeft > 0 ? 0 : abilityBar, left: abilityLeft };
   // Expanded (half / full): the arena shrinks to the space above the half sheet and the ability
   // bar floats over its lower edge, so the whole arena stays visible without collapsing to a dot.
   const bottom = snap === 'peek' ? s.peek + abilityBar : s.half;

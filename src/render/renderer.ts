@@ -23,8 +23,10 @@ import { BACKDROP_FS, FULLSCREEN_VS, INSTANCE_FS, INSTANCE_VS } from './shaders'
 const BYTES_PER_INSTANCE = INSTANCE_FLOATS * 4;
 const BUF_COUNT = 3;
 const INITIAL_CAPACITY = 24576;
+/** Enemy bodies are drawn at least this big (CSS px radius) so they stay legible on phones. */
+export const MIN_ENEMY_CSS_PX = 3.5;
 
-type InstU = UniformMap<'uCam' | 'uScale' | 'uOffset' | 'uPx' | 'uTime' | 'uLayerAlpha'>;
+type InstU = UniformMap<'uCam' | 'uScale' | 'uOffset' | 'uPx' | 'uTime' | 'uLayerAlpha' | 'uMinPx'>;
 type BackU = UniformMap<'uCam' | 'uRes' | 'uOff' | 'uPx' | 'uArena' | 'uTime' | 'uBg' | 'uFloorC' | 'uFloorE' | 'uGrid' | 'uRim'>;
 
 export interface RendererOptions {
@@ -65,6 +67,11 @@ export class Renderer {
   private lastFxTick = -1;
   private disposed = false;
   private palette: SectorPalette = SECTOR_PALETTES[0];
+  /** Minimum on-screen enemy radius in CSS px (see INSTANCE_VS uMinPx). */
+  minEnemyPx = MIN_ENEMY_CSS_PX;
+  /** UI-in-world overlay instances (tap ripple, designation reticle, aim line) drawn on layer 7. */
+  private overlay: Float32Array = new Float32Array(0);
+  private overlayCount = 0;
 
   // GL objects
   private instProg!: WebGLProgram;
@@ -126,7 +133,7 @@ export class Renderer {
 
     this.instProg = compileProgram(gl, INSTANCE_VS, INSTANCE_FS, 'instance');
     this.backProg = compileProgram(gl, FULLSCREEN_VS, BACKDROP_FS, 'backdrop');
-    this.instU = uniforms(gl, this.instProg, ['uCam', 'uScale', 'uOffset', 'uPx', 'uTime', 'uLayerAlpha'] as const);
+    this.instU = uniforms(gl, this.instProg, ['uCam', 'uScale', 'uOffset', 'uPx', 'uTime', 'uLayerAlpha', 'uMinPx'] as const);
     this.backU = uniforms(gl, this.backProg, ['uCam', 'uRes', 'uOff', 'uPx', 'uArena', 'uTime', 'uBg', 'uFloorC', 'uFloorE', 'uGrid', 'uRim'] as const);
 
     const quad = gl.createBuffer();
@@ -217,6 +224,12 @@ export class Renderer {
   }
 
   setBloom(on: boolean): void { this.bloomEnabled = on; }
+
+  /** Extra instances for this frame (INSTANCE_FLOATS each, any layer; normally 7). Not copied: keep the buffer alive. */
+  setOverlay(instances: Float32Array, count: number): void {
+    this.overlay = instances;
+    this.overlayCount = Math.max(0, Math.min(count, Math.floor(instances.length / INSTANCE_FLOATS)));
+  }
   get bloomOn(): boolean { return this.bloomEnabled && this.bloom !== null; }
 
   render(snap: RenderSnapshot, dtSeconds: number, camera: Camera): void {
@@ -240,7 +253,7 @@ export class Renderer {
 
     // --- layer alpha: density governor dims player effects only; enemies/UI never dim.
     const gov = parts.governor;
-    const fxA = (1 - 0.45 * clarity) * gov;
+    const fxA = (1 - 0.6 * clarity) * gov;   // full Clarity: player effects at 40% (design §20)
     const la = this.layerAlpha;
     la[0] = 1;
     la[1] = fxA;
@@ -250,15 +263,18 @@ export class Renderer {
 
     // --- sort + upload
     const n = snap.instanceCount;
-    const total = n + parts.count;
+    const on = this.overlayCount;
+    const total = n + parts.count + on;
     if (total > this.capacity) this.allocInstanceBuffers(Math.max(total + 1024, (this.capacity * 3) >> 1));
     const counts = this.counts;
     counts.fill(0);
     countLayers(snap.instances, n, counts);
     parts.countLayers(counts);
+    if (on) countLayers(this.overlay, on, counts);
     layerStarts(counts, this.starts, this.cursors);
     scatterInstances(snap.instances, n, this.sorted, this.cursors);
     parts.scatter(this.sorted, this.cursors);
+    if (on) scatterInstances(this.overlay, on, this.sorted, this.cursors);
 
     this.cur = (this.cur + 1) % BUF_COUNT;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instBufs[this.cur]);
@@ -291,6 +307,7 @@ export class Renderer {
     gl.uniform2f(u.uOffset, ox, oy);
     gl.uniform1f(u.uTime, this.time);
     gl.uniform1fv(u.uLayerAlpha, la);
+    gl.uniform1f(u.uMinPx, this.minEnemyPx * (W / vw));
 
     // --- bloom source: additive layers into the half-res FBO, then blur
     if (bl) {

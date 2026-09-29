@@ -103,7 +103,11 @@ export class ForecastPanel {
       if (g.peak && g.last) {
         attr(this.peakDot, 'cx', String(g.peak.x)); attr(this.peakDot, 'cy', String(g.peak.y));
         attr(this.nowDot, 'cx', String(g.last.x)); attr(this.nowDot, 'cy', String(g.last.y));
-        attr(this.peakLbl, 'x', String(Math.min(260, Math.max(8, g.peak.x - 20)))); attr(this.peakLbl, 'y', String(Math.max(12, g.peak.y - 8)));
+        // anchor the label away from the chart edge it is near, so "peak 25K/h" is never clipped
+        const right = g.peak.x > 200;
+        attr(this.peakLbl, 'x', String(right ? Math.min(314, g.peak.x - 6) : Math.max(8, g.peak.x + 6)));
+        attr(this.peakLbl, 'text-anchor', right ? 'end' : 'start');
+        attr(this.peakLbl, 'y', String(Math.max(12, g.peak.y - 8)));
         this.peakLbl.textContent = `peak ${fmtNum(g.peak.rate)}/h`;
       }
       text(this.axis, curve.length ? `0 → ${fmtDuration(g.maxSeconds)} · max ${fmtNum(g.maxRate)}/h` : 'The rate curve appears after wave 20.');

@@ -11,7 +11,8 @@ import type { DoctrineId, ElementId, HardpointId, TreeId } from '@sim/core/ids';
 import type { ShopEntry, UiState } from '@sim/core/types';
 import { button, h, holdRepeat, text, disable, show, attr, Keyed, clear } from './dom';
 import { icon } from './icons';
-import { fmtNum, substituteDesc, titleCase } from './format';
+import { fmtDuration, fmtNum, substituteDesc, titleCase } from './format';
+import { nextPurchase, openSlots } from './advice';
 import { CHASSIS, ELEMENTS, ELEMENT_BLURB, HARDPOINTS, HARDPOINT_BLURB, NODE_BY_ID, TREE_BY_ID, TREE_LABEL } from './content';
 import { confirmDialog, openModal } from './modal';
 import { prefs, setPref } from './prefs';
@@ -23,6 +24,8 @@ const CATEGORIES: { id: Category; label: string }[] = [
   { id: 'cross', label: 'Cross' }, { id: 'cores', label: 'Cores' },
 ];
 const REFIT_CORES = 3;
+/** Purchases after which the "Tap to buy" coach retires. */
+const COACH_BUYS = 3;
 
 interface Chip { id: string; label: string; empty?: boolean }
 
@@ -100,6 +103,19 @@ export class Shop {
   private readonly treeRow = h('div', { class: 'chips tree-chips', attrs: { role: 'tablist', 'aria-label': 'Tree' } });
   private readonly body = h('div', { class: 'shop-body' });
   private readonly quickRow = h('div', { class: 'quick-row' });
+  /** Open-slot chips ("Attune an element") shown before the quick buys. */
+  private readonly slotRow = h('div', { class: 'quick-row slots' });
+  private slotKey = '';
+  /** When nothing is affordable: the next buy, its price and ETA at the current income. */
+  private readonly nextChip: HTMLButtonElement;
+  private readonly nextLabel = h('span', { class: 'qc-name' });
+  private readonly nextPrice = h('span', { class: 'price scrap' });
+  private readonly nextEta = h('span', { class: 'qc-eta' });
+  private nextTree = '';
+  private readonly doneChip: HTMLButtonElement;
+  private readonly coach = h('span', { class: 'quick-coach', text: 'Tap to buy', title: 'Tap to buy one rank; hold to keep buying' });
+  /** Expand the sheet / panel when a chip jumps to a tree (GameUi wires it). */
+  onReveal: (() => void) | null = null;
   private readonly sortBtn: HTMLButtonElement;
   private readonly catBtns = new Map<Category, { b: HTMLButtonElement; n: HTMLSpanElement }>();
   private treeBtns = new Map<string, { b: HTMLButtonElement; n: HTMLSpanElement }>();
@@ -145,7 +161,10 @@ export class Shop {
       r.price.replaceChildren(icon('scrap', 'ico tiny'), fmtNum(e.cost));
       attr(r.el, 'aria-label', `Quick buy ${e.name} for ${fmtNum(e.cost)} Scrap`);
     });
-    this.quick = h('div', { class: 'quick' }, h('span', { class: 'quick-label', text: 'Quick buys' }), this.quickRow);
+    this.nextChip = button([h('span', { class: 'qc-next', text: 'Next' }), this.nextLabel, this.nextPrice, this.nextEta], () => this.jumpTo(this.nextTree), { class: 'btn chip next-chip' });
+    this.doneChip = button([icon('forecast', 'ico tiny'), 'Every upgrade owned: see the Forecast'], () => this.ctx.open('forecast'), { class: 'btn chip next-chip done-chip' });
+    this.doneChip.hidden = true;
+    this.quick = h('div', { class: 'quick' }, h('span', { class: 'quick-label', text: 'Quick buys' }), this.coach, this.slotRow, this.quickRow, this.nextChip, this.doneChip);
     this.el = h('section', { class: 'shop', attrs: { 'aria-label': 'Upgrades' } },
       h('div', { class: 'shop-head' }, this.catRow),
       h('div', { class: 'shop-sub' }, this.treeRow, this.sortBtn),
@@ -219,13 +238,57 @@ export class Shop {
     return n;
   }
 
+  /** Show a category / tree (death card, slot chips, "Next" chip) and expand the panel. */
+  open(cat: Category, tree?: string): void {
+    this.setCategory(cat);
+    if (tree) this.setTree(tree);
+    this.onReveal?.();
+  }
+
+  private jumpTo(tree: string): void {
+    const t = TREE_BY_ID.get(tree as TreeId);
+    const cat: Category = !t ? 'cross' : (ELEMENTS as string[]).includes(tree) ? 'elements' : (HARDPOINTS as string[]).includes(tree) ? 'hardpoints' : 'chassis';
+    this.open(cat, tree);
+  }
+
+  /** A purchase happened (Ev.Purchase): retire the first-purchase coach after three. */
+  noteBuy(): void {
+    const n = prefs().buyCoach;
+    if (n < COACH_BUYS) setPref('buyCoach', n + 1);
+  }
+
   // ---------------------------------------------------------------- update
-  update(ui: UiState): void {
+  update(ui: UiState, scrapRate = 0): void {
     this.ui = ui;
+    // open slots first: a new weapon system or element is the biggest step change there is
+    const slots = openSlots(ui);
+    const sk = slots.map((x) => `${x.cat}:${x.slot}`).join(',');
+    if (sk !== this.slotKey) {
+      this.slotKey = sk;
+      this.slotRow.replaceChildren(...slots.map((x) => button([icon('plus', 'ico tiny'), x.cat === 'elements' ? 'Attune an element' : 'Mount a weapon'],
+        () => this.open(x.cat, `slot:${x.slot}`), { class: 'btn chip quick slot-chip' })));
+    }
     // quick chips
     this.quickList.sync(cheapestAffordable(ui.shop), (e) => e.node);
     show(this.quick, true);
-    this.quick.classList.toggle('empty', this.quickList.rows.size === 0);
+    const empty = this.quickList.rows.size === 0;
+    const next = empty ? nextPurchase(ui.shop, ui.run.scrap, scrapRate) : null;
+    // Everything owned (the Prestige Wall): say so and point at the Forecast instead of "nothing affordable yet".
+    const allOwned = empty && !next && slots.length === 0 && !ui.shop.some((e) => e.currency === 'scrap' && e.rank < e.maxRank);
+    show(this.doneChip, allOwned);
+    this.quick.classList.toggle('empty', empty && slots.length === 0 && !next && !allOwned);
+    show(this.nextChip, !!next);
+    if (next) {
+      this.nextTree = next.entry.tree;
+      const e = next.entry;
+      text(this.nextLabel, e.rank > 0 && e.maxRank > 1 ? `${e.name} ${e.rank + 1}` : e.name);
+      if (this.nextPrice.dataset.v !== String(e.cost)) { this.nextPrice.dataset.v = String(e.cost); this.nextPrice.replaceChildren(icon('scrap', 'ico tiny'), fmtNum(e.cost)); }
+      text(this.nextEta, next.eta !== null && next.eta > 0 ? `~${fmtDuration(next.eta)}` : '');
+      attr(this.nextChip, 'aria-label', `Next upgrade: ${e.name}, ${fmtNum(e.cost)} Scrap${next.eta ? `, affordable in about ${fmtDuration(next.eta)}` : ''}. Opens its tree.`);
+    }
+    const coach = prefs().buyCoach < COACH_BUYS && !empty;
+    show(this.coach, coach);
+    this.quickRow.classList.toggle('coach', coach);
 
     for (const c of CATEGORIES) {
       const cb = this.catBtns.get(c.id)!;

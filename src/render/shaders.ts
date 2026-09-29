@@ -57,6 +57,7 @@ uniform vec2 uOffset;     // NDC offset of the view center (UI insets)
 uniform float uPx;        // device pixels per world unit
 uniform float uTime;
 uniform float uLayerAlpha[8];
+uniform float uMinPx;     // minimum enemy body radius in device pixels (phone legibility)
 
 out vec2 vP;              // local coords, radius-normalized, shape frame
 out vec2 vU;              // local coords, radius-normalized, world-aligned (for hp bars)
@@ -71,6 +72,13 @@ void main() {
   float r = aA.z;
   vec2 c = aA.xy;
   float rot = aA.w;
+
+  // Enemies never shrink below uMinPx on screen (a swarmer is ~1 px on a phone otherwise); the
+  // outline keeps its 2-unit gap and the halo its 1.8x ratio around the enlarged body.
+  float m = uMinPx / uPx;
+  if (li == 4) r = max(r, m);
+  else if (li == 5) r = max(r, m + 2.0);
+  else if (li == 6) r = max(r, m * 1.8);
 
   if (li == 6) {
     // threat halos pulse

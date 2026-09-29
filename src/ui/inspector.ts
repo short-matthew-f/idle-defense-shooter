@@ -85,7 +85,7 @@ export class Inspector {
     this.modal = openModal({
       title: 'Kill-Chain Inspector', variant: 'overlay', className: 'inspector-modal',
       body: h('div', { class: 'inspector' }, this.records, h('div', { class: 'insp-cols' }, this.list, this.detail)),
-      footer: h('div', { class: 'row between' }, h('span', { class: 'dim small', text: 'Paused. Space resumes.' }), resume),
+      footer: h('div', { class: 'row between' }, h('span', { class: 'dim small', text: typeof matchMedia === 'function' && matchMedia('(hover: none)').matches ? 'Paused.' : 'Paused. Space resumes.' }), resume),
       onClose: () => { this.modal = null; this.ctx.host.setPaused(false); this.onPauseChange?.(false); },
     });
   }

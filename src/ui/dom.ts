@@ -2,6 +2,8 @@
  * Tiny DOM helpers. Everything that updates at UI rate goes through `text` / `attr` / `style`
  * setters that compare first, so an unchanged value never touches the DOM.
  */
+import { HoldGesture, type HoldAction } from './hold';
+
 type Child = Node | string | number | null | undefined | false;
 export interface Props {
   class?: string;
@@ -61,42 +63,43 @@ export function disable(el: HTMLButtonElement | HTMLInputElement | HTMLSelectEle
 export function clear(el: Element): void { while (el.firstChild) el.removeChild(el.firstChild); }
 
 /**
- * Press-and-hold repeat for Buy buttons: fires on press, then after 380 ms repeats, speeding up.
- * Keyboard activation (click with detail 0) fires once.
+ * Press-and-hold repeat for Buy buttons (gesture rules in hold.ts): mouse fires on press and repeats
+ * after 380 ms, speeding up; touch fires on a tap, repeats only after holding still, and never fires
+ * when the finger scrolls the list. Keyboard activation (click with detail 0) fires once.
  */
 export function holdRepeat(btn: HTMLButtonElement, fire: () => void): void {
-  let timer = 0, delay = 0, pressed = false, fired = 0;
-  const stop = (): void => {
-    pressed = false;
-    if (timer) { clearTimeout(timer); timer = 0; }
-    window.removeEventListener('pointerup', stop, true);
-    window.removeEventListener('pointercancel', stop, true);
+  const g = new HoldGesture();
+  let timer = 0;
+  const clearTimer = (): void => { if (timer) { clearTimeout(timer); timer = 0; } };
+  const detach = (): void => {
+    window.removeEventListener('pointerup', onUp, true);
+    window.removeEventListener('pointercancel', onCancel, true);
   };
-  const tick = (): void => {
+  const run = (a: HoldAction): void => {
+    clearTimer();
+    if (a.kind === 'stop') { detach(); return; }
+    if (a.kind === 'none') return;
+    if (a.kind === 'fire') fire();
     // The button may be re-rendered or removed while held (e.g. a quick-buy chip that became unaffordable):
-    // without a pointerup it would repeat forever, so stop when it is disconnected, disabled, or after a bound.
-    if (!pressed || btn.disabled || !btn.isConnected || fired >= MAX_HOLD_FIRES) { stop(); return; }
-    fire(); fired++;
-    delay = Math.max(40, delay * 0.82);
-    timer = window.setTimeout(tick, delay);
+    // without a pointerup it would repeat forever, so each tick checks it is still connected and enabled.
+    timer = window.setTimeout(() => run(g.tick(btn.isConnected && !btn.disabled)), a.next);
   };
+  const onUp = (): void => run(g.up());
+  const onCancel = (): void => run(g.cancel());
   btn.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || btn.disabled) return;
-    stop();
-    pressed = true; fired = 1;
-    fire();
-    delay = 160;
-    timer = window.setTimeout(tick, 380);
+    run(g.stop());
+    run(g.down(e.pointerType, e.clientX, e.clientY));
     // Listen on the window (capture) so releasing over another element, or after the button was replaced, still stops it.
-    window.addEventListener('pointerup', stop, true);
-    window.addEventListener('pointercancel', stop, true);
+    window.addEventListener('pointerup', onUp, true);
+    window.addEventListener('pointercancel', onCancel, true);
   });
-  for (const ev of ['pointerup', 'pointerleave', 'pointercancel', 'blur'] as const) btn.addEventListener(ev, stop);
-  btn.addEventListener('click', (e) => { if (e.detail === 0) fire(); });
+  btn.addEventListener('pointermove', (e) => { if (g.pressed) run(g.move(e.clientX, e.clientY)); });
+  btn.addEventListener('pointercancel', onCancel);
+  for (const ev of ['pointerup', 'pointerleave', 'blur'] as const) btn.addEventListener(ev, () => { if (g.pressed) onUp(); });
+  btn.addEventListener('click', (e) => { if (g.click(e.detail) && !btn.disabled) fire(); });
   btn.addEventListener('contextmenu', (e) => e.preventDefault());
 }
-/** Upper bound on repeats from one press (~6 s at the fastest cadence). */
-const MAX_HOLD_FIRES = 150;
 
 /** Long-press detector (ms); returns true from `consumed()` right after a long press so the click can be ignored. */
 export function longPress(el: HTMLElement, ms: number, onLong: () => void): { consumed(): boolean } {
