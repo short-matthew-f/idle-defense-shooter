@@ -166,7 +166,8 @@ export class LaserSystem implements System {
     if (!this.on) { sh.laserNodeCount = 0; sh.laserBeamCount = 0; sh.laserInterior = 0; sh.laserBeamWidth = 0; return; }
     const tick = w.tick;
     if (w.signals) this.applyCounts(w.signals.laserNodeMul);
-    this.rot += this.rotSpeed * TICK_DT;
+    const dyn = w.dynamicSpeedMul > 0 ? w.dynamicSpeedMul : 1;   // Overdrive / Ember Heart / Critical Mass
+    this.rot += this.rotSpeed * dyn * TICK_DT;
     if (this.rot > TAU) this.rot -= TAU;
     this.geometry(w);
     const R = this.radius();
@@ -181,7 +182,7 @@ export class LaserSystem implements System {
     this.nodeDamage(w);
     // pulse cadence
     if (this.pulse) {
-      const rate = (sh.laserPulseRateMul > 0 ? sh.laserPulseRateMul : 1) / cooldownFactor(w.stats);
+      const rate = (sh.laserPulseRateMul > 0 ? sh.laserPulseRateMul : 1) * dyn / cooldownFactor(w.stats);
       this.pulseT += TICK_DT * rate;
       if (this.pulseT >= this.pulseEvery) { this.pulseT -= this.pulseEvery; this.pulseLeft = this.pulseDur; }
     }
@@ -198,7 +199,7 @@ export class LaserSystem implements System {
     if (tick % DMG_EVERY === 0) this.beamDamage(w, width, pulsing ? this.pulseD : 1);
     if (this.field > 0 && sh.laserInterior > 0) this.contain(w, sh.laserInterior);
     if (this.vertex) {
-      this.vertexT += TICK_DT;
+      this.vertexT += TICK_DT * dyn;
       if (this.vertexT >= this.vertexEvery) { this.vertexT -= this.vertexEvery; this.vertexBlast(w); }
     }
   }

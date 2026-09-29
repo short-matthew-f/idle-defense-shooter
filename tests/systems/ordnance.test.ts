@@ -104,17 +104,26 @@ describe('Ordnance', () => {
     const w = sim.world;
     w.spawnEnemy('grunt', 100, 0, { hpScale: 1000 });
     const elite = w.spawnEnemy('grunt', -300, 0, { hpScale: 1000, elite: ['hardened'] });
-    w.enemies.flags[elite] |= EnemyFlag.WeakPointOpen;
-    w.enemies.weakPointT[elite] = 30000;
+    w.enemies.flags[elite] |= EnemyFlag.WeakPointOpen;   // the boss script's own exposure window
     let firstTarget = -1;
-    for (let t = 0; t < 400; t++) {
+    for (let t = 0; t < 400 && fxCount(sim, 'ordnance.hunter.kill_order') === 0; t++) {
       combatTick(sim);
       const p = w.projectiles;
       if (firstTarget < 0) for (let i = 0; i < p.count; i++) if (p.kind[i] === ProjKind.Missile) { firstTarget = p.target[i]; break; }
     }
     expect(firstTarget).toBe(elite);
     expect(fxCount(sim, 'ordnance.hunter.kill_order')).toBeGreaterThan(0);
-    expect(w.enemies.weakPointT[elite]).toBeGreaterThan(30000 - 400);
+    const banked = w.enemies.weakPointT[elite];
+    expect(banked).toBeGreaterThanOrEqual(60);
+    expect(banked).toBeLessThanOrEqual(240);
+    // the boss script closes its window: Kill Order holds the weak point open for the banked time, then closes it
+    w.enemies.flags[elite] &= ~EnemyFlag.WeakPointOpen;
+    combatTick(sim);
+    expect(w.enemies.flags[elite] & EnemyFlag.WeakPointOpen).toBeTruthy();
+    expect(fxCount(sim, 'ordnance.hunter.kill_order.hold')).toBe(1);
+    w.stats.override('ordnance.damage', 0); w.rebuildStats();   // stop further extensions
+    ticks(sim, 300);
+    expect(w.enemies.flags[elite] & EnemyFlag.WeakPointOpen).toBeFalsy();
   });
 
   it('Swarm fires rocket pods that accelerate; Cascade launches follow-up rockets', () => {

@@ -275,13 +275,6 @@ export function wellAt(w: World, x: number, y: number): number {
   return -1;
 }
 
-/** Throttle helper: returns true (and records) when at least `gap` ticks passed since last[k]. */
-export function every(last: Int32Array, k: number, tick: number, gap: number): boolean {
-  if (tick - last[k] < gap) return false;
-  last[k] = tick;
-  return true;
-}
-
 /**
  * Remap a per-enemy typed array after pool compaction (remap[old] = new or -1). Values move with
  * their enemy; slots at/after the new count are reset to `fill`. Compaction only moves entities

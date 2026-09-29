@@ -100,7 +100,8 @@ export class BladeSystem implements System {
     const tick = w.tick;
     if (tick - this.lastMom > 60) this.stacks = 0;
     const chan = sh.bladeSpeedMul > 0 ? sh.bladeSpeedMul : 1;
-    const omega = this.rot * (1 + this.momentum * this.stacks) * chan * this.rotPenalty;
+    const dyn = w.dynamicSpeedMul > 0 ? w.dynamicSpeedMul : 1;   // Overdrive / Ember Heart / Critical Mass
+    const omega = this.rot * (1 + this.momentum * this.stacks) * chan * this.rotPenalty * dyn;
     const stepAbs = omega * TICK_DT;
     const nsub = Math.max(1, Math.ceil(stepAbs / MAX_SUB));
     const spin = w.signals && w.signals.bladeDir < 0 ? -1 : 1;   // WP8: Clockwork Blade / Reversal flip the spin

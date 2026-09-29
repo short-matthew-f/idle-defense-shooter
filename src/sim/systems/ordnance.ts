@@ -9,7 +9,8 @@
  * `tracking` rate; inside a Jammer aura they fly straight (no steering, no retarget).
  * Doctrines:
  *   hunter   profile 'elites'; +priority vs elites/bosses, +siegebreaker vs bosses;
- *            Kill Order: missile hits on an open weak point extend EnemyPool.weakPointT by 1 s (cap 4 s per opening)
+ *            Kill Order: missile hits on an open weak point bank +1 s in EnemyPool.weakPointT (cap 4 s per opening);
+ *            when the boss script closes the weak point this system holds it open for the banked time
  *   swarm    pods of `swarm.rockets` rockets (rocket_damage ×, rocket_blast ×), Afterburner acceleration
  *            (top speed and damage up to +afterburner), Cascade: each ordnance explosion may launch a smaller rocket
  *   bombard  Bomb Bay: `bomb_bay` shells per launcher lobbed (no en-route collision) at the densest group:
@@ -61,7 +62,7 @@ export class OrdnanceSystem implements System {
 
   init(w: World): void { this.rebuild(w); this.reset(w); }
   onAttemptStart(w: World): void { this.reset(w); }
-  private reset(w: World): void { this.timer = 0; this.salvos = 0; this.sN = 0; this.koExt.fill(0); this.evCursor = w.events.nextId; }
+  private reset(w: World): void { this.timer = 0; this.salvos = 0; this.sN = 0; this.koExt.fill(0); this.koOwned.fill(0); this.evCursor = w.events.nextId; }
 
   rebuild(w: World): void {
     const s = w.stats;
@@ -114,6 +115,7 @@ export class OrdnanceSystem implements System {
   update(w: World): void {
     if (!this.on) { this.sN = 0; this.evCursor = w.events.nextId; return; }
     if (this.cascade) this.scanExplosions(w); else this.evCursor = w.events.nextId;
+    if (this.killOrder) this.holdWeakPoints(w);
     this.steer(w);
     this.updateShells(w);
     this.timer += this.rate * globalRate(w) / cooldownFactor(w.stats) * TICK_DT;
@@ -342,7 +344,7 @@ export class OrdnanceSystem implements System {
     if (!this.killOrder || hit.source !== 'ordnance') return;
     const e = w.enemies, i = hit.enemy;
     if (!w.alive(i)) return;
-    if ((e.flags[i] & EnemyFlag.WeakPointOpen) === 0) { this.koExt[i] = 0; return; }
+    if ((e.flags[i] & EnemyFlag.WeakPointOpen) === 0) { if (!this.koOwned[i]) this.koExt[i] = 0; return; }
     if (this.koExt[i] >= this.koMax) return;
     const add = Math.min(this.koExtend, this.koMax - this.koExt[i]);
     this.koExt[i] += add;
@@ -350,8 +352,32 @@ export class OrdnanceSystem implements System {
     w.emit(Ev.Fx, 'ordnance.hunter.kill_order', i, add, e.x[i], e.y[i], hit.eventId);
   }
 
+  /**
+   * Kill Order exposure: EnemyPool.weakPointT is the extra exposure Kill Order banked. While the boss's own window
+   * is open it waits; when the boss script closes the weak point, this system re-opens it (koOwned) and counts the
+   * banked ticks down, closing it again at 0. The per-opening cap resets when that extension ends.
+   */
+  private holdWeakPoints(w: World): void {
+    const e = w.enemies;
+    for (let i = 0; i < e.count; i++) {
+      const f = e.flags[i];
+      if (f & EnemyFlag.Dead) continue;
+      if (this.koOwned[i]) {
+        if (e.weakPointT[i] > 0) e.weakPointT[i]--;
+        if (e.weakPointT[i] === 0) { e.flags[i] = f & ~EnemyFlag.WeakPointOpen; this.koOwned[i] = 0; this.koExt[i] = 0; }
+        else e.flags[i] = f | EnemyFlag.WeakPointOpen;
+      } else if (e.weakPointT[i] > 0 && (f & EnemyFlag.WeakPointOpen) === 0) {
+        this.koOwned[i] = 1;
+        e.flags[i] = f | EnemyFlag.WeakPointOpen;
+        w.emit(Ev.Fx, 'ordnance.hunter.kill_order.hold', i, e.weakPointT[i], e.x[i], e.y[i], -1);
+      }
+    }
+  }
+  private koOwned = new Uint8Array(MAX_ENEMIES);
+
   onCompact(w: World, remap: Int32Array, oldCount: number): void {
     remapArray(this.koExt, remap, oldCount, w.enemies.count, 0);
+    remapArray(this.koOwned, remap, oldCount, w.enemies.count, 0);
   }
 
   render(w: World, out: InstanceWriter): void {

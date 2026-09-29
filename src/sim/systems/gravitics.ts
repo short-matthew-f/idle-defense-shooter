@@ -45,7 +45,7 @@ export class GraviticsSystem implements System {
   // well slots: 0..3 main, 4.. chain
   private act = new Uint8Array(MAX_WELLS); private chainW = new Uint8Array(MAX_WELLS);
   private wx = new Float32Array(MAX_WELLS); private wy = new Float32Array(MAX_WELLS); private wr = new Float32Array(MAX_WELLS);
-  private life = new Int32Array(MAX_WELLS); private cd = new Int32Array(MAX_WELLS); private dmgMul = new Float32Array(MAX_WELLS);
+  private life = new Int32Array(MAX_WELLS); private cd = new Float32Array(MAX_WELLS); private dmgMul = new Float32Array(MAX_WELLS);
   private caps = new Int32Array(MAX_WELLS); private maxCaps = new Int32Array(MAX_WELLS); private spin = new Float32Array(MAX_WELLS);
   private focalT = new Int32Array(MAX_WELLS);
   private orbitT = new Uint16Array(MAX_ENEMIES); private orbitA = new Float32Array(MAX_ENEMIES);
@@ -92,10 +92,11 @@ export class GraviticsSystem implements System {
     sh.collapseCount = 0;
     if (!this.on) { sh.wellCount = 0; return; }
     const cf = cooldownFactor(w.stats);
+    const dyn = w.dynamicSpeedMul > 0 ? w.dynamicSpeedMul : 1;   // Overdrive / Ember Heart / Critical Mass: faster re-forming
     // spawn ready main wells
     for (let k = 0; k < this.wellsN; k++) {
       if (this.act[k]) continue;
-      if (this.cd[k] > 0) { this.cd[k]--; continue; }
+      if (this.cd[k] > 0) { this.cd[k] -= dyn; continue; }
       if (w.enemies.count === 0) continue;
       this.spawn(w, k);
     }
