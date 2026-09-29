@@ -15,7 +15,8 @@ import type { Command } from './types';
 export interface HitInfo {
   enemy: number;                // enemy pool index
   damage: number;               // final damage after armor, before status procs
-  source: WeaponSystemId | 'status' | 'ability' | 'hazard' | 'fusion' | 'linkage' | 'retaliation';
+  source: WeaponSystemId | 'status' | 'ability' | 'hazard' | 'fusion' | 'linkage' | 'retaliation'
+    /** WP2 addition: element procs (arcs, Flashpoint, Iceburst, Toxic Burst); never re-procs elements. */ | 'element';
   srcTag: string;               // e.g. 'ballistics', 'fusion.plasma', 'link.blade+laser', 'burn'
   crit: boolean;
   element: ElementId | null;    // element carried by the hit (primary native, infusion, fusion)
@@ -43,6 +44,13 @@ export interface System {
   onKill?(world: World, hit: HitInfo): void;
   onStatusApply?(world: World, enemy: number, status: StatusId, stacks: number, srcTag: string, cause: number): void;
   onTowerHit?(world: World, damage: number, enemy: number, cause: number): void;
+  /**
+   * WP2 addition. Damage-taken modifier: World.damage calls it for every non-true damage after the
+   * global power multipliers and before shock/brittle/armor/shields, and multiplies the damage by the
+   * return value (1 = none, 0 = absorb, e.g. Cryotoxin banking). `amount` is the damage at that point;
+   * `hit` has source/srcTag/crit/element filled in (read-only). May consume per-enemy marks (Static Charge).
+   */
+  damageMul?(world: World, enemy: number, amount: number, hit: HitInfo, ignoreArmor: boolean): number;
   /**
    * WP1 addition. Enemy pool compaction happened at end of tick: remap[oldIndex] = newIndex or -1 if freed
    * (valid for old indices < oldCount). Systems caching enemy indices across ticks repair them here.

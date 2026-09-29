@@ -18,6 +18,7 @@ import type { NodeDef, TreeDef } from '../data/schema';
 import type { DoctrineId, TreeId } from '../core/ids';
 import { allTrees, treeDef, nodeInfo, allNodes, type NodeInfo } from '../core/content';
 import { nodeCost, CORE_COSTS } from './curves';
+import { progressionCostMul, effectiveMaxRank, triadsUnlocked } from './prestige';   // WP8
 
 type Eval = { visible: boolean; locked?: string; cost: number; currency: 'scrap' | 'cores'; rank: number; maxRank: number };
 
@@ -51,7 +52,9 @@ function evaluate(w: WorldImpl, info: NodeInfo): Eval {
   const def = info.def, s = w.stats;
   const rank = w.build.ranks[def.id] | 0;
   const pc = nodeCost(def, rank);
-  const out: Eval = { visible: false, cost: pc.currency === 'scrap' ? Math.ceil(pc.cost * costMul(w, info)) : pc.cost, currency: pc.currency, rank, maxRank: def.maxRank };
+  // WP8: Branch Discount / Scatter reward (progressionCostMul) and Fusion Apex (effectiveMaxRank)
+  const out: Eval = { visible: false, cost: pc.currency === 'scrap' ? Math.ceil(pc.cost * costMul(w, info) * progressionCostMul(w, info, 'scrap')) : pc.cost * progressionCostMul(w, info, 'cores'),
+    currency: pc.currency, rank, maxRank: effectiveMaxRank(w, info) };
   switch (info.group) {
     case 'tree': {
       const t = treeDef(info.tree!);
@@ -61,7 +64,7 @@ function evaluate(w: WorldImpl, info: NodeInfo): Eval {
       break;
     }
     case 'ability': if (!info.ability || !w.build.abilities.includes(info.ability as never)) return out; break;
-    case 'fusion': case 'triad': if (!info.elements!.every((e) => s.attuned(e))) return out; break;
+    case 'fusion': case 'triad': if (!info.elements!.every((e) => s.attuned(e))) return out; if (info.group === 'triad' && !triadsUnlocked(w)) return out; break;   // WP8: Triads from Ascension II
     case 'link': if (!s.mounted(info.pair![0]) || !s.mounted(info.pair![1])) return out; break;
     case 'chassis_link': if (!s.mounted(info.pair![1])) return out; break;
     case 'infuse': if (!s.mounted(info.system!) || !s.attuned(info.elements![0])) return out; break;
@@ -72,7 +75,7 @@ function evaluate(w: WorldImpl, info: NodeInfo): Eval {
     const missing = def.requires.find((r) => (w.build.ranks[r] | 0) <= 0);
     if (missing) out.locked = `Requires ${nodeInfo(missing)?.def.name ?? missing}`;
   }
-  if (!out.locked && rank >= def.maxRank) out.locked = 'Max rank';
+  if (!out.locked && rank >= out.maxRank) out.locked = 'Max rank';
   return out;
 }
 
@@ -132,6 +135,7 @@ export function doctrineChoice(w: WorldImpl, tree: TreeId, doctrine: DoctrineId)
   const t = treeDef(tree);
   if (!t || !t.doctrines.some((d) => d.id === doctrine)) return { cost: 0, locked: 'Unknown doctrine', second: false };
   if (!w.stats.treeActive(tree)) return { cost: 0, locked: 'Tree not available', second: false };
+  if (w.stats.borrowed(tree)) return { cost: 0, locked: 'A Borrowed Blade takes no Doctrines', second: false };   // WP8
   const f = forkOpen(w, t);
   if (!f.open) return { cost: 0, locked: `Buy ${t.forkRequirement - f.owned} more ${t.name} nodes`, second: false };
   const cur = w.build.doctrines[tree];

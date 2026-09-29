@@ -1,0 +1,22 @@
+/* Prestige Forecast. */
+.forecast { display: flex; flex-direction: column; gap: 10px; }
+.recommend {
+  display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warn) 16%, var(--bg-2)); border: 1px solid var(--warn); font-weight: 700;
+}
+.recommend .ico { color: var(--warn); }
+.readouts { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.readout { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; }
+.ro-label { font-size: 14px; color: var(--text-dim); }
+.ro-val { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ro-sub { font-size: 14px; color: var(--text-dim); }
+.readout.warn .ro-val { color: var(--warn); font-size: 17px; }
+.fc-chart-wrap { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px; }
+.fc-chart { width: 100%; height: auto; display: block; }
+.fc-line { fill: none; stroke: var(--echo); stroke-width: 2.5; stroke-linejoin: round; }
+.fc-area { fill: color-mix(in srgb, var(--echo) 14%, transparent); stroke: none; }
+.fc-base { stroke: var(--line-2); stroke-width: 1; }
+.fc-peak { fill: var(--warn); stroke: #000; stroke-width: 1.5; }
+.fc-peak-lbl { fill: var(--warn); font-size: 12px; font-weight: 700; }
+.fc-now { fill: #fff; stroke: #000; stroke-width: 1; }
+.fc-axis { font-size: 14px; color: var(--text-dim); padding: 2px 4px 0; }

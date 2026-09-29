@@ -8,11 +8,12 @@
  *
  * The tick orchestration (order of phases) lives in src/sim/index.ts (Sim.step).
  */
-import type { World } from './world';
+import type { World, SharedGeometry, ProgressionSignals } from './world';
 import type { System, HitInfo } from './system';
-import type { ElementId, StatusId, TargetingProfile, WeaponSystemId } from './ids';
-import type { BuildState, EnemyPool, Hazard, MetaState, ProjectilePool, RunState, SimEvent, TowerState, WaveDef } from './types';
+import type { ElementId, StatusId, TargetingProfile, TrialId, WeaponSystemId } from './ids';
+import type { BuildState, Command, EnemyPool, Hazard, MetaState, ProjectilePool, RunState, SimEvent, TowerState, WaveDef } from './types';
 import { EnemyFlag, Ev, MAX_ENEMIES, MAX_HAZARDS, MAX_PROJECTILES, NO_ENTITY, ProjFlag, TICK_DT, TICK_RATE, ARENA_RADIUS } from './types';
+import { MAX_BLADES, MAX_DRONES, MAX_LASER_NODES, MAX_WELLS } from './types';   // WP3: shared geometry sizes
 import { Prng } from '../math/prng';
 import { atan2 } from '../math/lut';
 import { createEnemyPool, createProjectilePool, allocEnemy, allocProjectile, freeEnemy, freeProjectile as poolFreeProjectile, compactEnemies, compactProjectiles } from './pools';
@@ -76,6 +77,31 @@ export class WorldImpl implements World {
   waveScrap = 0;
   /** Kills during the current wave. */
   waveKills = 0;
+  /** WP9: attack-speed multiplier (Overdrive); see World.dynamicSpeedMul. */
+  dynamicSpeedMul = 1;
+  /** WP9: commands queued from inside the sim; Sim.step dispatches them at the start of the next tick. */
+  pendingCommands: Command[] = [];
+  enqueueCommand(cmd: Command): void { this.pendingCommands.push(cmd); }
+
+  /** WP5: live boss tell (enemies/bosses.ts writes it; ui-state reads it). */
+  bossTell: World['bossTell'] = { ability: null, ticksLeft: 0, bossIndex: -1 };
+  /** WP5: pre-armor damage multiplier hook (enemies/bosses.ts installs it). */
+  damageModifier: World['damageModifier'] = null;
+  /** WP3: shared hardpoint geometry (systems/hardpoints publish, linkages/infusions read). */
+  shared: SharedGeometry = newSharedGeometry();
+  /** WP2: Phoenix Last Stand etc. (see World.dynamicPowerMul). */
+  dynamicPowerMul = 1;
+  /** WP2: Reactive Armor (see World.towerArmorMul). */
+  towerArmorMul = 1;
+  /** WP2: overflow healing accumulator (Fortress Keep drains it). */
+  healOverflow = 0;
+  /** WP8: the Trial being played (meta.activeTrial), or null. */
+  get trial(): TrialId | null { return this.meta.activeTrial ?? null; }
+  /** WP8: progression signals (systems/anomalies.ts writes them). */
+  signals: ProgressionSignals = { bladeDir: 1, ghostEdges: 0, laserNodeMul: 1 };
+  private hookDmg: System[] = [];
+  /** WP2: element trees own the burn/poison/chill caps while attuned (cached per rebuild; 0 = use STATUS_CAPS). */
+  private elemCap: Record<string, number> = { burn: 0, poison: 0, chill: 0 };
 
   constructor(run: RunState, build: BuildState, meta: MetaState, tower: TowerState, prng: Prng) {
     this.run = run; this.build = build; this.meta = meta; this.tower = tower; this.prng = prng;
@@ -94,6 +120,7 @@ export class WorldImpl implements World {
     this.hookKill = systems.filter((s) => s.onKill);
     this.hookStatus = systems.filter((s) => s.onStatusApply);
     this.hookTower = systems.filter((s) => s.onTowerHit);
+    this.hookDmg = systems.filter((s) => s.damageMul);   // WP2
   }
 
   // -------------------------------------------------------------------------
@@ -107,6 +134,10 @@ export class WorldImpl implements World {
   private cacheStats(): void {
     const s = this.stats, t = this.tower;
     this.powerMul = s.get('combat.power_mul');
+    // WP2: attuned element trees set their status caps (fire.burn_stacks, poison.stack_cap, frost.chill_stacks)
+    this.elemCap.burn = s.attuned('fire') ? Math.max(1, Math.floor(s.get('fire.burn_stacks'))) : 0;
+    this.elemCap.poison = s.attuned('poison') ? Math.max(1, Math.floor(s.get('poison.stack_cap'))) : 0;
+    this.elemCap.chill = s.attuned('frost') ? Math.max(1, Math.floor(s.get('frost.chill_stacks'))) : 0;
     const maxHp = Math.max(1, s.get('bastion.max_hp'));
     if (t.maxHp > 0 && maxHp > t.maxHp && t.hp > 0) t.hp += maxHp - t.maxHp;   // buying max HP heals the difference
     t.maxHp = maxHp;
@@ -187,11 +218,13 @@ export class WorldImpl implements World {
     if (!this.alive(enemy) || !(amount > 0)) { h.x = opts.x ?? 0; h.y = opts.y ?? 0; return h; }
     h.x = opts.x ?? e.x[enemy]; h.y = opts.y ?? e.y[enemy];
     let dmg = amount;
+    if (this.damageModifier !== null) dmg *= this.damageModifier(enemy, h.element, opts.srcTag, opts.source);   // WP5: weak points, resistances
     let toHp = 0;
     if (opts.trueDamage) {
       toHp = dmg;
     } else {
-      dmg *= this.powerMul;
+      dmg *= this.powerMul * this.dynamicPowerMul;
+      for (let k = 0; k < this.hookDmg.length; k++) dmg *= this.hookDmg[k].damageMul!(this, enemy, dmg, h, !!opts.ignoreArmor);   // WP2
       const sh = e.shock[enemy];
       if (sh > 0) dmg *= 1 + 0.05 * sh;
       if (h.crit && e.brittle[enemy] > 0) dmg *= 1 + 0.15 * e.brittle[enemy];
@@ -237,7 +270,8 @@ export class WorldImpl implements World {
     // Scrap
     const w = run.wave;
     const first = run.firstClears[w] ? 1 : this.stats.get('economy.first_clear_mul');
-    const scrap = scrapPerKill(w, e.scrapMul[i], run.threatDial) * first * this.stats.get('economy.scrap_mul') * Math.max(1, e.clumpCount[i]);
+    const bossMul = (e.flags[i] & (EnemyFlag.Boss | EnemyFlag.Elite)) ? this.stats.get('economy.boss_scrap_mul') : 1;   // WP2: Boss Scavenging
+    const scrap = scrapPerKill(w, e.scrapMul[i], run.threatDial) * first * this.stats.get('economy.scrap_mul') * bossMul * Math.max(1, e.clumpCount[i]);
     this.addScrap(scrap);
     // Command Energy
     const f = e.flags[i];
@@ -295,7 +329,9 @@ export class WorldImpl implements World {
   // -------------------------------------------------------------------------
   statusCap(status: StatusId): number {
     let cap = STATUS_CAPS[status];
+    const ec = this.elemCap[status]; if (ec) cap = ec;   // WP2: attuned element tree caps
     if (this.stats.frameFlag('statuses_plus_one')) cap += 1;
+    if (status === 'burn' || status === 'poison' || status === 'chill' || status === 'shock') cap += Math.floor(this.stats.get('status.stack_cap_bonus'));   // WP8: Monochrome reward
     if (this.stats.has('prestige.overflow')) cap *= 2;
     return cap;
   }
@@ -476,7 +512,7 @@ export class WorldImpl implements World {
     const t = this.tower;
     if (t.hp <= 0 || !(amount > 0)) return;
     if (t.invulnT > 0) return;
-    const armor = this.stats.get('bastion.armor');
+    const armor = this.stats.get('bastion.armor') * this.towerArmorMul;   // WP2: Reactive Armor
     const res = Math.min(0.9, Math.max(0, this.stats.get('bastion.resistance')));
     let dmg = amount * (armor > 0 ? 100 / (100 + armor) : 1) * (1 - res);
     const total = dmg;
@@ -505,8 +541,10 @@ export class WorldImpl implements World {
   healTower(amount: number, cause: number): void {
     const t = this.tower;
     if (t.hp <= 0 || !(amount > 0)) return;
+    if (this.stats.hasAnomaly('hungry_core')) return;   // WP8: Hungry Core stops every other heal (kills heal in finishKill)
     const before = t.hp;
     t.hp = Math.min(t.maxHp, t.hp + amount);
+    if (before + amount > t.maxHp) this.healOverflow += before + amount - t.maxHp;   // WP2: Fortress Keep
     if (t.hp > before) this.emit(Ev.Heal, 'bastion', 0, t.hp - before, 0, 0, cause);
   }
   gainCE(amount: number): void {
@@ -552,6 +590,19 @@ export class WorldImpl implements World {
     this.enemies.count = 0; this.projectiles.count = 0; this.hazards.length = 0;
     this.pendingEnemyFrees = 0; this.pendingProjFrees = 0;
     this.tower.designated = NO_ENTITY; this.tower.designated2 = NO_ENTITY;
+    this.pendingCommands.length = 0;   // WP9: Directive commands never outlive their attempt
     this.spatial.rebuild();
   }
+}
+
+/** WP3: zeroed shared hardpoint geometry buffers (sizes from the entity budgets in core/types.ts). */
+function newSharedGeometry(): SharedGeometry {
+  return {
+    bladeCount: 0, bladeAngles: new Float32Array(MAX_BLADES), bladeInner: new Float32Array(MAX_BLADES), bladeLens: new Float32Array(MAX_BLADES), bladeSpeedMul: 1,
+    laserNodeCount: 0, laserNodes: new Float32Array(MAX_LASER_NODES * 2 + 16), laserBeamCount: 0, laserBeams: new Float32Array(96 * 4),
+    laserBeamWidth: 0, laserElement: 0, laserInterior: 0, laserWidthMul: 1, laserPulseRateMul: 1,
+    wellCount: 0, wells: new Float32Array(MAX_WELLS * 4), collapseCount: 0, collapses: new Float32Array(MAX_WELLS * 4),
+    droneCount: 0, drones: new Float32Array(MAX_DRONES * 3), droneBoost: new Float32Array(MAX_DRONES),
+    jammerTick: -1, jammerCount: 0, jammers: new Float32Array(64 * 3),
+  };
 }

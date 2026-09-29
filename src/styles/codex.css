@@ -1,0 +1,17 @@
+/* Chain Codex. */
+.codex { display: flex; flex-direction: column; gap: 6px; }
+.codex-summary { font-weight: 700; font-size: 16px; }
+.hint-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.hint-list li { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; color: var(--text-dim); font-style: italic; }
+.codex-group { border-top: 1px solid var(--line); }
+.codex-group summary { min-height: var(--touch); display: flex; align-items: center; justify-content: space-between; cursor: pointer; font-weight: 700; list-style: none; }
+.codex-group summary::-webkit-details-marker { display: none; }
+.codex-group summary::before { content: '▸'; margin-right: 8px; color: var(--text-dim); }
+.codex-group[open] summary::before { content: '▾'; }
+.codex-group summary span:first-of-type { flex: 1; }
+.codex-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px; padding-bottom: 10px; }
+.codex-entry { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-s); padding: 8px 10px; }
+.codex-entry:not(.found) { border-style: dashed; color: var(--text-faint); }
+.codex-entry.found .ce-name .ico { color: var(--ok); }
+.ce-name { display: flex; gap: 6px; align-items: center; font-size: 14px; font-weight: 700; }
+.ce-desc { margin: 4px 0 0; font-size: 14px; color: var(--text-dim); }

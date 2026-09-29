@@ -13,6 +13,7 @@
 import type { WorldImpl } from './world-impl';
 import type { WeaponSystemId, ElementId } from './ids';
 import { EnemyFlag, NO_ENTITY, ProjFlag, TICK_DT, TOWER_RADIUS, ARENA_RADIUS } from './types';
+import { Ev } from './types';   // WP8: Loaded Dice fires an Anomaly event (Codex)
 import { SYSTEM_ORDER_IDS, ELEMENT_ORDER } from '../data/index';
 import { targetable } from './spatial';
 
@@ -101,7 +102,8 @@ const IMPACT_ENDED = 0, IMPACT_PIERCED = 1, IMPACT_BOUNCED = 2;
 function impact(w: WorldImpl, i: number, enemy: number): number {
   const p = w.projectiles, e = w.enemies;
   const flags = p.flags[i];
-  const source = (SYSTEM_ORDER_IDS[p.source[i]] ?? 'primary') as WeaponSystemId;
+  // WP9: source indices past SYSTEM_ORDER_IDS (255 = tactical abilities) hit as 'ability'
+  const source = (SYSTEM_ORDER_IDS[p.source[i]] ?? 'ability') as WeaponSystemId | 'ability';
   const srcTag = w.tagName(p.tag[i]);
   const element = p.element[i] > 0 ? (ELEMENT_ORDER[p.element[i] - 1] as ElementId) : null;
   const hx = e.x[enemy], hy = e.y[enemy];
@@ -109,7 +111,10 @@ function impact(w: WorldImpl, i: number, enemy: number): number {
   let crit = (flags & ProjFlag.Crit) !== 0;
   if (!crit && p.critChance[i] > 0) {
     crit = w.prng.chance(p.critChance[i]);
-    if (!crit && w.stats.hasAnomaly('loaded_dice')) crit = w.prng.chance(p.critChance[i]);
+    if (!crit && w.stats.hasAnomaly('loaded_dice')) {
+      crit = w.prng.chance(p.critChance[i]);
+      if (crit) p.cause[i] = w.emit(Ev.Anomaly, 'anomaly.loaded_dice', enemy, 0, hx, hy, p.cause[i]);   // WP8: the re-roll is a chain link
+    }
   }
   if (crit) dmg *= p.critMul[i];
   if (p.execBonus[i] > 0 && e.hp[enemy] < 0.3 * e.maxHp[enemy]) dmg *= 1 + p.execBonus[i];

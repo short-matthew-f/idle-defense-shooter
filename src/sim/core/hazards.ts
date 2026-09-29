@@ -41,7 +41,7 @@ export function updateHazards(w: WorldImpl): void {
         const lx = line ? h.x2! - h.x : 0, ly = line ? h.y2! - h.y : 0;
         const reach = line ? Math.sqrt(lx * lx + ly * ly) * 0.5 + h.radius : h.radius;
         const n = w.spatial.queryRadius(cx, cy, reach, SCRATCH);
-        const tag = h.element ?? h.owner;
+        const tag = h.srcTag ?? h.element ?? h.owner;   // WP2: explicit srcTag wins
         for (let j = 0; j < n; j++) {
           const en = SCRATCH[j];
           if (!w.alive(en)) continue;

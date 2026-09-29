@@ -1,0 +1,27 @@
+/* Automation: Directives, Targeting Profiles, Upgrade Queue, Blueprints. */
+.automation { display: flex; flex-direction: column; gap: 8px; }
+.automation > .tabs { border-bottom: 1px solid var(--line); }
+.auto-content p { margin: 6px 0; }
+.rules { list-style: none; padding: 0; margin: 8px 0; display: flex; flex-direction: column; gap: 6px; }
+.rule { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); }
+.rule.off .rule-text { opacity: 0.55; text-decoration: line-through; }
+.rule.editing { border-color: var(--accent); }
+.rule.dragging { opacity: 0.5; }
+.rule.drop { outline: 2px dashed var(--accent); }
+.rule-head { display: flex; align-items: center; gap: 4px; padding: 2px 4px 2px 6px; flex-wrap: wrap; }
+.grip { color: var(--text-faint); cursor: grab; display: inline-flex; }
+.rule-num { width: 22px; text-align: center; font-weight: 800; color: var(--accent); }
+.rule-text { flex: 1 1 180px; min-width: 0; font-size: 14px; line-height: 1.35; padding: 4px 0; }
+.q-builder { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px 10px; border-top: 1px solid var(--line); }
+.builder { padding: 8px 10px 10px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.conds { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.cond-row, .act-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.kw { font-weight: 800; font-size: 14px; color: var(--accent); min-width: 46px; }
+.kw.do { color: var(--ok); }
+.num-wrap { display: inline-flex; align-items: center; gap: 4px; }
+.targeting { display: flex; flex-direction: column; }
+.tg-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.tg-name { font-weight: 600; }
+.bp { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 12px; margin: 6px 0; }
+.bp p { margin: 2px 0; }
+.bp-name { display: flex; gap: 6px; align-items: center; font-weight: 700; }

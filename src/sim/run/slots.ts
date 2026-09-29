@@ -10,6 +10,7 @@
 import type { WorldImpl } from '../core/world-impl';
 import { frameDef } from '../core/content';
 import { HARDPOINT_SLOT_WAVES, ATTUNEMENT_SLOT_WAVES } from '../economy/curves';
+import { trialHas } from '../economy/prestige';   // WP8: Trial slot caps
 
 const HARDPOINT_FLOORS = [0, 15, 35, 55];
 
@@ -17,12 +18,14 @@ function prank(w: WorldImpl, id: string): number { return w.meta.prestigeRanks[i
 
 export function hardpointCap(w: WorldImpl): number {
   const f = frameDef(w.build.frame);
+  if (trialHas(w.meta.activeTrial, 'no_hardpoints')) return 0;   // WP8: Bare Metal
   let cap = f.hardpointCap;
   if (prank(w, 'prestige.expanded_frame') > 0 && w.build.frame !== 'monolith') cap += 1;
   return Math.max(0, Math.min(cap, 4 - (f.freeMount ? 1 : 0)));
 }
 export function attunementCap(w: WorldImpl): number {
-  return frameDef(w.build.frame).attunementCap + (prank(w, 'prestige.third_attunement') > 0 ? 1 : 0);
+  const cap = frameDef(w.build.frame).attunementCap + (prank(w, 'prestige.third_attunement') > 0 ? 1 : 0);
+  return trialHas(w.meta.activeTrial, 'one_attunement') ? Math.min(1, cap) : cap;   // WP8: Monochrome
 }
 
 export function hardpointSlotWaves(w: WorldImpl): number[] {

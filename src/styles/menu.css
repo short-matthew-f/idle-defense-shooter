@@ -1,0 +1,14 @@
+/* Main menu. */
+.menu-list { display: flex; flex-direction: column; gap: 4px; }
+.menu-item {
+  display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 12px; cursor: pointer; text-align: left;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); color: var(--text);
+}
+.menu-item:hover { background: var(--bg-3); }
+.menu-item > .ico { color: var(--accent); }
+.mi-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.mi-label { font-weight: 700; font-size: 16px; }
+.mi-hint { font-size: 14px; color: var(--text-dim); }
+.mi-lock { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; color: var(--text-faint); white-space: nowrap; }
+.menu-item.locked .mi-label { color: var(--text-dim); }
+.menu-item.locked > .ico { color: var(--text-faint); }

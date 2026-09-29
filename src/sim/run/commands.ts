@@ -8,10 +8,14 @@ import type { RunMachine } from './machine';
 import { purchase, chooseDoctrine, spendKey } from '../economy/shop';
 import { allNodes } from '../core/content';
 import { CORE_COSTS, REFIT_REFUND, offlineScrap } from '../economy/curves';
+import { buyPrestigeNode, chooseDoctrineCmd, commandGuard, doPrestige, saveBlueprint, setThreatDial } from './prestige';   // WP8
+import { endTrial, startTrial } from './trials';                                                                        // WP8
+import { ascend, buyStar } from '../economy/ascension';                                                                 // WP8
+import { abilitySlotCount, secondDesignatorAllowed, trialActive } from '../systems/abilities';   // WP9
 
 /** Apply one command. Returns an error string (also stored in machine.lastError) or null. */
 export function applyCommand(m: RunMachine, cmd: Command): string | null {
-  const err = dispatch(m, cmd);
+  const err = commandGuard(m.w, cmd) ?? dispatch(m, cmd);   // WP8: Trial mount rules
   m.lastError = err;
   return err;
 }
@@ -20,7 +24,7 @@ function dispatch(m: RunMachine, cmd: Command): string | null {
   const w = m.w, run = w.run, b = w.build, t = w.tower;
   switch (cmd.type) {
     case 'buy': return purchase(w, cmd.node);
-    case 'choose_doctrine': return chooseDoctrine(w, cmd.tree, cmd.doctrine);
+    case 'choose_doctrine': return chooseDoctrineCmd(w, cmd.tree, cmd.doctrine, cmd.second);   // WP8: explicit second doctrine
     case 'mount_hardpoint': {
       if (cmd.slot < 0 || cmd.slot >= run.hardpointSlotsOpen) return 'Slot not open';
       if (b.hardpoints[cmd.slot]) return 'Slot occupied (Refit instead)';
@@ -69,26 +73,27 @@ function dispatch(m: RunMachine, cmd: Command): string | null {
     }
     case 'designate': {
       const slot = cmd.slot ?? 0;
+      if (trialActive(w, 'blackout')) return 'Designator disabled (Blackout)';                    // WP9
+      if (slot === 1 && !secondDesignatorAllowed(w)) return 'No second designator';              // WP9
       const i = cmd.enemy === null ? NO_ENTITY : cmd.enemy;
       if (i !== NO_ENTITY && !w.alive(i)) return 'No such enemy';
       const gen = i >= 0 ? w.enemies.gen[i] : 0;
       if (slot === 1) { t.designated2 = i; t.designated2Gen = gen; } else { t.designated = i; t.designatedGen = gen; }
+      for (const s of w.systems) s.onCommand?.(w, cmd);   // WP5: observers (boss Counters) see designations
       return null;
     }
-    case 'manual_aim': t.manualAim = cmd.active; t.manualAngle = cmd.angle; return null;
+    case 'manual_aim': if (cmd.active && trialActive(w, 'blackout')) return 'Manual aim disabled (Blackout)'; t.manualAim = cmd.active; t.manualAngle = cmd.angle; return null;
     case 'set_ability_slot': {
-      if (cmd.slot < 0 || cmd.slot >= b.abilities.length) return 'No such slot';
+      const slots = abilitySlotCount(w);                                                          // WP9
+      if (cmd.slot < 0 || cmd.slot >= slots) return 'No such slot';
+      while (b.abilities.length < slots) b.abilities.push(null);
       if (cmd.ability) for (let k = 0; k < b.abilities.length; k++) if (b.abilities[k] === cmd.ability) b.abilities[k] = null;
       b.abilities[cmd.slot] = cmd.ability;
       w.rebuildStats();
       return null;
     }
     case 'set_targeting': b.targeting[cmd.system] = cmd.profile; return null;
-    case 'set_threat_dial': {
-      if (!(cmd.level >= 0) || cmd.level >= run.threatDial) return 'The Threat Dial can only be lowered mid-run';
-      run.threatDial = Math.floor(cmd.level);
-      return null;
-    }
+    case 'set_threat_dial': return setThreatDial(w, cmd.level);   // WP8: lower only; Echoes pay at the lowest level used
     case 'offline_return': {
       const long = (w.meta.prestigeRanks['prestige.long_patrol'] | 0) > 0;
       const s = offlineScrap(run.patrolScrapPerSecond, cmd.elapsedSeconds, long);
@@ -96,17 +101,18 @@ function dispatch(m: RunMachine, cmd: Command): string | null {
       return null;
     }
     case 'set_setting': (w.meta.settings as Record<string, number | boolean>)[cmd.key] = cmd.value; return null;
+    // --- WP8: progression (run/prestige.ts, run/trials.ts, economy/ascension.ts) ---
+    case 'save_blueprint': return saveBlueprint(w, cmd.blueprint);
+    case 'prestige': return doPrestige(m, cmd);
+    case 'ascend': return ascend(m);
+    case 'buy_prestige': return buyPrestigeNode(w, cmd.node);
+    case 'buy_star': return buyStar(w, cmd.node);
+    case 'start_trial': return startTrial(m, cmd.trial);
+    case 'end_trial': return endTrial(m);
     // --- Owned by later work packages: offered to systems (System.onCommand), otherwise no-ops ---
-    case 'cast':               // TODO(WP9): abilities system
-    case 'set_directives':     // TODO(WP9): directives
-    case 'set_upgrade_queue':  // TODO(WP9): upgrade queue
-    case 'save_blueprint':     // TODO(WP7/WP9): blueprints
-    case 'prestige':           // TODO(WP8): run/prestige.ts
-    case 'ascend':             // TODO(WP8)
-    case 'buy_prestige':       // TODO(WP8)
-    case 'buy_star':           // TODO(WP8)
-    case 'start_trial':        // TODO(WP8): run/trials.ts
-    case 'end_trial':          // TODO(WP8)
+    case 'cast':               // WP9: systems/abilities.ts (observe-only: every system sees it)
+    case 'set_directives':     // WP9: directives/engine.ts
+    case 'set_upgrade_queue':  // WP9: directives/engine.ts (rules run by directives/upgrade-queue.ts)
       for (const s of w.systems) if (s.onCommand?.(w, cmd)) return null;
       return null;
     default: {

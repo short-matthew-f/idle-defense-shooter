@@ -22,6 +22,8 @@ import type { ElementId, TreeId, WeaponSystemId } from './ids';
 import type { StatEffect } from '../data/schema';
 import { BASE_STATS } from '../data/index';
 import { allNodes, nodeInfo, frameDef, anomalyDef, type NodeInfo } from './content';
+import { metaEffects, trialHas } from '../economy/prestige';   // WP8: Trial rewards/constraints
+import { codexMultiplier } from '../economy/codex';            // WP8: Codex +0.25%/entry
 
 /** Bases the core relies on even if data/base-stats.ts lacks them. */
 export const CORE_DEFAULTS: Record<string, number> = {
@@ -38,6 +40,9 @@ export const CORE_DEFAULTS: Record<string, number> = {
   'economy.scrap_mul': 1, 'economy.ce_cap': 100, 'economy.core_drop_chance': 0.02, 'economy.first_clear_mul': 3,
   'combat.power_mul': 1,
 };
+
+/** WP8: node granted by the Recursive Warhead Anomaly. */
+const RECURSIVE_NODE = 'ordnance.cluster_warheads';
 
 export function baseStat(key: string): number {
   const b = (BASE_STATS as Record<string, number> | undefined)?.[key];
@@ -95,6 +100,12 @@ export class StatResolver implements DerivedStats {
     const frame = frameDef(this.build.frame);
     apply(frame.effects, 1);
     for (const a of this.build.anomalies) { const d = anomalyDef(a); if (d) apply(d.effects, 1); }
+    // WP8: Recursive Warhead grants Cluster Warheads (rank 1) without the Exotic; meta effects (Trial rewards/constraints)
+    if (this.hasAnomaly('recursive_warhead') && this.mounted('ordnance') && !ranks.has(RECURSIVE_NODE)) {
+      ranks.set(RECURSIVE_NODE, 1); const inf = nodeInfo(RECURSIVE_NODE); if (inf) apply(inf.def.effects, 1);
+    }
+    apply(metaEffects(this.meta, this.build), 1);
+    const codexMul = codexMultiplier(this.meta);
 
     const values = this.values;
     values.clear();
@@ -108,6 +119,7 @@ export class StatResolver implements DerivedStats {
     for (const k of keys) {
       let v = (baseStat(k) + (add.get(k) ?? 0)) * (1 + (mul.get(k) ?? 0));
       const s = set.get(k); if (s !== undefined) v = s;
+      if (k === 'combat.power_mul' || k === 'economy.scrap_mul') v *= codexMul;   // WP8: Codex bonus
       const o = this.overrides.get(k); if (o !== undefined) v = o;
       values.set(k, v);
     }
@@ -127,10 +139,13 @@ export class StatResolver implements DerivedStats {
         const t = info.tree!;
         if (!this.treeActive(t)) return 0;
         if (info.doctrine && !this.hasDoctrine(t, info.doctrine)) return 0;
+        // WP8: a Borrowed Blade is tier 1 — no Doctrine, Exotic or tier 2+ nodes
+        if (t === 'blade' && this.borrowed('blade') && (info.doctrine || info.exotic || info.def.tier > 1)) return 0;
         break;
       }
       case 'fusion': case 'triad': {
         if (!info.elements!.every((e) => this.attuned(e))) return 0;
+        if (trialHas(this.meta.activeTrial, 'no_fusions')) return 0;   // WP8: Monochrome Trial
         if (info.group === 'fusion' && frameDef(this.build.frame).flags.includes('fusions_start_rank1')) r = Math.min(info.def.maxRank, r + 1);
         break;
       }
@@ -191,9 +206,14 @@ export class StatResolver implements DerivedStats {
   }
   hasAnomaly(id: string): boolean { return this.build.anomalies.includes(id as never); }
   mounted(system: WeaponSystemId | string): boolean {
-    if (system === 'primary') return true;
+    if (system === 'primary') return !trialHas(this.meta.activeTrial, 'no_primary');   // WP8: Hive Mind / Siege Mentality
+    if (this.borrowed(system)) return true;                                              // WP8: Borrowed Blade
     if (this.build.hardpoints.includes(system as never)) return true;
     return frameDef(this.build.frame).freeMount === system;
+  }
+  /** WP8: mounted only through the Borrowed Blade Anomaly (no hardpoint slot; tier 1 only). */
+  borrowed(system: WeaponSystemId | string): boolean {
+    return system === 'blade' && this.hasAnomaly('borrowed_blade') && !this.build.hardpoints.includes('blade') && frameDef(this.build.frame).freeMount !== 'blade';
   }
   attuned(element: ElementId | string): boolean { return this.build.attunements.includes(element as never); }
   frameFlag(flag: string): boolean { return frameDef(this.build.frame).flags.includes(flag); }

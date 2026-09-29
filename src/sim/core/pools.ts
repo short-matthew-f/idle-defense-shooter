@@ -42,6 +42,12 @@ export function createEnemyPool(cap: number): EnemyPool {
     burnCause: new Int32Array(cap), poisonCause: new Int32Array(cap), bleedCause: new Int32Array(cap),
     burnAcc: new Float32Array(cap), poisonAcc: new Float32Array(cap), bleedAcc: new Float32Array(cap),
     staticStacks: new Uint8Array(cap), staticT: new Uint16Array(cap), bleedDps: new Float32Array(cap),
+    fieldSlow: new Float32Array(cap),   // WP9 addition
+    // WP2 additions
+    bankedPoison: new Float32Array(cap), freezeLockUntil: new Int32Array(cap), thermalUntil: new Int32Array(cap),
+    flashUntil: new Int32Array(cap), bossSlowUntil: new Int32Array(cap), comboStart: new Int32Array(cap), comboMask: new Uint8Array(cap),
+    harmonicUntil: new Int32Array(cap),
+    weakPointT: new Uint16Array(cap),   // WP3 addition
   };
 }
 
@@ -56,6 +62,7 @@ export function createProjectilePool(cap: number): ProjectilePool {
     cause: new Int32Array(cap), lastHit: new Int32Array(cap), hitMask: new Uint32Array(cap),
     tag: new Uint16Array(cap), critMul: new Float32Array(cap), retention: new Float32Array(cap), pierceSpeed: new Float32Array(cap),
     bounceRange: new Float32Array(cap), knock: new Float32Array(cap), execBonus: new Float32Array(cap), pierced: new Uint8Array(cap),
+    hpBits: new Uint32Array(cap),   // WP3 addition
   };
 }
 

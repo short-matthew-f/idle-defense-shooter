@@ -21,8 +21,16 @@ function table(src: readonly number[] | undefined, min: number): Uint8Array {
   return t;
 }
 
+/** WP8: optional progression fields shared by RunState and RunSave (copied when present). */
+const RUN_EXTRAS = ['plannedHardpoints', 'plannedAttunements', 'plannedDoctrines', 'minThreatDial', 'discountTree', 'checkpointSeconds'] as const;
+function runExtras(src: RunState | RunSave): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const k of RUN_EXTRAS) { const v = src[k]; if (v !== undefined && v !== null) out[k] = clone(v); }
+  return out;
+}
+
 export function toRunSave(run: RunState, build: BuildState, prngState: [number, number, number, number]): RunSave {
-  return {
+  return Object.assign({
     prestigeSeed: run.prestigeSeed, wave: run.wave, checkpoint: run.checkpoint, deepestCleared: run.deepestCleared,
     firstClears: trimmed(run.firstClears), mode: run.mode, scrap: run.scrap, cores: run.cores,
     coresDroppedByBoss: trimmed(run.coresDroppedByBoss), threatDial: run.threatDial, attempts: run.attempts,
@@ -31,7 +39,7 @@ export function toRunSave(run: RunState, build: BuildState, prngState: [number, 
     hardpointSlotsOpen: run.hardpointSlotsOpen, attunementSlotsOpen: run.attunementSlotsOpen,
     patrolScrapPerSecond: run.patrolScrapPerSecond, longestChain: run.longestChain,
     build: clone(build), prngState: [...prngState] as [number, number, number, number], spentByTree: { ...run.spentByTree },
-  };
+  } as RunSave, runExtras(run));   // WP8: progression extras
 }
 
 export function toSave(sim: Serializable): SaveState {
@@ -52,6 +60,7 @@ export function fromRunSave(s: RunSave): { run: RunState; build: BuildState; prn
   run.hardpointSlotsOpen = s.hardpointSlotsOpen; run.attunementSlotsOpen = s.attunementSlotsOpen;
   run.patrolScrapPerSecond = s.patrolScrapPerSecond; run.longestChain = s.longestChain;
   run.spentByTree = { ...(s.spentByTree ?? {}) };
+  Object.assign(run, runExtras(s));   // WP8: progression extras
   return { run, build: clone(s.build), prngState: [...s.prngState] as [number, number, number, number] };
 }
 

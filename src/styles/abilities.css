@@ -1,0 +1,50 @@
+/* Ability bar: floats above the bottom sheet (phones) or at the bottom of the field (desktop). */
+.abilities {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--sheet-h) + var(--safe-bottom) + 10px);
+  display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 4;
+  transition: bottom 0.22s ease;
+}
+body.layout-side .abilities { bottom: calc(16px + var(--safe-bottom)); left: calc((100% - var(--panel-w)) / 2); }
+body.layout-side.panel-closed .abilities { left: 50%; }
+.ability-row { display: flex; gap: 12px; }
+.btn.ability {
+  position: relative; width: 60px; height: 60px; padding: 0; border-radius: 50%;
+  border: 2px solid var(--line-2);
+  background: conic-gradient(color-mix(in srgb, var(--ce) 60%, transparent) calc(var(--ce, 0) * 360deg), var(--bg-3) 0);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+.btn.ability::before {
+  content: ''; position: absolute; inset: 3px; border-radius: 50%; z-index: 2; pointer-events: none;
+  background: conic-gradient(rgba(0, 0, 0, 0.7) calc(var(--cd, 0) * 360deg), transparent 0);
+}
+.ab-ico { width: 48px; height: 48px; border-radius: 50%; background: var(--bg-2); display: grid; place-items: center; color: var(--text-dim); }
+.ab-ico .ico { width: 26px; height: 26px; }
+.btn.ability.ready { border-color: var(--ce); }
+.btn.ability.ready .ab-ico { color: var(--text); }
+.btn.ability.empty { border-style: dashed; background: var(--bg-2); }
+.btn.ability.armed { border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 45%, transparent); transform: scale(1.08); }
+.btn.ability.armed .ab-ico { color: var(--accent); }
+.btn.ability.counter { border: 3px dashed var(--warn); animation: pulse 0.7s infinite; }
+.btn.ability.nope { animation: shake 0.3s; }
+.ab-cost {
+  position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); z-index: 3;
+  font-size: 14px; font-weight: 700; line-height: 18px; padding: 0 6px; border-radius: 9px;
+  background: var(--bg-1); border: 1px solid var(--line-2); color: var(--ce);
+}
+.ab-cost:empty { display: none; }
+.ab-key { position: absolute; top: -6px; left: -2px; z-index: 3; font-size: 12px; color: var(--text-faint); font-weight: 700; }
+@media (hover: none) { .ab-key { display: none; } }
+.arm-hint {
+  display: flex; align-items: center; gap: 10px; padding: 0 4px 0 14px; border-radius: 24px;
+  background: var(--bg-1); border: 1px solid var(--accent); font-size: 14px; font-weight: 600; box-shadow: var(--shadow);
+}
+body.arming #game { cursor: crosshair; }
+
+.ab-picker { display: flex; flex-direction: column; gap: 6px; }
+.btn.abp-item { justify-content: flex-start; text-align: left; white-space: normal; padding: 8px 12px; gap: 12px; font-weight: 400; }
+.btn.abp-item.current { border-color: var(--accent); }
+.abp-main { display: flex; flex-direction: column; gap: 2px; }
+.abp-name { font-weight: 700; display: flex; gap: 8px; align-items: baseline; }
+.abp-cost { color: var(--ce); font-size: 14px; }
+.abp-desc, .abp-meta { font-size: 14px; color: var(--text-dim); }

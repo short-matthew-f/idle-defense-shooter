@@ -21,8 +21,14 @@ const PULSE_DT = PULSE / 60;
 
 export class StatusesSystem implements System {
   readonly id = 'statuses';
-  init(): void { /* stateless */ }
-  rebuild(): void { /* stateless */ }
+  init(w: World): void { this.rebuild(w); }
+  /** WP2: while Frost is attuned its tree sets the slow (frost.slow_per_stack, capped at frost.slow_cap); otherwise 12%/stack, cap 90%. */
+  private slowPer = 0.12; private slowCap = 0.9;
+  rebuild(w: World): void {
+    const s = w.stats;
+    if (s.attuned('frost')) { this.slowPer = Math.max(0, s.get('frost.slow_per_stack')); this.slowCap = Math.min(0.9, Math.max(0, s.get('frost.slow_cap'))); }
+    else { this.slowPer = 0.12; this.slowCap = 0.9; }
+  }
 
   update(world: World): void {
     const w = world as WorldImpl;
@@ -47,9 +53,10 @@ export class StatusesSystem implements System {
       // staggerT on a boss is an interrupt flag for its AI, not a stun
       if (e.frozenT[i] > 0 || (e.staggerT[i] > 0 && (f & EnemyFlag.Boss) === 0)) m = 0;
       else if (e.chill[i] > 0) {
-        const slow = 0.12 * e.chill[i] * ((f & EnemyFlag.Immovable) ? 0.5 : 1);
-        m = slow >= 0.9 ? 0.1 : 1 - slow;
+        const slow = this.slowPer * e.chill[i] * ((f & EnemyFlag.Immovable) ? 0.5 : 1);   // WP2: frost tree keys
+        m = slow >= this.slowCap ? 1 - this.slowCap : 1 - slow;
       }
+      if (e.fieldSlow[i] > 0) { m *= 1 - e.fieldSlow[i]; e.fieldSlow[i] = 0; }   // WP9: Time Field (written by plugins last tick)
       e.speedMul[i] = m;
 
       if (pulse) {

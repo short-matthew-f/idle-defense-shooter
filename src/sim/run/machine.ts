@@ -26,6 +26,8 @@ import { enemyHp } from '../economy/curves';
 import { betweenWaveHeal } from '../systems/tower';
 import { updateSlots } from './slots';
 import { rollDraft } from './draft';
+import { trialWave } from './trials';                 // WP8
+import { trialHas } from '../economy/prestige';       // WP8
 import { ARENA_RADIUS } from '../core/types';
 
 export const PHASE_TICKS = { between: 2 * TICK_RATE, wave_clear: 1.5 * TICK_RATE, dead: 1.5 * TICK_RATE, draftAuto: 30 * TICK_RATE } as const;
@@ -109,7 +111,8 @@ export class RunMachine {
 
   startWave(): void {
     const w = this.w, run = w.run;
-    const wave = generateWave(run.prestigeSeed, run.wave, run.threatDial, w.meta.ascension);
+    // WP8: Scatter Trial forces spread formations; Swarmstorm post-processes the wave (run/trials.ts)
+    const wave = trialWave(w, generateWave(run.prestigeSeed, run.wave, run.threatDial, w.meta.ascension, { scatter: trialHas(w.trial, 'scatter') }));
     w.wave = wave;
     this.cursor = 0; this.bossIndex = NO_ENTITY; this.clumpIndex = NO_ENTITY;
     run.waveTick = 0;

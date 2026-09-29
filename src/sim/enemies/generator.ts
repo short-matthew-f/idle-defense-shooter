@@ -574,7 +574,8 @@ function applyElites(rng: Prng, spawns: SpawnEntry[], wave: number, threatDial: 
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
-export function generateWave(prestigeSeed: number, wave: number, threatDial: number, ascension: number): WaveDef {
+export function generateWave(prestigeSeed: number, wave: number, threatDial: number, ascension: number,
+  /** WP8 addition: Scatter Trial — every ordinary wave uses a spread formation (Scattered Rain). */ opts?: { scatter?: boolean }): WaveDef {
   const w = wave < 1 ? 1 : Math.floor(wave);
   const rng = new Prng(waveSeed(prestigeSeed, w));
   const sectorDef = SECTORS[sectorIndexForWave(w)];
@@ -613,7 +614,8 @@ export function generateWave(prestigeSeed: number, wave: number, threatDial: num
     spawns[0].elite = [];
     spawns[0].hpScale = dialScale;
   } else {
-    const tpl = pickTemplate(rng, w, ascension);
+    let tpl = pickTemplate(rng, w, ascension);
+    if (opts?.scatter) tpl = FORMATION_BY_ID.scattered_rain;   // WP8: same RNG draws, spread layout
     formation = tpl.id;
     params = varyParams(rng, tpl.defaults);
     const roster = rosterForWave(w, tpl.id);

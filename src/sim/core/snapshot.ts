@@ -90,7 +90,7 @@ export function writeScene(w: WorldImpl, out: SnapshotWriter, fromEvent: number,
     const f = e.flags[i];
     if (f & EnemyFlag.Dead) continue;
     let shape: number, col: [number, number, number];
-    if (f & EnemyFlag.Boss) { const b = bossDefByIndex(e.bossId[i], w.run.wave); shape = b.shape; col = b.color; }
+    if ((f & EnemyFlag.Boss) || e.bossId[i] >= 0) { const b = bossDefByIndex(e.bossId[i], w.run.wave); shape = b.shape; col = b.color; }   // WP5: boss clones (bossId >= 0) share the boss look
     else { const d = enemyDefByIndex(e.kind[i]); shape = d.shape; col = d.color; }
     const frac = e.maxHp[i] > 0 ? e.hp[i] / e.maxHp[i] : 1;
     out.push(e.x[i], e.y[i], e.radius[i], e.angle[i], shape, col[0], col[1], col[2], (f & EnemyFlag.Phased) ? 0.45 : 1, 4, frac, w.stateBits(i));
@@ -98,9 +98,9 @@ export function writeScene(w: WorldImpl, out: SnapshotWriter, fromEvent: number,
   for (let i = 0; i < e.count; i++) {
     const f = e.flags[i];
     if (f & EnemyFlag.Dead) continue;
-    const shape = (f & EnemyFlag.Boss) ? bossDefByIndex(e.bossId[i], w.run.wave).shape : enemyDefByIndex(e.kind[i]).shape;
+    const shape = ((f & EnemyFlag.Boss) || e.bossId[i] >= 0) ? bossDefByIndex(e.bossId[i], w.run.wave).shape : enemyDefByIndex(e.kind[i]).shape;
     let r = 0.05, g = 0.05, b = 0.08, a = 0.85;
-    if (f & EnemyFlag.Boss) { r = 1; g = 1; b = 1; }
+    if ((f & EnemyFlag.Boss) || e.bossId[i] >= 0) { r = 1; g = 1; b = 1; }
     else if (f & EnemyFlag.Elite) { r = 1; g = 0.84; b = 0.36; }
     else if (e.frozenT[i] > 0) { r = 0.7; g = 0.95; b = 1; }
     else if (e.markedT[i] > 0 || i === t.designated || i === t.designated2) { r = 1; g = 0.3; b = 0.3; }

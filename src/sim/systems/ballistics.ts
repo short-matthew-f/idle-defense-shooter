@@ -90,7 +90,7 @@ export class BallisticsSystem implements System {
     const t = w.tower;
     const manual = t.manualAim;
     const profile = w.build.targeting.primary ?? 'nearest';
-    const target = manual ? NO_ENTITY : w.nearestEnemy(0, 0, this.range, profile, 'primary');
+    const target = manual || w.trial === 'commander' ? NO_ENTITY : w.nearestEnemy(0, 0, this.range, profile, 'primary');   // WP8: Commander Trial — no automatic fire
     let desired = this.aim;
     if (manual) desired = t.manualAngle;
     else if (target >= 0) desired = this.leadAngle(w, target);
@@ -99,7 +99,7 @@ export class BallisticsSystem implements System {
     this.aim = wrapAngle(this.aim + clamp(diff, -turn, turn));
     t.aimAngle = this.aim;
 
-    this.timer += this.rate * TICK_DT;
+    this.timer += this.rate * w.dynamicSpeedMul * TICK_DT;   // WP9: Overdrive
     if (!manual && target < 0) { if (this.timer > 1) this.timer = 1; return; }
     if (!manual && Math.abs(angleDiff(this.aim, desired)) > ALIGN) { if (this.timer > 1) this.timer = 1; return; }
     let shots = 0;

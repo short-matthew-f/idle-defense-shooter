@@ -76,6 +76,11 @@ export class Sim implements ISim {
       this.queue = [];
       for (const c of q) applyCommand(m, c);
     }
+    if (w.pendingCommands.length) {   // WP9: Directive / Autocast commands, same dispatch path
+      const q = w.pendingCommands;
+      w.pendingCommands = [];
+      for (const c of q) applyCommand(m, c);
+    }
     m.preTick();
     m.spawnScheduled();
     this.statuses.update(w);

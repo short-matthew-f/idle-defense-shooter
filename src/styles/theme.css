@@ -1,0 +1,67 @@
+/* Design tokens. --accent / --accent-2 follow the current Sector palette (set by GameUi). */
+:root {
+  --bg-0: #0b0d12;
+  --bg-1: rgba(14, 18, 26, 0.93);
+  --bg-2: #161c28;
+  --bg-3: #1f2737;
+  --bg-4: #2b3548;
+  --line: #262f41;
+  --line-2: #36425a;
+  --text: #e6ecf6;
+  --text-dim: #a3afc4;
+  --text-faint: #717e96;
+  --accent: rgb(255 184 56);
+  --accent-2: rgb(255 117 41);
+  --on-accent: #101318;
+  /* status colours: Okabe–Ito-derived, always paired with a shape or label */
+  --ok: #4fd08a;
+  --warn: #f5b041;
+  --bad: #ff6070;
+  --info: #56b4e9;
+  --scrap: #ffcc4d;
+  --cores: #c79bff;
+  --echo: #6fe3ff;
+  --star: #fff0a0;
+  --hp: #e8505f;
+  --shield: #56b4e9;
+  --barrier: #d8c93a;
+  --ce: #1fc79b;
+  --r-common: #c4ccda;
+  --r-rare: #56b4e9;
+  --r-paradox: #d58ce0;
+  --r-cursed: #e69f00;
+  --radius: 10px;
+  --radius-s: 8px;
+  --touch: 44px;
+  --panel-w: 360px;
+  --hud-h: 0px;
+  --sheet-h: 132px;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+[hidden] { display: none !important; }
+
+#ui { font: 15px/1.35 var(--font); color: var(--text); }
+#ui button, #ui input, #ui select, #ui textarea { font: inherit; color: inherit; }
+#ui :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.row { display: flex; align-items: center; }
+.gap { gap: 8px; }
+.end { justify-content: flex-end; }
+.between { justify-content: space-between; }
+.wrap { flex-wrap: wrap; }
+.grow { flex: 1; }
+.dim { color: var(--text-dim); }
+.small { font-size: 14px; }
+.tabular, .res-val, .bar-label, .price { font-variant-numeric: tabular-nums; }
+
+.ico { width: 20px; height: 20px; flex: none; display: inline-block; vertical-align: middle; }
+.ico.tiny { width: 16px; height: 16px; }
+.ico.big { width: 32px; height: 32px; }
+.ico.huge { width: 64px; height: 64px; }
+
+@keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--warn) 60%, transparent); } 50% { box-shadow: 0 0 0 6px transparent; } }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+@media (prefers-reduced-motion: reduce) { #ui * { animation: none !important; transition: none !important; } }

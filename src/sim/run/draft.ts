@@ -8,6 +8,7 @@ import type { AnomalyDef } from '../data/schema';
 import type { WorldImpl } from '../core/world-impl';
 import { Prng, combineSeed } from '../math/prng';
 import { allAnomalies } from '../core/content';
+import { codexAnomalyWeight } from '../economy/codex';   // WP8: Codex milestones weight non-Common offers
 
 const RARITY_WEIGHT: Record<string, number> = { common: 5, rare: 3, cursed: 2, paradox: 1 };
 
@@ -29,7 +30,7 @@ export function needsMet(w: WorldImpl, a: AnomalyDef): boolean {
 
 export function rollDraft(w: WorldImpl, wave: number, rerolls: number): AnomalyId[] {
   const rng = new Prng(combineSeed(w.run.prestigeSeed, 0xd4af7, wave, rerolls));
-  const paradoxBoost = (w.meta.prestigeRanks['prestige.paradox_pool'] | 0) > 0 ? 2 : 1;
+  const paradoxBoost = 1 + Math.max(0, w.stats.get('prestige.paradox_pool'));   // WP8: Paradox Pool +50%/rank
   const cands = allAnomalies().filter((a) => poolAllowed(w, a) && !w.build.anomalies.includes(a.id));
   const out: AnomalyId[] = [];
   let lacking = 0;
@@ -40,7 +41,7 @@ export function rollDraft(w: WorldImpl, wave: number, rerolls: number): AnomalyI
       const met = needsMet(w, a);
       if (!met && lacking >= 1) continue;
       items.push(a);
-      weights.push((RARITY_WEIGHT[a.rarity] ?? 1) * (a.rarity === 'paradox' ? paradoxBoost : 1) * (met ? 3 : 1));
+      weights.push((RARITY_WEIGHT[a.rarity] ?? 1) * (a.rarity === 'paradox' ? paradoxBoost : 1) * (met ? 3 : 1) * codexAnomalyWeight(w.meta, a.rarity));
     }
     if (items.length === 0) break;
     const a = rng.pickWeighted(items, weights);

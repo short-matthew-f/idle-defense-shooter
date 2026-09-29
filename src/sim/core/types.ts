@@ -98,6 +98,19 @@ export interface EnemyPool {
   bleedDps: Float32Array;
   /** 'static' status stacks (Lightning Chain doctrine). */
   staticStacks: Uint8Array; staticT: Uint16Array;
+  /** WP9 addition: fraction of movement removed NEXT tick by area fields (Time Field; 0 = none). Plugins write max(); statuses consumes and clears it. */
+  fieldSlow: Float32Array;
+  // --- WP2 additions (elements, fusions, reactor) ---------------------------
+  /** Cryotoxin: poison damage banked while frozen; released ×fusion.cryotoxin on thaw. */
+  bankedPoison: Float32Array;
+  /** Tick-stamped lockouts: Deep Freeze (5 s), Thermal Shock (1 s), Flashpoint re-eruption, boss Deep Freeze slow window. */
+  freezeLockUntil: Int32Array; thermalUntil: Int32Array; flashUntil: Int32Array; bossSlowUntil: Int32Array;
+  /** Synchronization: start tick of the current combo window and the bitmask of weapon systems (SYSTEM_ORDER_IDS index) that hit in it. */
+  comboStart: Int32Array; comboMask: Uint8Array;
+  /** Harmonic Lock: tick until which the enemy takes the +50% bonus. */
+  harmonicUntil: Int32Array;
+  /** WP3 addition: ticks left on an open boss weak point (Kill Order extends it; boss scripts may read/close on 0). */
+  weakPointT: Uint16Array;
 }
 
 export const enum EnemyFlag {
@@ -155,6 +168,8 @@ export interface ProjectilePool {
   knock: Float32Array;           // knockback units per hit (0 = none)
   execBonus: Float32Array;       // bonus damage fraction vs enemies below 30% HP
   pierced: Uint8Array;           // enemies pierced so far
+  /** WP3 addition: hardpoint-private per-projectile bits (seeker steering, retargets, wells passed, linkage marks); see systems/hardpoints/common.ts. */
+  hpBits: Uint32Array;
 }
 export const enum ProjFlag { Crit = 1 << 0, Homing = 1 << 1, Manual = 1 << 2, Marked = 1 << 3, CrossedBeam = 1 << 4, CrossedBlade = 1 << 5, Lensed = 1 << 6, Echo = 1 << 7, FromDrone = 1 << 8, Hostile = 1 << 9, Duplicate = 1 << 10, Cluster = 1 << 11,
   /** WP1 additions */ LastRites = 1 << 12, ReturnFire = 1 << 13, Stagger = 1 << 14, Dead = 1 << 15 }
@@ -180,6 +195,8 @@ export interface TowerState {
 export interface Hazard {
   kind: 'fire_zone' | 'toxic_cloud' | 'ice_patch' | 'plasma_line' | 'shell_zone' | 'firestorm' | 'enemy_hazard' | 'time_field' | 'barrier_field';
   x: number; y: number; x2?: number; y2?: number; radius: number; life: number; dps: number; element?: ElementId; cause: number; owner: WeaponSystemId | 'enemy' | 'ability';
+  /** WP2 addition: damage srcTag for attribution (e.g. 'fusion.plasma'); default element ?? owner. */
+  srcTag?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -223,7 +240,7 @@ export interface RunState {
   attemptsPerCheckpoint: number[]; // index checkpoint/5
   prestigeStartedAt: number;    // real seconds (save-side wall clock, only for Forecast; never read by sim math)
   playSeconds: number;          // accumulated simulated seconds (ticks / 60)
-  echoRateHistory: { seconds: number; echoes: number }[];
+  echoRateHistory: { seconds: number; echoes: number; /** WP8: deepest wave cleared at the sample */ wave?: number }[];
   pendingDraft: AnomalyId[] | null;
   anomaliesOfferedAt: Uint8Array; // per wave/10
   hardpointSlotsOpen: number;
@@ -233,6 +250,18 @@ export interface RunState {
   longestChain: number;
   /** Scrap spent per tree/system this Prestige (Refit refunds 60% of the removed system's spend). */
   spentByTree: Record<string, number>;
+  // --- WP8 additions (progression; all optional, saved by save/serialize.ts) ---
+  /** Blueprint plan: systems/elements mounted automatically as slots open (in order). */
+  plannedHardpoints?: HardpointId[];
+  plannedAttunements?: ElementId[];
+  /** Blueprint plan: doctrines chosen automatically when each tree's fork opens. */
+  plannedDoctrines?: Partial<Record<TreeId, DoctrineId>>;
+  /** Lowest Threat Dial level used this Prestige (Echoes pay at this level). */
+  minThreatDial?: number;
+  /** Branch Discount: the tree chosen at Prestige start (−25%). */
+  discountTree?: TreeId | null;
+  /** playSeconds at the first reach of each checkpoint (index = checkpoint / 5), for the Reclimb estimate. */
+  checkpointSeconds?: number[];
 }
 
 export interface MetaState {
@@ -253,6 +282,15 @@ export interface MetaState {
   keepsake: AnomalyId | null;
   records: { deepestWave: number; longestChain: number; fastestWave100Seconds: number | null };
   settings: { clarity: number; autoPrestige: boolean };
+  // --- WP8 additions (optional) ---
+  /** The main run, parked while a Trial runs (run/trials.ts). */
+  parkedRun?: RunSave;
+  /** The Trial being played (World.trial reads this), or null. */
+  activeTrial?: TrialId | null;
+  /** checkpointSeconds of the previous Prestige (Forecast reclimb estimate). */
+  lastRunCheckpointSeconds?: number[];
+  /** Palettes unlocked by Codex milestones (e.g. 'palette.10'). */
+  palettes?: string[];
 }
 
 export interface Blueprint {
@@ -291,7 +329,8 @@ export type DirectiveAction =
 // ---------------------------------------------------------------------------
 export type Command =
   | { type: 'buy'; node: NodeId }                         // one rank of a Scrap node (or Core node)
-  | { type: 'choose_doctrine'; tree: TreeId; doctrine: DoctrineId }
+  | { type: 'choose_doctrine'; tree: TreeId; doctrine: DoctrineId;
+      /** WP8 addition: explicitly choose the tree's SECOND doctrine (Dual Doctrine, Spare Barrel, Monolith, Bulwark, Singularity Core). */ second?: boolean }
   | { type: 'mount_hardpoint'; slot: number; system: HardpointId }
   | { type: 'refit_hardpoint'; slot: number; system: HardpointId }
   | { type: 'attune'; slot: number; element: ElementId }
@@ -300,12 +339,16 @@ export type Command =
   | { type: 'set_mode'; mode: RunMode }
   | { type: 'restart_checkpoint' }
   | { type: 'set_speed'; speed: 1 | 2 | 4 | 8 }
-  | { type: 'designate'; enemy: number | null; slot?: 0 | 1 }
+  | { type: 'designate'; enemy: number | null; slot?: 0 | 1;
+      /** WP9 addition: issued by a Directive (not a human). */ viaDirective?: boolean }
   | { type: 'manual_aim'; active: boolean; angle: number }
-  | { type: 'cast'; ability: AbilityId; x: number; y: number; target?: number }
+  | { type: 'cast'; ability: AbilityId; x: number; y: number; target?: number;
+      /** WP9/WP5 addition: issued by a Directive or Autocast (Counters earn directives.counter_efficiency). */ viaDirective?: boolean;
+      /** WP9 addition: index of the issuing Directive in meta.directives (-1 = Autocast). */ directive?: number }
   | { type: 'set_ability_slot'; slot: number; ability: AbilityId | null }
   | { type: 'set_targeting'; system: WeaponSystemId; profile: TargetingProfile }
-  | { type: 'prestige'; frame: FrameId; blueprint?: number; threatDial?: number }
+  | { type: 'prestige'; frame: FrameId; blueprint?: number; threatDial?: number;
+      /** WP8 additions: Keepsake Anomaly to keep (must be socketed), Branch Discount tree. */ keepsake?: AnomalyId; discountTree?: TreeId }
   | { type: 'ascend' }
   | { type: 'buy_prestige'; node: NodeId }
   | { type: 'buy_star'; node: NodeId }
@@ -386,7 +429,7 @@ export interface UiState {
   tower: Pick<TowerState, 'hp' | 'maxHp' | 'shield' | 'maxShield' | 'barrier' | 'maxBarrier' | 'tempHp' | 'ce' | 'ceCap'>;
   build: BuildState;
   meta: MetaState;
-  wave: { sector: string; isBoss: boolean; bossId: BossId | null; bossPhase: number; bossHp: number; bossMaxHp: number; bossPhaseMarks: number[]; tellActive: AbilityId | null; tellTicksLeft: number; enemiesAlive: number; enemiesTotal: number; spawned: number; formation: FormationId | null; progress: number; weakPointOpen: boolean };
+  wave: { sector: string; isBoss: boolean; bossId: BossId | null; bossPhase: number; bossHp: number; bossMaxHp: number; bossPhaseMarks: number[]; tellActive: AbilityId | 'designate' | null; tellTicksLeft: number; enemiesAlive: number; enemiesTotal: number; spawned: number; formation: FormationId | null; progress: number; weakPointOpen: boolean };
   shop: ShopEntry[];             // every currently visible node with price and affordability
   abilities: { id: AbilityId; cost: number; cooldown: number; ready: boolean }[];
   forecast: Forecast | null;
@@ -433,12 +476,15 @@ export interface SaveState {
 export interface RunSave {
   prestigeSeed: number; wave: number; checkpoint: number; deepestCleared: number; firstClears: number[];
   mode: RunMode; scrap: number; cores: number; coresDroppedByBoss: number[]; threatDial: number; attempts: number;
-  attemptsPerCheckpoint: number[]; prestigeStartedAt: number; playSeconds: number; echoRateHistory: { seconds: number; echoes: number }[];
+  attemptsPerCheckpoint: number[]; prestigeStartedAt: number; playSeconds: number; echoRateHistory: { seconds: number; echoes: number; wave?: number }[];
   anomaliesOfferedAt: number[]; hardpointSlotsOpen: number; attunementSlotsOpen: number; patrolScrapPerSecond: number; longestChain: number;
   build: BuildState;
   prngState: [number, number, number, number];
   /** WP1 addition: Scrap spent per tree (Refit refunds). Optional for old saves. */
   spentByTree?: Record<string, number>;
+  /** WP8 additions (see RunState). */
+  plannedHardpoints?: HardpointId[]; plannedAttunements?: ElementId[]; plannedDoctrines?: Partial<Record<TreeId, DoctrineId>>;
+  minThreatDial?: number; discountTree?: TreeId | null; checkpointSeconds?: number[];
 }
 
 // ---------------------------------------------------------------------------
