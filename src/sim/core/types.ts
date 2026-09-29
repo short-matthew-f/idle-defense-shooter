@@ -1,0 +1,450 @@
+/**
+ * Shared runtime contracts for the simulation. Everything in src/sim is pure
+ * TypeScript with no DOM access; the same code runs in a Web Worker and in Node.
+ *
+ * Conventions
+ *  - Time: fixed 60 Hz ticks. `tick` is an integer. TICK_DT = 1/60 seconds.
+ *  - Space: the arena is a circle of radius ARENA_RADIUS centered on the tower at (0,0).
+ *    Units are "arena units"; the tower body has radius TOWER_RADIUS.
+ *  - Entities: struct-of-arrays pools; an entity is referenced by its pool index while
+ *    alive, and by an EntityRef (index + generation) when it must be remembered across ticks.
+ *  - Events: every event has an id and a cause id (the parent event), forming the kill chain.
+ */
+import type {
+  AbilityId, AnomalyId, BossId, DoctrineId, ElementId, EliteModifier, EnemyKind, FormationId,
+  FrameId, HardpointId, NodeId, StatusId, TargetingProfile, TreeId, TrialId, WeaponSystemId,
+} from './ids';
+
+export const TICK_RATE = 60;
+export const TICK_DT = 1 / TICK_RATE;
+export const ARENA_RADIUS = 520;      // enemies spawn on this perimeter
+export const TOWER_RADIUS = 22;
+export const INNER_RING = 120;        // "inner ring" for Directive conditions and Critical Mass
+export const CE_CAP_BASE = 100;
+
+/** Entity budgets (design §20). Past these, swarms merge into Clumps. */
+export const MAX_ENEMIES = 1500;
+export const MAX_PROJECTILES = 4000;
+export const MAX_DRONES = 64;
+export const MAX_WELLS = 16;
+export const MAX_LASER_NODES = 16;
+export const MAX_BLADES = 4;
+export const MAX_HAZARDS = 256;
+
+/** index + generation; `gen` mismatch means the slot was recycled. */
+export interface EntityRef { index: number; gen: number }
+export const NO_ENTITY = -1;
+
+// ---------------------------------------------------------------------------
+// Enemy pool (struct of arrays)
+// ---------------------------------------------------------------------------
+export interface EnemyPool {
+  count: number;                 // live count (compact; index < count is alive)
+  capacity: number;
+  gen: Uint32Array;
+  kind: Uint8Array;              // EnemyKind index (see data/enemies.ts KIND_INDEX)
+  x: Float32Array; y: Float32Array;
+  vx: Float32Array; vy: Float32Array;
+  hp: Float32Array; maxHp: Float32Array;
+  shield: Float32Array; maxShield: Float32Array;
+  armor: Float32Array;           // flat armor; damage after armor = dmg * 100/(100+armor)
+  radius: Float32Array;
+  speed: Float32Array;           // base movement speed (units/s) before statuses
+  angle: Float32Array;           // facing / formation angle
+  flags: Uint32Array;            // EnemyFlag bitfield
+  eliteMods: Uint16Array;        // EliteModifier bitfield
+  bossId: Int8Array;             // -1 unless kind === boss
+  bossPhase: Uint8Array;
+  spawnTick: Int32Array;
+  lastHitTick: Int32Array;
+  // Status stacks. Stacks are integers; durations in ticks.
+  burn: Uint8Array; burnT: Uint16Array; burnDps: Float32Array;
+  poison: Uint8Array; poisonT: Uint16Array; poisonDps: Float32Array;
+  chill: Uint8Array; chillT: Uint16Array;
+  shock: Uint8Array; shockT: Uint16Array;
+  bleed: Uint8Array; bleedT: Uint16Array;
+  brittle: Uint8Array; brittleT: Uint16Array;
+  markedT: Uint16Array;          // designated / Hunter Mark ticks remaining
+  frozenT: Uint16Array;          // Deep Freeze; > 0 means frozen solid
+  staggerT: Uint16Array;
+  /** Per-enemy scratch used by AI (healer targets, leech tethers, formation slot). */
+  aiA: Float32Array; aiB: Float32Array; aiI: Int32Array;
+  /** Formation slot: target position the formation script wants this enemy at. */
+  fx: Float32Array; fy: Float32Array;
+  /** Damage bookkeeping for Salvage / Codex: last cause event id. */
+  lastCause: Int32Array;
+  /** Count merged into this entity when kind === clump. */
+  clumpCount: Uint16Array;
+}
+
+export const enum EnemyFlag {
+  Elite         = 1 << 0,
+  Boss          = 1 << 1,
+  Immovable     = 1 << 2,  // Anchor: immune to pull/knockback/freeze
+  Phased        = 1 << 3,  // currently intangible (Phase)
+  Burrowed      = 1 << 4,
+  Refracts      = 1 << 5,  // Refractor: deflects beams
+  Jams          = 1 << 6,  // Jammer aura
+  Nullifies     = 1 << 7,  // Nullifier aura: strips statuses
+  Shielder      = 1 << 8,  // Warden: projects shields onto others
+  Healer        = 1 << 9,
+  Kamikaze      = 1 << 10,
+  Ranged        = 1 << 11, // Artillery: attacks from range
+  Support       = 1 << 12, // targeting profile "support"
+  WeakPointOpen = 1 << 13, // boss weak point exposed
+  Reviving      = 1 << 14,
+  Dead          = 1 << 15,
+  Clump         = 1 << 16,
+  Ally          = 1 << 17, // Ghost Protocol: fights for the tower
+}
+
+// ---------------------------------------------------------------------------
+// Projectile pool
+// ---------------------------------------------------------------------------
+export const enum ProjKind { Bullet = 0, Fireball = 1, Missile = 2, Rocket = 3, Shell = 4, Bomb = 5, DroneShot = 6, Microdrone = 7, CuttingArc = 8, EnemyShot = 9, BallLightning = 10, Fragment = 11 }
+
+export interface ProjectilePool {
+  count: number; capacity: number;
+  gen: Uint32Array;
+  kind: Uint8Array;              // ProjKind
+  source: Uint8Array;            // WeaponSystem index (see SYSTEM_INDEX)
+  x: Float32Array; y: Float32Array; vx: Float32Array; vy: Float32Array;
+  damage: Float32Array;
+  radius: Float32Array;
+  life: Uint16Array;             // ticks remaining
+  pierce: Uint8Array;            // remaining pierce count
+  bounces: Uint8Array;           // remaining ricochets
+  target: Int32Array;            // enemy index for homing, or NO_ENTITY
+  targetGen: Uint32Array;
+  flags: Uint32Array;            // ProjFlag
+  element: Uint8Array;           // ElementId index +1, 0 = none
+  critChance: Float32Array;
+  blast: Float32Array;           // explosion radius, 0 = none
+  cause: Int32Array;             // event id that launched it (kill-chain parent)
+  lastHit: Int32Array;           // last enemy index hit (avoid double hits)
+  hitMask: Uint32Array;          // small bloom filter of hit enemy indices for pierce
+}
+export const enum ProjFlag { Crit = 1 << 0, Homing = 1 << 1, Manual = 1 << 2, Marked = 1 << 3, CrossedBeam = 1 << 4, CrossedBlade = 1 << 5, Lensed = 1 << 6, Echo = 1 << 7, FromDrone = 1 << 8, Hostile = 1 << 9, Duplicate = 1 << 10, Cluster = 1 << 11 }
+
+// ---------------------------------------------------------------------------
+// Tower, systems, and status of the run
+// ---------------------------------------------------------------------------
+export interface TowerState {
+  hp: number; maxHp: number;
+  shield: number; maxShield: number;   // Bastion shield
+  barrier: number; maxBarrier: number; // Aegis Outer Barrier
+  tempHp: number;                      // Fortification
+  invulnT: number;                     // ticks
+  secondCoreUsed: boolean;             // per wave
+  ce: number; ceCap: number;           // Command Energy meter
+  aimAngle: number;                    // current primary aim
+  manualAim: boolean; manualAngle: number;
+  designated: number; designatedGen: number;
+  designated2: number; designated2Gen: number;   // Second Opinion / Commander
+  lowHpTicks: number;
+}
+
+export interface Hazard {
+  kind: 'fire_zone' | 'toxic_cloud' | 'ice_patch' | 'plasma_line' | 'shell_zone' | 'firestorm' | 'enemy_hazard' | 'time_field' | 'barrier_field';
+  x: number; y: number; x2?: number; y2?: number; radius: number; life: number; dps: number; element?: ElementId; cause: number; owner: WeaponSystemId | 'enemy' | 'ability';
+}
+
+// ---------------------------------------------------------------------------
+// Build and progression state
+// ---------------------------------------------------------------------------
+export interface BuildState {
+  frame: FrameId;
+  hardpoints: (HardpointId | null)[];         // slot order; null = slot open but unfilled
+  attunements: (ElementId | null)[];
+  doctrines: Partial<Record<TreeId, DoctrineId>>;
+  /** Second doctrine from Dual Doctrine / Spare Barrel / Monolith / Bulwark, keyed by tree. */
+  secondDoctrines: Partial<Record<TreeId, DoctrineId>>;
+  ranks: Record<NodeId, number>;               // purchased ranks per node id
+  anomalies: AnomalyId[];                      // socketed
+  anomalySockets: number;
+  targeting: Partial<Record<WeaponSystemId, TargetingProfile>>;
+  abilities: (AbilityId | null)[];             // tactical slots
+}
+
+export type RunMode = 'push' | 'patrol';
+export type RunPhase = 'between' | 'combat' | 'dead' | 'wave_clear' | 'draft';
+
+export interface RunState {
+  prestigeSeed: number;
+  wave: number;                 // current wave (1-based)
+  checkpoint: number;           // last cleared boss wave (0, 5, 10 ...)
+  deepestCleared: number;       // deepest wave cleared this Prestige
+  clearedWaves: number;         // bitset-ish: waves cleared this prestige (for first-clear ×3), stored as array of 0/1
+  firstClears: Uint8Array;      // index = wave
+  mode: RunMode;
+  phase: RunPhase;
+  phaseTicks: number;           // ticks spent in the current phase
+  tick: number;                 // sim tick since Prestige start
+  attemptTick: number;          // tick since this attempt started
+  waveTick: number;             // tick since this wave started
+  scrap: number;
+  cores: number;
+  coresDroppedByBoss: Uint8Array;  // per boss wave, first-kill Core paid
+  threatDial: number;
+  attempts: number;             // attempts this Prestige
+  attemptsPerCheckpoint: number[]; // index checkpoint/5
+  prestigeStartedAt: number;    // real seconds (save-side wall clock, only for Forecast; never read by sim math)
+  playSeconds: number;          // accumulated simulated seconds (ticks / 60)
+  echoRateHistory: { seconds: number; echoes: number }[];
+  pendingDraft: AnomalyId[] | null;
+  anomaliesOfferedAt: Uint8Array; // per wave/10
+  hardpointSlotsOpen: number;
+  attunementSlotsOpen: number;
+  speedMultiplier: 1 | 2 | 4 | 8;
+  patrolScrapPerSecond: number; // measured, for offline estimate
+  longestChain: number;
+}
+
+export interface MetaState {
+  echoes: number;
+  stars: number;
+  prestigeCount: number;
+  ascension: number;
+  deepestEver: number;
+  totalPlaySeconds: number;
+  prestigeRanks: Record<NodeId, number>;      // Prestige layer nodes (prestige.*)
+  constellation: Record<NodeId, number>;      // Constellation nodes (star.*)
+  unlockedFrames: FrameId[];
+  codex: Record<string, number>;               // entry id -> first discovery count (>0 = discovered)
+  trials: Partial<Record<TrialId, number>>;    // tiers completed 0..3
+  blueprints: Blueprint[];
+  directives: Directive[];
+  upgradeQueue: UpgradeRule[];
+  keepsake: AnomalyId | null;
+  records: { deepestWave: number; longestChain: number; fastestWave100Seconds: number | null };
+  settings: { clarity: number; autoPrestige: boolean };
+}
+
+export interface Blueprint {
+  name: string; frame: FrameId; hardpoints: HardpointId[]; attunements: ElementId[];
+  doctrines: Partial<Record<TreeId, DoctrineId>>; targeting: Partial<Record<WeaponSystemId, TargetingProfile>>; upgradeQueue: UpgradeRule[];
+}
+
+export interface UpgradeRule { node: NodeId; keepWithin?: { of: NodeId; ranks: number }; maxRank?: number }
+
+/** Directive: WHEN conditions AND ... → DO action. Checked in priority order. */
+export interface Directive {
+  enabled: boolean;
+  conditions: DirectiveCondition[];
+  action: DirectiveAction;
+}
+export type DirectiveCondition =
+  | { kind: 'inner_ring_at_least'; n: number }
+  | { kind: 'group_at_least'; n: number; radius: number }
+  | { kind: 'tower_hp_below'; pct: number }
+  | { kind: 'barrier_broken' }
+  | { kind: 'boss_phase'; phase: number }
+  | { kind: 'boss_tell_active' }                 // Adept
+  | { kind: 'enemy_present'; enemy: EnemyKind | 'elite' }
+  | { kind: 'ce_at_least'; ce: number }
+  | { kind: 'wave_is'; which: 'boss' | 'ordinary' }
+  | { kind: 'forecast_recommends' };
+export type DirectiveAction =
+  | { kind: 'cast'; ability: AbilityId; at: 'largest_group' | 'nearest_threat' | 'boss' | 'tower' }
+  | { kind: 'designate'; what: 'highest_threat' | 'healer' | 'warden' | 'weak_point' | 'nearest_kamikaze' }
+  | { kind: 'targeting'; system: WeaponSystemId; profile: TargetingProfile }
+  | { kind: 'mode'; mode: RunMode }
+  | { kind: 'prestige' };
+
+// ---------------------------------------------------------------------------
+// Commands (UI/agents → sim). All player intent goes through here.
+// ---------------------------------------------------------------------------
+export type Command =
+  | { type: 'buy'; node: NodeId }                         // one rank of a Scrap node (or Core node)
+  | { type: 'choose_doctrine'; tree: TreeId; doctrine: DoctrineId }
+  | { type: 'mount_hardpoint'; slot: number; system: HardpointId }
+  | { type: 'refit_hardpoint'; slot: number; system: HardpointId }
+  | { type: 'attune'; slot: number; element: ElementId }
+  | { type: 'pick_anomaly'; anomaly: AnomalyId | null; replace?: number }  // null = skip (1 Core)
+  | { type: 'reroll_anomaly' }
+  | { type: 'set_mode'; mode: RunMode }
+  | { type: 'restart_checkpoint' }
+  | { type: 'set_speed'; speed: 1 | 2 | 4 | 8 }
+  | { type: 'designate'; enemy: number | null; slot?: 0 | 1 }
+  | { type: 'manual_aim'; active: boolean; angle: number }
+  | { type: 'cast'; ability: AbilityId; x: number; y: number; target?: number }
+  | { type: 'set_ability_slot'; slot: number; ability: AbilityId | null }
+  | { type: 'set_targeting'; system: WeaponSystemId; profile: TargetingProfile }
+  | { type: 'prestige'; frame: FrameId; blueprint?: number; threatDial?: number }
+  | { type: 'ascend' }
+  | { type: 'buy_prestige'; node: NodeId }
+  | { type: 'buy_star'; node: NodeId }
+  | { type: 'set_directives'; directives: Directive[] }
+  | { type: 'set_upgrade_queue'; rules: UpgradeRule[] }
+  | { type: 'save_blueprint'; blueprint: Blueprint }
+  | { type: 'start_trial'; trial: TrialId }
+  | { type: 'end_trial' }
+  | { type: 'set_threat_dial'; level: number }
+  | { type: 'offline_return'; elapsedSeconds: number }
+  | { type: 'set_setting'; key: keyof MetaState['settings']; value: number | boolean };
+
+// ---------------------------------------------------------------------------
+// Events (sim → everyone). Every event carries a cause for the kill chain.
+// ---------------------------------------------------------------------------
+export const enum Ev {
+  WaveStart, WaveClear, BossPhase, BossTell, BossCounter, BossKilled,
+  Spawn, Hit, Kill, Explosion, StatusApply, StatusTick, Fusion, Triad, Linkage, Infusion, Anomaly,
+  TowerHit, TowerDeath, BarrierBreak, SecondCore, Cast, CounterScored, Heal,
+  Purchase, DoctrineChosen, Mounted, Attuned, AnomalyPicked, CoreDrop, ScrapGain,
+  Checkpoint, AttemptStart, Prestige, Ascend, Fx, Codex, Chain,
+}
+
+export interface SimEvent {
+  id: number;            // monotonically increasing within a Prestige
+  tick: number;
+  type: Ev;
+  cause: number;         // parent event id, or -1
+  /** Source system / element / fusion / linkage / ability tag, e.g. 'ballistics', 'fire', 'fusion.plasma', 'link.blade+laser'. */
+  src: string;
+  a: number; b: number;  // event-specific numerics (enemy index, damage, stacks, wave, phase...)
+  x: number; y: number;  // position for FX and the Inspector
+  /** Optional structured payload; keep small. */
+  data?: Record<string, number | string | boolean>;
+}
+
+/** Ring buffer of recent events plus a hash of the whole stream (determinism test). */
+export interface EventLog {
+  push(e: Omit<SimEvent, 'id'>): number;   // returns new event id
+  recent(sinceTick: number): SimEvent[];
+  byId(id: number): SimEvent | undefined;
+  hash(): number;                          // rolling FNV over (type, tick, a|0, b|0, src)
+  nextId: number;
+}
+
+// ---------------------------------------------------------------------------
+// Snapshots for the renderer and UI (sim → main thread)
+// ---------------------------------------------------------------------------
+export const enum Shape { Circle = 0, Ring = 1, Triangle = 2, Square = 3, Diamond = 4, Hex = 5, Star = 6, Capsule = 7, Line = 8, Shard = 9, Cross = 10, Crescent = 11 }
+
+/**
+ * Instance stream, 12 floats per instance:
+ *  [x, y, radius, rotation, shape, r, g, b, alpha, layer, aux0, aux1]
+ * layer follows the draw order in design §20: 0 arena, 1 hazards, 2 player fx, 3 projectiles,
+ * 4 enemies, 5 enemy outlines, 6 threat halos, 7 ui-in-world. aux carries e.g. hp fraction,
+ * beam end x/y for Line shapes (aux0=x2, aux1=y2 with radius = thickness).
+ */
+export const INSTANCE_FLOATS = 12;
+
+export interface RenderSnapshot {
+  tick: number;
+  instances: Float32Array;   // INSTANCE_FLOATS * instanceCount
+  instanceCount: number;
+  /** FX spawn requests since the last snapshot: [kind, x, y, r, g, b, size, count] repeated. */
+  fx: Float32Array; fxCount: number;
+  cameraShake: number;
+  clarity: number;
+}
+export const FX_FLOATS = 8;
+export const enum FxKind { Hit = 0, Kill = 1, Explosion = 2, Spark = 3, Ember = 4, Frost = 5, Toxic = 6, Arc = 7, Shockwave = 8, Muzzle = 9, Trail = 10, Text = 11, Counter = 12, Tell = 13 }
+
+/** Everything the UI draws from, sent ~10 Hz. Plain JSON, no typed arrays. */
+export interface UiState {
+  tick: number;
+  run: Pick<RunState, 'wave' | 'checkpoint' | 'deepestCleared' | 'mode' | 'phase' | 'scrap' | 'cores' | 'attempts' | 'threatDial' | 'speedMultiplier' | 'playSeconds' | 'pendingDraft' | 'hardpointSlotsOpen' | 'attunementSlotsOpen' | 'longestChain'>;
+  tower: Pick<TowerState, 'hp' | 'maxHp' | 'shield' | 'maxShield' | 'barrier' | 'maxBarrier' | 'tempHp' | 'ce' | 'ceCap'>;
+  build: BuildState;
+  meta: MetaState;
+  wave: { sector: string; isBoss: boolean; bossId: BossId | null; bossPhase: number; bossHp: number; bossMaxHp: number; bossPhaseMarks: number[]; tellActive: AbilityId | null; tellTicksLeft: number; enemiesAlive: number; enemiesTotal: number; spawned: number; formation: FormationId | null; progress: number; weakPointOpen: boolean };
+  shop: ShopEntry[];             // every currently visible node with price and affordability
+  abilities: { id: AbilityId; cost: number; cooldown: number; ready: boolean }[];
+  forecast: Forecast | null;
+  stats: DamageShare;
+  hints: string[];               // Codex hints for undiscovered nearby entries
+  wallGaugeSeconds: number | null;
+  recentEvents: SimEvent[];      // for the event feed / Inspector (last ~2 s)
+}
+
+export interface ShopEntry {
+  node: NodeId; tree: TreeId | 'link' | 'infuse' | 'fusion' | 'ability' | 'exotic' | 'frame' | 'slot';
+  name: string; desc: string; rank: number; maxRank: number;
+  cost: number; currency: 'scrap' | 'cores'; affordable: boolean;
+  kind: 'stat' | 'mechanic' | 'exotic' | 'doctrine' | 'linkage' | 'infusion' | 'fusion' | 'ability';
+  locked?: string;               // reason it can't be bought yet (doctrine not chosen, checkpoint only...)
+  tier: number;
+}
+
+export interface Forecast {
+  echoesNow: number;
+  echoRate: number;          // per hour
+  peakRate: number;
+  nextBossEchoes: number; nextBossRate: number;
+  reclimbSeconds: number;
+  wallGaugeSeconds: number | null;
+  recommended: boolean;
+  curve: { seconds: number; rate: number }[];
+}
+
+export interface DamageShare { bySource: Record<string, number>; total: number; windowSeconds: number }
+
+// ---------------------------------------------------------------------------
+// Save state
+// ---------------------------------------------------------------------------
+export const SAVE_VERSION = 1;
+export interface SaveState {
+  version: number;
+  savedAtMs: number;             // wall clock, main-thread only
+  meta: MetaState;
+  run: RunSave;                  // current run, restorable to the start of the current checkpoint
+  trial: { id: TrialId; run: RunSave } | null;
+}
+/** Persisted subset of a run: enough to rebuild at the checkpoint. Live combat is never saved. */
+export interface RunSave {
+  prestigeSeed: number; wave: number; checkpoint: number; deepestCleared: number; firstClears: number[];
+  mode: RunMode; scrap: number; cores: number; coresDroppedByBoss: number[]; threatDial: number; attempts: number;
+  attemptsPerCheckpoint: number[]; prestigeStartedAt: number; playSeconds: number; echoRateHistory: { seconds: number; echoes: number }[];
+  anomaliesOfferedAt: number[]; hardpointSlotsOpen: number; attunementSlotsOpen: number; patrolScrapPerSecond: number; longestChain: number;
+  build: BuildState;
+  prngState: [number, number, number, number];
+}
+
+// ---------------------------------------------------------------------------
+// Worker protocol
+// ---------------------------------------------------------------------------
+export type ToWorker =
+  | { t: 'init'; save: SaveState | null; seedOverride?: number }
+  | { t: 'cmd'; cmd: Command }
+  | { t: 'run'; running: boolean }
+  | { t: 'tick_budget'; ticks: number }     // main thread paces the sim: run up to N ticks now
+  | { t: 'want_snapshot' }
+  | { t: 'want_save' }
+  | { t: 'inspector'; enemyIndex: number; gen: number }
+  | { t: 'set_clarity'; value: number };
+export type FromWorker =
+  | { t: 'ready'; ui: UiState }
+  | { t: 'snapshot'; snap: RenderSnapshot }
+  | { t: 'ui'; ui: UiState }
+  | { t: 'events'; events: SimEvent[] }
+  | { t: 'save'; save: SaveState }
+  | { t: 'inspector'; chain: SimEvent[]; sentence: string }
+  | { t: 'error'; message: string };
+
+// ---------------------------------------------------------------------------
+// Waves (generator → run). Fixed per Prestige seed: generateWave(seed, wave, dial, ascension).
+// ---------------------------------------------------------------------------
+export interface SpawnEntry {
+  tick: number;                 // ticks after wave start
+  kind: EnemyKind;
+  angle: number;                // spawn angle on the perimeter (radians)
+  radiusOffset: number;         // 0 = on the perimeter; >0 spawns farther out (delayed ambush uses <0 for burrowers)
+  elite: EliteModifier[];       // empty for ordinary enemies
+  hpScale: number;              // multiplier from Threat Dial / elite / clump merging (1 = none)
+  formationSlot: number;        // index into the formation's path for this enemy
+  lane: number;
+}
+export interface WaveDef {
+  wave: number;
+  sector: string;
+  isBoss: boolean;
+  bossId: BossId | null;
+  formation: FormationId | null;   // bosses: escort formation for adds, or null
+  threatBudget: number;
+  spawns: SpawnEntry[];            // sorted by tick
+  /** Formation motion parameters the AI reads to steer enemies along the script. */
+  params: { lanes: number; spread: number; tempo: number; radialSpeed: number; rotation: number; escortRatio: number };
+  durationTicks: number;           // spawn window; the wave ends when spawns are done and enemies are dead
+}

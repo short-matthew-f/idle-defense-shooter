@@ -1,0 +1,26 @@
+{
+  "name": "project-citadel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Project Citadel: a browser idle tower-defense game where the tower is the character and each Prestige is a new machine.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "sim": "tsx sim-cli/main.ts",
+    "sim:accept": "tsx sim-cli/accept.ts",
+    "check": "npm run typecheck && npm run test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.0",
+    "vite": "^6.4.0",
+    "vite-plugin-pwa": "^1.0.0",
+    "vitest": "^3.0.0"
+  }
+}

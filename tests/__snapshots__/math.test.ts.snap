@@ -1,0 +1,13 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Prng > has a golden value so cross-engine drift is caught 1`] = `
+[
+  1527061606,
+  1876388733,
+  2300386379,
+]
+`;
+
+exports[`Prng > has a golden value so cross-engine drift is caught 2`] = `1963634499`;
+
+exports[`Prng > has a golden value so cross-engine drift is caught 3`] = `451726305`;
