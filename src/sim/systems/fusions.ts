@@ -36,7 +36,7 @@ export class FusionsSystem implements System {
   readonly id = 'fusions';
   readonly arcs = new ArcEngine();
   private bursts = new BurstQueue();
-  private toxic = 0; private toxicMin = 5; private toxicR = 80;
+  private toxic = 0; private toxicMin = 5; private toxicR = 80; private toxicCap = 0.5;
   private thermal = 0; private chillTh = 4; private burnTh = 3; private thermalR = 50;
   private cryo = 0;
   private polar = 0; private crucible = 0; private arcFrac = 0.5; private refDmg = 10; private poisonDur = 300; private blastMul = 1;
@@ -51,6 +51,7 @@ export class FusionsSystem implements System {
     this.arcs.rebuild(w);
     this.blastMul = s.get('combat.blast_radius_mul') || 1;
     this.toxic = s.has(TAG_TOXIC) ? s.get(TAG_TOXIC) : 0;
+    this.toxicCap = s.get('fusion.toxic_combustion.target_cap');
     this.toxicMin = s.get('fusion.toxic_combustion.min_stacks'); this.toxicR = s.get('fusion.toxic_combustion.radius') * this.blastMul;
     this.thermal = s.has(TAG_THERMAL) ? s.get(TAG_THERMAL) : 0;
     this.chillTh = s.get('fusion.thermal_shock.chill_threshold'); this.burnTh = s.get('fusion.thermal_shock.burn_threshold');
@@ -94,7 +95,7 @@ export class FusionsSystem implements System {
     if (dmg > 0 && this.bursts.push(w, K_TOXIC, i, dmg, 0, 0, fid, this.toxicR * 0.5) < 0) this.toxicBoom(w, x, y, dmg, fid);
   }
   private toxicBoom(w: World, x: number, y: number, dmg: number, fid: number): void {
-    w.explode(x, y, this.toxicR, dmg, { source: 'fusion', srcTag: TAG_TOXIC, element: 'fire', cause: fid, falloff: false });
+    w.explode(x, y, this.toxicR, dmg, { source: 'fusion', srcTag: TAG_TOXIC, element: 'fire', cause: fid, falloff: true, maxHpCap: this.toxicCap });
   }
 
   private drain(w: World): void {

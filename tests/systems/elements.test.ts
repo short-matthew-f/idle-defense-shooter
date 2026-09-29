@@ -215,7 +215,7 @@ describe('Elements: doctrines', () => {
     const clean = w.damage(b, 100, { source: 'primary', srcTag: 'ballistics', cause: -1 }).damage;
     expect(hurt / clean).toBeCloseTo(200 / (100 + 100 * (1 - 0.27)), 3);   // 9 stacks × 3% armor stripped
     const dotA = w.damage(a, 10, { source: 'status', srcTag: 'poison', cause: -1, ignoreArmor: true }).damage;
-    expect(dotA).toBeCloseTo(10 * (1 + 0.1 * 4), 3);                     // virulence 0.1 × (9 − 5)
+    expect(dotA).toBeCloseTo(10 * (1 + w.stats.get('poison.venom.virulence') * 4), 3);   // virulence (base 0.03 + 5 × 0.02) × (9 − 5)
     w.applyStatus(a, 'poison', 1, 600, 'poison', -1, 1);                  // reaches cap 10 → burst
     expect(events(sim, (e) => e.type === Ev.Hit && e.src === 'poison.toxic_burst').length).toBe(1);
     expect(w.enemies.poison[a]).toBe(5);

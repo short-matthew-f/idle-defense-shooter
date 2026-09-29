@@ -20,8 +20,8 @@ const DOC_G = 1.18;
 export const BALLISTICS: TreeDef = {
   id: 'ballistics', name: 'Ballistics', category: 'chassis', forkRequirement: 4,
   shared: [
-    stat('ballistics.damage', 'Caliber', '+8% primary damage per rank (base 10 per shot).', 'mul', 0.08, 10, 1.17, 40, 0, { tags: ['damage'] }),
-    stat('ballistics.attack_speed', 'Autoloader', '+5% primary attack speed per rank (base 2 shots/s).', 'mul', 0.05, 12, 1.17, 40, 0, { tags: ['speed'] }),
+    stat('ballistics.damage', 'Caliber', '+8% primary damage per rank (base 10 per shot).', 'mul', 0.08, 10, 1.17, 60, 0, { tags: ['damage'] }),
+    stat('ballistics.attack_speed', 'Autoloader', '+5% primary attack speed per rank (base 2 shots/s).', 'mul', 0.05, 12, 1.17, 60, 0, { tags: ['speed'] }),
     stat('ballistics.range', 'Long Barrel', '+10 primary range per rank (base 300).', 'add', 10, 15, 1.18, 25, 0, { tags: ['range'] }),
     stat('ballistics.projectile_speed', 'Muzzle Velocity', '+6% projectile speed per rank, so shots land before fast targets slip away.', 'mul', 0.06, 8, 1.16, 25),
     stat('ballistics.crit_chance', 'Fire Control', '+1% critical hit chance per rank (base 5%).', 'add', 0.01, 20, 1.19, 35, 0, { tags: ['damage'] }),
@@ -69,12 +69,12 @@ export const BALLISTICS: TreeDef = {
         'When no new target is in reach, bounces revisit enemies they already struck instead of ending.',
         3, flat(3, 1)),
     ]),
-    doctrine('ballistics', 'heavy_rounds', 'Heavy Rounds', 'Fires 40% slower for +90% damage; rounds grow larger, hit harder and knock enemies back.', [
+    doctrine('ballistics', 'heavy_rounds', 'Heavy Rounds', 'Fires 15% slower for +90% damage; rounds grow larger (×2.5), hit harder and knock enemies back.', [
       stat('ballistics.heavy.damage', 'Depleted Core',
         '+6% Heavy Round damage per rank, on top of the doctrine\'s inherent ×1.9.',
         'mul', 0.06, DOC_BASE, DOC_G, 25, 2),
       stat('ballistics.heavy.size', 'Wide Bore',
-        'Heavy Rounds are 4% larger per rank (on top of the inherent ×1.75), clipping enemies beside the target.',
+        'Heavy Rounds are 4% larger per rank (on top of the inherent ×2.5), clipping enemies beside the target.',
         'mul', 0.04, DOC_BASE, DOC_G, 20, 2),
       stat('ballistics.heavy.knockback', 'Impact Mass',
         'Heavy Round impacts shove enemies back 4 more units per rank (inherent 18).',
@@ -94,12 +94,12 @@ export const BALLISTICS: TreeDef = {
 export const BASTION: TreeDef = {
   id: 'bastion', name: 'Bastion', category: 'chassis', forkRequirement: 3,
   shared: [
-    stat('bastion.max_hp', 'Hull Plating', '+15 max HP per rank (base 100).', 'add', 15, 10, 1.16, 40, 0, { tags: ['defense'] }),
+    stat('bastion.max_hp', 'Hull Plating', '+15 max HP per rank (base 100).', 'add', 15, 10, 1.16, 60, 0, { tags: ['defense'] }),
     stat('bastion.armor', 'Composite Armor', '+2 armor per rank. Each hit is reduced by armor / (100 + armor).', 'add', 2, 15, 1.17, 35, 0, { tags: ['defense'] }),
     stat('bastion.shield_capacity', 'Shield Emitter', '+10 shield capacity per rank. Shields absorb damage before HP.', 'add', 10, 20, 1.17, 35, 0, { tags: ['defense'] }),
     stat('bastion.shield_recharge', 'Capacitor Bank', 'Shields recharge 1 point per second per rank after 3 s without taking damage.', 'add', 1, 20, 1.18, 30, 0, { tags: ['defense'] }),
     stat('bastion.regeneration', 'Nanite Weave', 'The tower regenerates 0.4 HP per second per rank.', 'add', 0.4, 15, 1.17, 35, 0, { tags: ['defense'] }),
-    stat('bastion.resistance', 'Ablative Coating', 'All incoming damage −1% per rank, applied after armor (max 35%).', 'add', 0.01, 25, 1.19, 35, 0, { tags: ['defense'] }),
+    stat('bastion.resistance', 'Ablative Coating', 'All incoming damage −2% per rank, applied after armor (max 36%).', 'add', 0.02, 25, 1.19, 35, 0, { tags: ['defense'] }),
   ],
   doctrines: [
     doctrine('bastion', 'fortress', 'Fortress', 'HP and armor; Fortification builds temporary HP while the tower is at full health.', [

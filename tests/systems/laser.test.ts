@@ -52,7 +52,7 @@ describe('Laser Polygon', () => {
   it('nodes take contact damage, drop their beams, and rebuild', () => {
     const sim = fixedLaser();
     const w = sim.world;
-    const b = w.spawnEnemy('brute', 110, 0, { hpScale: 1e5 });
+    const b = w.spawnEnemy('brute', w.stats.get('laser.radius'), 0, { hpScale: 1e5 });
     ticks(sim, 300);
     expect(fxCount(sim, 'laser.node_down')).toBeGreaterThan(0);
     w.killEnemy(b, -1, 'test');

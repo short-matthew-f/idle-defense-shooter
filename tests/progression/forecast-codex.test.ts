@@ -24,6 +24,15 @@ describe('Prestige Forecast', () => {
     expect(isRecommended(history([[10, 100], [15, 80], [19, 60]]), 19)).toBe(false);   // before wave 20
   });
 
+  it('recommends at a real wall: no waves cleared, but a checkpoint cycle of play time below the peak', () => {
+    // peak at wave 30 after 3600 s; then stuck on wave 30 while time passes
+    const h = [{ seconds: 3000, echoes: 30, wave: 25 }, { seconds: 3600, echoes: 61, wave: 30 }];
+    const at = (s: number) => [...h, { seconds: 3600 + 700, echoes: 61, wave: 30 }, { seconds: s, echoes: 61, wave: 30 }];
+    expect(isRecommended(at(4400), 30, 600)).toBe(false);    // below since 4300 s: only 100 s
+    expect(isRecommended(at(4900), 30, 600)).toBe(true);     // 600 s below the peak with no progress
+    expect(isRecommended(at(4900), 30, 1200)).toBe(false);   // a longer checkpoint cycle waits longer
+  });
+
   it('fills UiState.forecast from simulated time and records', () => {
     const sim = new Sim(null, 5);
     const w = sim.world;

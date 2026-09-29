@@ -152,7 +152,7 @@ describe('stats', () => {
       'bastion.max_hp': 100, 'bastion.armor': 0, 'bastion.shield_capacity': 0, 'bastion.shield_recharge': 0,
       'bastion.regeneration': 0, 'bastion.resistance': 0, 'reactor.global_attack_speed': 1, 'reactor.cooldown_reduction': 0,
       'reactor.energy_recycling': 0, 'economy.scrap_mul': 1, 'economy.ce_cap': 100, 'economy.core_drop_chance': 0.02,
-      'fire.burn_chance': 0.15, 'lightning.arc_targets': 2, 'ordnance.launchers': 1, 'drones.count': 1, 'blade.length': 60,
+      'fire.burn_chance': 0.15, 'lightning.arc_targets': 2, 'ordnance.launchers': 1, 'drones.count': 1, 'blade.length': 140,
       'laser.nodes': 2, 'gravitics.wells': 1,
     };
     for (const [k, v] of Object.entries(required)) expect(BASE_STATS[k], k).toBe(v);

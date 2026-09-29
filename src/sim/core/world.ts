@@ -75,7 +75,7 @@ export interface World {
     /* WP1 additions */ srcTag: string; critMul: number; retention: number; pierceSpeed: number; bounceRange: number; knock: number; execBonus: number }>): number;
   spawnEnemy(kind: string, x: number, y: number, opts?: { hpScale?: number; elite?: readonly string[]; bossId?: string | null; cause?: number;
     /** WP1 addition: hpScale already includes the elite HP multiplier (generator spawns); skip the ×2.5. */ eliteHpIncluded?: boolean }): number;
-  explode(x: number, y: number, radius: number, damage: number, opts: { source: HitInfo['source']; srcTag: string; element?: ElementId | null; cause: number; falloff?: boolean }): void;
+  explode(x: number, y: number, radius: number, damage: number, opts: { source: HitInfo['source']; srcTag: string; element?: ElementId | null; cause: number; falloff?: boolean; /** cap each target's damage at this × its max HP */ maxHpCap?: number }): void;
   addHazard(h: Hazard): void;
   damageTower(amount: number, enemy: number, cause: number): void;
   healTower(amount: number, cause: number): void;

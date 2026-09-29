@@ -138,7 +138,8 @@ export class WorldImpl implements World {
     this.elemCap.burn = s.attuned('fire') ? Math.max(1, Math.floor(s.get('fire.burn_stacks'))) : 0;
     this.elemCap.poison = s.attuned('poison') ? Math.max(1, Math.floor(s.get('poison.stack_cap'))) : 0;
     this.elemCap.chill = s.attuned('frost') ? Math.max(1, Math.floor(s.get('frost.chill_stacks'))) : 0;
-    const maxHp = Math.max(1, s.get('bastion.max_hp'));
+    // bastion.max_hp_final multiplies after every other max-HP bonus (Glass Cannon's −50% must bite)
+    const maxHp = Math.max(1, s.get('bastion.max_hp') * s.get('bastion.max_hp_final'));
     if (t.maxHp > 0 && maxHp > t.maxHp && t.hp > 0) t.hp += maxHp - t.maxHp;   // buying max HP heals the difference
     t.maxHp = maxHp;
     if (t.hp > maxHp) t.hp = maxHp;
@@ -219,7 +220,7 @@ export class WorldImpl implements World {
     h.x = opts.x ?? e.x[enemy]; h.y = opts.y ?? e.y[enemy];
     let dmg = amount;
     if (this.damageModifier !== null) dmg *= this.damageModifier(enemy, h.element, opts.srcTag, opts.source);   // WP5: weak points, resistances
-    let toHp = 0;
+    let toHp = 0, absorbed = 0;
     if (opts.trueDamage) {
       toHp = dmg;
     } else {
@@ -231,14 +232,17 @@ export class WorldImpl implements World {
       if (!opts.ignoreArmor) { const ar = e.armor[enemy]; if (ar > 0) dmg = (dmg * 100) / (100 + ar); }
       toHp = dmg;
       const s = e.shield[enemy];
-      if (s > 0) { const absorbed = s < dmg ? s : dmg; e.shield[enemy] = s - absorbed; toHp = dmg - absorbed; }
+      if (s > 0) { absorbed = s < dmg ? s : dmg; e.shield[enemy] = s - absorbed; toHp = dmg - absorbed; }
     }
+    const hpBefore = e.hp[enemy] > 0 ? e.hp[enemy] : 0;
     e.hp[enemy] -= toHp;
     h.damage = dmg;
     e.lastHitTick[enemy] = this.run.tick;
     e.lastCause[enemy] = opts.cause;
     if (!opts.silent) h.eventId = this.emitC(Ev.Hit, opts.srcTag, enemy, dmg, this.stateBits(enemy), h.x, h.y, opts.cause);
-    this.recordShare(opts.srcTag, dmg);
+    // Damage share counts effective damage (HP and shield actually removed), not overkill: an 8,000-damage
+    // blast on a 50-HP enemy contributed 50. Hit events still carry the full dealt damage.
+    this.recordShare(opts.srcTag, (toHp < hpBefore ? toHp : hpBefore) + absorbed);
     const killed = e.hp[enemy] <= 0;
     if (killed) { h.killed = true; e.flags[enemy] |= EnemyFlag.Dead; this.pendingEnemyFrees++; }
     if (this.hookDepth < HOOK_DEPTH_LIMIT) {
@@ -275,7 +279,7 @@ export class WorldImpl implements World {
     this.addScrap(scrap);
     // Command Energy
     const f = e.flags[i];
-    this.gainCE((f & EnemyFlag.Elite) ? 12 : 2);
+    this.gainCE((f & EnemyFlag.Elite) ? 12 : 1);   // balance pass: ordinary kills 2 → 1 CE (docs/BALANCE.md)
     if (this.stats.hasAnomaly('hungry_core') && t.hp > 0) t.hp = Math.min(t.maxHp, t.hp + t.maxHp * 0.01);
     // Cores
     if (f & EnemyFlag.Boss) {
@@ -504,7 +508,7 @@ export class WorldImpl implements World {
     this.pendingEnemyFrees++;
   }
 
-  explode(x: number, y: number, radius: number, damage: number, opts: { source: HitInfo['source']; srcTag: string; element?: ElementId | null; cause: number; falloff?: boolean }): void {
+  explode(x: number, y: number, radius: number, damage: number, opts: { source: HitInfo['source']; srcTag: string; element?: ElementId | null; cause: number; falloff?: boolean; maxHpCap?: number }): void {
     const id = this.emit(Ev.Explosion, opts.srcTag, radius, damage, x, y, opts.cause);
     const d = this.queryDepth++;
     while (this.queryStack.length <= d) this.queryStack.push(new Int32Array(1024));
@@ -517,6 +521,7 @@ export class WorldImpl implements World {
       if (e.flags[i] & (EnemyFlag.Phased | EnemyFlag.Burrowed)) continue;   // intangible (design: Phase / Burrow)
       let amt = damage;
       if (falloff) { const dx = e.x[i] - x, dy = e.y[i] - y; const dist = Math.sqrt(dx * dx + dy * dy); amt *= 1 - 0.5 * Math.min(1, dist / Math.max(1, radius)); }
+      if (opts.maxHpCap !== undefined) { const c = opts.maxHpCap * e.maxHp[i]; if (amt > c) amt = c; }   // per-target cap (Flashpoint)
       this.damage(i, amt, { source: opts.source, srcTag: opts.srcTag, element: opts.element ?? null, cause: id, x, y });
     }
     this.queryDepth--;

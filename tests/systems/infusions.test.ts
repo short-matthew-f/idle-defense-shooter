@@ -19,7 +19,7 @@ function setup(sys: HardpointId, el: ElementId): Sim {
   switch (sys) {
     case 'ordnance': ring(sim, 12, 200, 'grunt', 1e5); break;
     case 'drones': setRanks(sim, { 'drones.count': 3 }); ring(sim, 8, 150, 'grunt', 1e5); break;
-    case 'blade': w.stats.override('blade.knockback', 0); w.rebuildStats(); ring(sim, 12, 50, 'grunt', 1e5); ring(sim, 12, 78, 'grunt', 1e5, 0.2); break;
+    case 'blade': { w.stats.override('blade.knockback', 0); w.rebuildStats(); const tip = 24 + w.stats.get('blade.length'); ring(sim, 12, tip - 34, 'grunt', 1e5); ring(sim, 12, tip - 6, 'grunt', 1e5, 0.2); break; }
     case 'laser': ring(sim, 12, 60, 'grunt', 1e5); ring(sim, 6, 150, 'grunt', 1e5); break;
     case 'gravitics': cluster(sim, 200, 0, 9); break;
   }

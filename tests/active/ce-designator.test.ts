@@ -3,16 +3,16 @@ import { Ev, ProjFlag, ProjKind, TICK_RATE } from '../../src/sim/core/types';
 import { arena, dummy, cmd, tick, events } from './helpers';
 
 describe('Command Energy', () => {
-  it('fills on kills (+2) and elite kills (+12) and caps at economy.ce_cap', () => {
+  it('fills on kills (+1) and elite kills (+12) and caps at economy.ce_cap', () => {   // balance pass: ordinary kills were +2
     const sim = arena();
     const w = sim.world, t = w.tower;
     t.ce = 0;
     const a = dummy(sim, 200, 0, 'grunt', 1);
     w.damage(a, 1e9, { source: 'primary', srcTag: 'test', cause: -1 });
-    expect(t.ce).toBeCloseTo(2);
+    expect(t.ce).toBeCloseTo(1);
     const el = dummy(sim, 200, 50, 'grunt', 1, ['hardened']);
     w.damage(el, 1e9, { source: 'primary', srcTag: 'test', cause: -1 });
-    expect(t.ce).toBeCloseTo(14);
+    expect(t.ce).toBeCloseTo(13);
     t.ce = t.ceCap - 1;
     const b = dummy(sim, 200, 90, 'grunt', 1);
     w.damage(b, 1e9, { source: 'primary', srcTag: 'test', cause: -1 });

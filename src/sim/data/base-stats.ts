@@ -55,9 +55,9 @@ export const BASE_STATS: Record<string, number> = {
   'ballistics.multishot.spread': 0.35,            // radians across the fan (≈20°)
   'ballistics.piercing.last_rites.mult': 4,       // damage ×4 on the final enemy pierced
   'ballistics.ricochet.retention': 0.8,           // damage kept per bounce
-  'ballistics.heavy.fire_rate': 0.6,              // Heavy Rounds attack-speed multiplier
+  'ballistics.heavy.fire_rate': 0.85,             // Heavy Rounds attack-speed multiplier
   'ballistics.heavy.base_damage': 1.9,            // inherent Heavy damage multiplier
-  'ballistics.heavy.base_size': 1.75,             // inherent Heavy size multiplier
+  'ballistics.heavy.base_size': 2.5,              // inherent Heavy size multiplier
   'ballistics.heavy.base_knockback': 18,          // inherent Heavy knockback units
   'ballistics.heavy.staggerhead.seconds': 0.6,    // elite stagger duration
   'ballistics.heavy.staggerhead.boss_lockout': 4, // s between boss interrupts
@@ -65,6 +65,7 @@ export const BASE_STATS: Record<string, number> = {
   'ballistics.gunstorm.rounds': 6,                // rounds per barrel in the burst
 
   // --- Bastion --------------------------------------------------------------
+  'bastion.max_hp_final': 1,                      // applied after all max-HP bonuses (Glass Cannon ×0.5)
   'bastion.shield_delay': 3,                      // s without damage before recharge
   'bastion.resistance_cap': 0.9,
   'bastion.between_wave_heal': 0.25,              // fraction of max HP healed between waves (Tithe sets 0)
@@ -133,6 +134,7 @@ export const BASE_STATS: Record<string, number> = {
   'anomaly.rogue_moon.orbit': 380,
   'anomaly.unstable_isotope.self_chance': 0.05,
   'anomaly.unstable_isotope.self_damage': 0.1,
+  'anomaly.unstable_isotope.self_cap': 0.02,       // each self-detonation deals ≤ this × tower max HP
   'anomaly.afterimage_round.delay': 0.4,
   'anomaly.afterimage_round.damage': 0.3,
   'anomaly.echo_chamber.delay': 0.5,
@@ -180,6 +182,9 @@ export const BASE_STATS: Record<string, number> = {
   'fire.spread_on_death.radius': 60,
   'fire.wildfire.flashpoint': 0,                  // × remaining burn damage dealt by a Flashpoint
   'fire.wildfire.flashpoint.radius': 60,
+  'fire.wildfire.flashpoint.source_cap': 0.35,     // Flashpoint damage ≤ this × the erupting enemy's max HP
+  'fire.wildfire.flashpoint.target_cap': 0.12,    // one Flashpoint deals ≤ this × each target's max HP
+  'fire.wildfire.flashpoint.inherit': 0.5,        // Burn a Flashpoint passes on burns at this × the victim's Burn DPS (chains fade)
   'fire.wildfire.tinder': 1,                      // Flashpoint radius multiplier
   'fire.inferno.fireball_every': 7,               // every Nth primary shot (rank 1 → 6)
   'fire.inferno.crits_ignite': 0,                 // extra Burn stacks on crit
@@ -221,7 +226,7 @@ export const BASE_STATS: Record<string, number> = {
   'poison.plague.contagion.radius': 80,
   'poison.plague.incubation': 1,                  // damage multiplier for spread stacks
   'poison.plague.plague_carrier.radius': 70,
-  'poison.venom.virulence': 0,                    // damage bonus per stack past the 5th
+  'poison.venom.virulence': 0.03,                 // damage bonus per stack past the 5th (Venom's base; nodes add 0.02)
   'poison.venom.corrosion': 0,                    // armor fraction stripped per stack
   'poison.venom.corrosion.cap': 0.6,
   'poison.pandemic.interval': 2,
@@ -277,7 +282,7 @@ export const BASE_STATS: Record<string, number> = {
   // --- Drones -----------------------------------------------------------------
   'drones.count': 1,
   'drones.cap': 8,                                // Hive ×1.5
-  'drones.damage': 6,
+  'drones.damage': 16,
   'drones.orbit_radius': 90,
   'drones.speed': 160,
   'drones.attack_speed': 1.2,
@@ -299,8 +304,8 @@ export const BASE_STATS: Record<string, number> = {
   'drones.support.shield_drone': 0,               // shield capacity as fraction of max HP
 
   // --- Blade ------------------------------------------------------------------
-  'blade.damage': 8,
-  'blade.length': 60,
+  'blade.damage': 20,
+  'blade.length': 140,
   'blade.rotation_speed': 3,                      // rad/s
   'blade.knockback': 20,
   'blade.serration': 0,                           // Bleed chance
@@ -323,10 +328,10 @@ export const BASE_STATS: Record<string, number> = {
   // --- Laser ------------------------------------------------------------------
   'laser.nodes': 2,
   'laser.max_nodes': 8,
-  'laser.radius': 110,
+  'laser.radius': 170,
   'laser.rotation': 0.6,                          // rad/s
   'laser.beam_width': 6,
-  'laser.damage': 12,                             // DPS per beam
+  'laser.damage': 60,                             // DPS per beam
   'laser.node_durability': 50,                    // node HP
   'laser.node_rebuild': 4,                        // s
   'laser.pulse.interval': 3.4,                    // rank 1 → 3.0 s
@@ -355,7 +360,8 @@ export const BASE_STATS: Record<string, number> = {
   'gravitics.cooldown': 8,                        // s
   'gravitics.mass_driver.fraction': 0.1,          // × thrown enemy max HP
   'gravitics.mass_driver.boss_fraction': 0.05,
-  'gravitics.collapse.implosion': 0.5,            // implosion multiplier (rank 1 → 1.0)
+  'gravitics.damage': 60,                         // crush damage of every well collapse (× (1 + per_captive × captives))
+  'gravitics.collapse.implosion': 1,              // Collapse multiplier on well damage (rank 1 → 1.5, +0.5 per rank)
   'gravitics.collapse.base_damage': 30,
   'gravitics.collapse.per_captive': 0.15,
   'gravitics.collapse.yield': 1,
@@ -368,9 +374,10 @@ export const BASE_STATS: Record<string, number> = {
   'gravitics.tidal.orbit_lock.seconds': 2,
 
   // --- Fusions and Triads (node id = magnitude key) ---------------------------
-  'fusion.toxic_combustion': 1,                   // × remaining poison (rank 1 → 1.5)
+  'fusion.toxic_combustion': 0.25,                // × remaining poison (rank 1 → 0.5, +0.25 per rank)
+  'fusion.toxic_combustion.target_cap': 0.15,     // one explosion deals ≤ this × each target's max HP
   'fusion.toxic_combustion.min_stacks': 5,
-  'fusion.toxic_combustion.radius': 80,
+  'fusion.toxic_combustion.radius': 60,
   'fusion.superconductivity': 0,
   'fusion.thermal_shock': 0,                      // × triggering hit damage
   'fusion.thermal_shock.chill_threshold': 4,

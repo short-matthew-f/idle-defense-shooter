@@ -1,16 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { enemyHp, bossHp, scrapPerKill, echoesFor, starsFor, nodeCost, firstClearMultiplier, statCost, offlineScrap, mechanicTierCost } from '../../src/sim/economy/curves';
+import { ENEMY_HP_BASE, ENEMY_HP_GROWTH, SCRAP_GROWTH, enemyHp, bossHp, scrapPerKill, echoesFor, starsFor, nodeCost, firstClearMultiplier, statCost, offlineScrap, mechanicTierCost } from '../../src/sim/economy/curves';
 import type { NodeDef } from '../../src/sim/data/schema';
 
 describe('economy curves', () => {
-  it('EnemyHP follows 10·1.13^w·k·1.6^A·(1+0.12T)', () => {
-    expect(enemyHp(20, 1)).toBeCloseTo(10 * Math.pow(1.13, 20), 9);
-    expect(enemyHp(1, 1)).toBeCloseTo(11.3, 9);
-    expect(enemyHp(10, 4, 2, 5)).toBeCloseTo(10 * Math.pow(1.13, 10) * 4 * 1.6 * 1.6 * 1.6, 6);
-    expect(bossHp(5, 1.5)).toBeCloseTo(12 * 10 * Math.pow(1.13, 5) * 1.5, 9);
+  // growth constants were retuned in the balance pass (docs/BALANCE.md); the formula shape is what is tested
+  it('EnemyHP follows base·g^w·k·1.6^A·(1+0.12T)', () => {
+    const g = ENEMY_HP_GROWTH, b = ENEMY_HP_BASE;
+    expect(enemyHp(20, 1)).toBeCloseTo(b * Math.pow(g, 20), 9);
+    expect(enemyHp(1, 1)).toBeCloseTo(b * g, 9);
+    expect(enemyHp(10, 4, 2, 5)).toBeCloseTo(b * Math.pow(g, 10) * 4 * 1.6 * 1.6 * 1.6, 6);
+    expect(bossHp(5, 1.5)).toBeCloseTo(12 * b * Math.pow(g, 5) * 1.5, 9);
   });
   it('Scrap, Echoes and Stars', () => {
-    expect(scrapPerKill(10, 2)).toBeCloseTo(Math.pow(1.11, 10) * 2, 9);
+    expect(scrapPerKill(10, 2)).toBeCloseTo(Math.pow(SCRAP_GROWTH, 10) * 2, 9);
     expect(echoesFor(30, 0)).toBe(Math.floor(10 * Math.pow(1.2, 10)));
     expect(echoesFor(30, 0)).toBe(61);
     expect(echoesFor(19, 3)).toBe(0);

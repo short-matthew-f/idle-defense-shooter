@@ -120,7 +120,9 @@ describe('boss data', () => {
       expect(b.phases.length, b.id).toBe(finale ? 3 : 2);
       expect(b.phases[0].hpFraction).toBe(1);
       for (let i = 1; i < b.phases.length; i++) expect(b.phases[i].hpFraction).toBeLessThan(b.phases[i - 1].hpFraction);
-      if (finale && b.id !== 'deep_graft') expect(b.hpMul).toBe(1.3);
+      // balance pass: hpMul rises with the wave; a finale is ≥ 1.2× the boss before it (was a flat 1.3)
+      const prev = BOSSES.find((x) => x.wave === b.wave - 5);
+      if (finale && b.id !== 'deep_graft' && prev) expect(b.hpMul, b.id).toBeGreaterThanOrEqual(1.2 * prev.hpMul - 1e-9);
       for (const ph of b.phases) expect(ph.attacks.length).toBeGreaterThan(0);
     }
   });

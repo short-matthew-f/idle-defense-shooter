@@ -20,6 +20,23 @@ export const TIER_PRICE = { 1: 150, 2: 1200, 3: 9600 } as const;
 export const RANK_STEP = 3;
 /** Hardpoint trees start pricier (design §17 guidance). */
 export const HARDPOINT_SCALE = 1.5;
+/**
+ * Balance pass: every stat node's per-rank price growth is raised by STAT_GROWTH_ADD and capped at
+ * STAT_GROWTH_MAX (the top of the design's 1.15–1.22 range), so late ranks keep costing real Scrap
+ * as income grows ×1.10 per wave. The tables keep their authored (relative) growth values.
+ */
+export const STAT_GROWTH_ADD = 0.03;
+export const STAT_GROWTH_MAX = 1.22;
+/**
+ * Balance pass: every stat node's authored maxRank is scaled by STAT_RANK_SCALE (rounded up). With
+ * the authored depths (20–60 ranks at ×1.19–1.22) a build never ran out of stat ranks before wave
+ * ~60–70, so the Echo rate never peaked and the Forecast never recommended; at half depth the shop
+ * of a first-Prestige build runs out around wave 45–55 and the §3 wall forms there. Nodes whose
+ * text promises a maximum (Ablative Coating, Matched Edges, Containment Field) doubled their
+ * per-rank value instead of losing half the maximum.
+ */
+export const STAT_RANK_SCALE = 0.5;
+export const STAT_BASE_MUL = 1.5;
 
 export interface NodeOpts {
   requires?: string[];
@@ -55,7 +72,8 @@ export function stat(
   tier: 0 | 1 | 2 = 0, o: NodeOpts = {},
 ): NodeDef {
   const effects: StatEffect[] = [{ stat: id, op, perRank }, ...(o.effects ?? [])];
-  return withOpts({ id, name, desc, kind: 'stat', maxRank, cost: { base, growth }, tier, effects }, o);
+  const g = Math.min(STAT_GROWTH_MAX, Math.max(growth, growth + STAT_GROWTH_ADD));
+  return withOpts({ id, name, desc, kind: 'stat', maxRank: Math.max(1, Math.ceil(maxRank * STAT_RANK_SCALE)), cost: { base: base * STAT_BASE_MUL, growth: g }, tier, effects }, o);
 }
 
 /** Mechanic node: flat price per rank; maxRank = prices.length. */

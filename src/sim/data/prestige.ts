@@ -32,14 +32,14 @@ const e = (stat: string, op: StatEffect['op'], perRank: number): StatEffect => (
 
 export const PRESTIGE_NODES: PrestigeNodeDef[] = [
   // --- Prestige I — Inheritance (wave 20): compress mastered content -------
-  node(1, 'seed_capital', 'Seed Capital', 'Start each Prestige with 150 Scrap per rank.', 5, 20, [e('economy.start_scrap', 'add', 150)]),
-  node(1, 'memory_of_steel', 'Memory of Steel', 'Start each Prestige with 2 free ranks of Caliber (primary damage) per rank.', 8, 10, [e('prestige.memory_of_steel', 'add', 2)]),
-  node(1, 'memory_of_motion', 'Memory of Motion', 'Start each Prestige with 2 free ranks of Autoloader (primary attack speed) per rank.', 8, 10, [e('prestige.memory_of_motion', 'add', 2)]),
-  node(1, 'accelerated_clearing', 'Accelerated Clearing', 'Waves below your previous best run at ×2 speed; ×4 at rank 2, ×8 at rank 3.', 15, 3),
-  node(1, 'boss_bounty', 'Boss Bounty', 'Bosses pay +25% Scrap per rank.', 6, 20, [e('economy.boss_scrap_mul', 'add', 0.25)]),
-  node(1, 'checkpoint_dividend', 'Checkpoint Dividend', 'The first reach of each checkpoint in a Prestige pays a bonus of 25% per rank of that boss wave\'s kill Scrap.', 10, 10, [e('prestige.checkpoint_dividend', 'add', 0.25)]),
-  node(1, 'scrap_resonance', 'Scrap Resonance', '+5% Scrap from every source per rank.', 5, 50, [e('economy.scrap_mul', 'add', 0.05)]),
-  node(1, 'hardened_core', 'Hardened Core', '+5% max HP per rank.', 5, 30, [e('bastion.max_hp', 'mul', 0.05)]),
+  node(1, 'seed_capital', 'Seed Capital', 'Start each Prestige with 150 Scrap per rank.', 10, 20, [e('economy.start_scrap', 'add', 150)]),
+  node(1, 'memory_of_steel', 'Memory of Steel', 'Start each Prestige with 2 free ranks of Caliber (primary damage) per rank.', 16, 10, [e('prestige.memory_of_steel', 'add', 2)]),
+  node(1, 'memory_of_motion', 'Memory of Motion', 'Start each Prestige with 2 free ranks of Autoloader (primary attack speed) per rank.', 16, 10, [e('prestige.memory_of_motion', 'add', 2)]),
+  node(1, 'accelerated_clearing', 'Accelerated Clearing', 'Waves below your previous best run at ×2 speed; ×4 at rank 2, ×8 at rank 3.', 1500, 3),
+  node(1, 'boss_bounty', 'Boss Bounty', 'Bosses pay +25% Scrap per rank.', 12, 20, [e('economy.boss_scrap_mul', 'add', 0.25)]),
+  node(1, 'checkpoint_dividend', 'Checkpoint Dividend', 'The first reach of each checkpoint in a Prestige pays a bonus of 25% per rank of that boss wave\'s kill Scrap.', 20, 10, [e('prestige.checkpoint_dividend', 'add', 0.25)]),
+  node(1, 'scrap_resonance', 'Scrap Resonance', '+5% Scrap from every source per rank.', 10, 50, [e('economy.scrap_mul', 'add', 0.05)]),
+  node(1, 'hardened_core', 'Hardened Core', '+5% max HP per rank.', 10, 30, [e('bastion.max_hp', 'mul', 0.05)]),
 
   // --- Prestige II — Arsenal Memory (wave 40): plan builds -----------------
   node(2, 'frames', 'Frames', 'Unlocks the Arsenal and Conductor frames.', 60, 1),

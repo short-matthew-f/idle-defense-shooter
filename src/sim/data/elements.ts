@@ -16,9 +16,9 @@ export const FIRE: TreeDef = {
   id: 'fire', name: 'Fire', category: 'element', forkRequirement: 3,
   shared: [
     stat('fire.burn_chance', 'Incendiary Mix', 'Primary hits Burn their target with 15% chance; +2% per rank.', 'add', 0.02, 20, 1.18, 25, 0, { tags: ['status'] }),
-    stat('fire.burn_stacks', 'Accelerant', 'Burn stacks up to 3 times on one enemy; +1 stack cap per rank.', 'add', 1, 40, 1.22, 12, 0, { tags: ['status'] }),
+    stat('fire.burn_stacks', 'Accelerant', 'Burn stacks up to 3 times on one enemy; +1 stack cap per rank.', 'add', 1, 40, 1.22, 7, 0, { tags: ['status'] }),
     stat('fire.burn_duration', 'Slow Fuse', 'Burn lasts 3 s; +0.2 s per rank. Reapplying refreshes the duration.', 'add', 0.2, 20, 1.17, 25, 0, { tags: ['status'] }),
-    stat('fire.burn_damage', 'Thermite', 'Each Burn stack deals 20% of the igniting hit\'s damage per second; +8% per rank.', 'mul', 0.08, 25, 1.18, 35, 0, { tags: ['damage'] }),
+    stat('fire.burn_damage', 'Thermite', 'Each Burn stack deals 20% of the igniting hit\'s damage per second; +6% per rank.', 'mul', 0.06, 25, 1.18, 35, 0, { tags: ['damage'] }),
     mech('fire.spread_on_death', 'Spread on Death',
       'Burning enemies that die pass 1 Burn stack per rank to up to 2 enemies within 60 units.',
       1, flat(1, 3), [fx('fire.spread_on_death', 'add', 1)], { requires: ['fire.burn_chance'] }),
@@ -26,8 +26,8 @@ export const FIRE: TreeDef = {
   doctrines: [
     doctrine('fire', 'wildfire', 'Wildfire', 'Flashpoint explosions spread Burn stacks through the wave.', [
       mech('fire.wildfire.flashpoint', 'Flashpoint',
-        'An enemy reaching max Burn stacks erupts in a 60-unit Flashpoint dealing 50% per rank of its remaining Burn damage and giving 1 Burn stack to everything caught.',
-        2, flat(2, 3), [fx('fire.wildfire.flashpoint', 'add', 0.5)]),
+        'An enemy reaching max Burn stacks erupts in a 60-unit Flashpoint dealing 15% per rank of its remaining Burn damage (falling off with distance; at most 12% of each target\'s max HP and 35% of its own) and giving 1 Burn stack at half its Burn strength to everything caught.',
+        2, flat(2, 3), [fx('fire.wildfire.flashpoint', 'add', 0.15)]),
       stat('fire.wildfire.tinder', 'Tinderbox', 'Flashpoints are 5% wider per rank.', 'mul', 0.05, DOC_BASE, DOC_G, 25, 2),
       mech('fire.wildfire.spread', 'Conflagration',
         'Flashpoints pass on every Burn stack the victim carried instead of one, and an enemy pushed to max stacks by a Flashpoint erupts in turn.',
@@ -95,8 +95,8 @@ export const POISON: TreeDef = {
   id: 'poison', name: 'Poison', category: 'element', forkRequirement: 3,
   shared: [
     stat('poison.application', 'Toxin Glands', 'Primary hits apply 0.3 Poison stacks on average (the fraction is a chance for one more); +0.03 per rank.', 'add', 0.03, 20, 1.18, 30, 0, { tags: ['status'] }),
-    stat('poison.stack_cap', 'Saturation', 'Poison stacks up to 10 times per enemy; +1 per rank.', 'add', 1, 30, 1.2, 30, 0, { tags: ['status'] }),
-    stat('poison.damage', 'Neurotoxin', 'Each Poison stack deals 8% of primary damage per second; +8% per rank.', 'mul', 0.08, 25, 1.18, 35, 0, { tags: ['damage'] }),
+    stat('poison.stack_cap', 'Saturation', 'Poison stacks up to 10 times per enemy; +1 per rank.', 'add', 1, 30, 1.2, 15, 0, { tags: ['status'] }),
+    stat('poison.damage', 'Neurotoxin', 'Each Poison stack deals 8% of primary damage per second; +6% per rank.', 'mul', 0.06, 25, 1.18, 35, 0, { tags: ['damage'] }),
     stat('poison.duration', 'Lingering Dose', 'Poison stacks last 5 s; +0.25 s per rank.', 'add', 0.25, 20, 1.17, 25, 0, { tags: ['status'] }),
   ],
   doctrines: [

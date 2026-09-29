@@ -2,9 +2,9 @@
  * Economy curves (design §17, ARCHITECTURE "Economy constants"). Every power goes through
  * `growth(g, n)` so results are bit-identical across engines.
  *
- *   EnemyHP(w)      = 10 · 1.13^w · k · 1.6^A · (1 + 0.12·T)
- *   BossHP(w)       = 12 · EnemyHP(w) · boss.hpMul
- *   ScrapPerKill(w) = 1.11^w · k                       (first clear ×3; Strip Mine ×4; Poverty reward ×5)
+ *   EnemyHP(w)      = 7 · 1.14^w · k · 1.6^A · (1 + 0.12·T)   (design start: 10 · 1.13^w; balance pass, docs/BALANCE.md)
+ *   BossHP(w)       = 12 · EnemyHP(w) · boss.hpMul         (hpMul now rises with the wave, data/bosses.ts)
+ *   ScrapPerKill(w) = 1.10^w · k                       (design start 1.11^w; first clear ×3; Strip Mine ×4; Poverty reward ×5)
  *   StatCost(r)     = base · g^r
  *   Mechanic cost   = flat per rank; tiers ×8 within a tree
  *   Echoes(D,T)     = floor(10 · 1.2^(D−20) · (1 + 0.1·T)), 0 when D < 20
@@ -13,14 +13,14 @@
 import { growth } from '../math/lut';
 import type { NodeDef } from '../data/schema';
 
-export const ENEMY_HP_BASE = 10;
-export const ENEMY_HP_GROWTH = 1.13;
+export const ENEMY_HP_BASE = 7;
+export const ENEMY_HP_GROWTH = 1.14;
 export const ASCENSION_HP_GROWTH = 1.6;
 export const THREAT_HP_PER_LEVEL = 0.12;
 export const THREAT_SPEED_PER_LEVEL = 0.03;
 export const THREAT_SCRAP_PER_LEVEL = 0.05;
 export const BOSS_HP_MUL = 12;
-export const SCRAP_GROWTH = 1.11;
+export const SCRAP_GROWTH = 1.10;
 export const CONTACT_GROWTH = 1.06;
 export const MECHANIC_TIER_GROWTH = 8;
 export const BETWEEN_WAVE_HEAL = 0.25;

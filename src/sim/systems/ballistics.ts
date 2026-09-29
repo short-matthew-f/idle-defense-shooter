@@ -11,8 +11,8 @@
  *   piercing      pierce = piercing.count; damage × retention × (1 + velocity) and speed × (1 + velocity) per pierce;
  *                 Last Rites: the final pierce deals ×4
  *   ricochet      bounces = ricochet.bounces within ricochet.range, ×0.8 damage per bounce; Return Fire revisits
- *   heavy_rounds  fire rate ×0.6, damage ×1.9 × heavy.damage, radius ×1.75 × heavy.size,
- *                 knockback 18 + heavy.knockback; Staggerhead staggers elites / interrupts bosses (staggerT)
+ *   heavy_rounds  fire rate × heavy.fire_rate (0.75), damage × heavy.base_damage (1.9) × heavy.damage, radius ×
+ *                 heavy.base_size (2.5) × heavy.size, knockback heavy.base_knockback (18) + heavy.knockback; Staggerhead staggers elites / interrupts bosses (staggerT)
  * Targeting: build.targeting.primary (default 'nearest'); a live designated enemy in range always wins.
  * Manual aim (tower.manualAim) overrides direction; manual shots get +10% crit chance (ProjFlag.Manual).
  */
@@ -77,10 +77,11 @@ export class BallisticsSystem implements System {
 
     const hs = s.doctrineStrength('ballistics', 'heavy_rounds');
     if (hs > 0) {
-      this.rate *= 1 - 0.4 * hs;
-      this.dmg *= (1 + 0.9 * hs) * s.get('ballistics.heavy.damage');
-      this.radius = 3 * (1 + 0.75 * hs) * s.get('ballistics.heavy.size');
-      this.knock = 18 * hs + s.get('ballistics.heavy.knockback');
+      // inherent Heavy constants come from data (base-stats ballistics.heavy.*); they were hard-coded here
+      this.rate *= 1 - (1 - s.get('ballistics.heavy.fire_rate')) * hs;
+      this.dmg *= (1 + (s.get('ballistics.heavy.base_damage') - 1) * hs) * s.get('ballistics.heavy.damage');
+      this.radius = 3 * (1 + (s.get('ballistics.heavy.base_size') - 1) * hs) * s.get('ballistics.heavy.size');
+      this.knock = s.get('ballistics.heavy.base_knockback') * hs + s.get('ballistics.heavy.knockback');
       this.stagger = s.has('ballistics.heavy.staggerhead');
     } else { this.radius = 3; this.knock = 0; this.stagger = false; }
   }

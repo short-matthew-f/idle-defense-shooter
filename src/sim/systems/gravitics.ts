@@ -69,7 +69,10 @@ export class GraviticsSystem implements System {
     this.massDriver = s.has('gravitics.mass_driver');
     this.mdFrac = s.get('gravitics.mass_driver.fraction'); this.mdBoss = s.get('gravitics.mass_driver.boss_fraction');
     this.collapse = s.doctrineStrength('gravitics', 'collapse') > 0 && s.has('gravitics.collapse.implosion');
-    this.implosion = s.get('gravitics.collapse.implosion'); this.baseDmg = s.get('gravitics.collapse.base_damage');
+    // Every collapse crushes its captives for gravitics.damage (the tree's damage node scales it); the Collapse
+    // Doctrine multiplies that by implosion × yield.
+    this.implosion = this.collapse ? s.get('gravitics.collapse.implosion') * s.get('gravitics.collapse.yield') : 1;
+    this.baseDmg = s.get('gravitics.damage');
     this.perCaptive = s.get('gravitics.collapse.per_captive'); this.yieldMul = s.get('gravitics.collapse.yield');
     this.chain = this.collapse && s.has('gravitics.collapse.chain_collapse');
     this.chainN = Math.max(0, Math.min(4, Math.floor(s.get('gravitics.collapse.chain_collapse.count'))));
@@ -143,9 +146,16 @@ export class GraviticsSystem implements System {
     for (let j = 0; j < MAX_WELLS; j++) if (this.act[j]) {
       this.avoid[na * 4] = this.wx[j]; this.avoid[na * 4 + 1] = this.wy[j]; this.avoid[na * 4 + 2] = this.wr[j] + this.R * 0.5; na++;
     }
-    const best = densestEnemy(w, 0, 0, 2000, this.R, 64, this.avoid, na);
+    // Wells only form on enemies inside the primary's range. Without the limit a well could form on a lone
+    // enemy beyond every weapon's reach and re-form on it after each collapse, pinning it there forever (a
+    // wave that never ends; seen with shield-regenerating enemies at r ≈ 410–640).
+    const best = densestEnemy(w, 0, 0, Math.max(150, w.stats.get('ballistics.range')), this.R, 64, this.avoid, na);
     if (best < 0 || bestScore === 0) return;
-    this.open(k, w.enemies.x[best], w.enemies.y[best], this.R, this.duration, 1, false);
+    // Centre the well a quarter radius inside the cluster (toward the tower): captives are dragged inward
+    // ("Wells drag enemies inward"), never held in place at the edge of the weapons' reach.
+    const bx = w.enemies.x[best], by = w.enemies.y[best], br = Math.sqrt(bx * bx + by * by);
+    const kIn = br > 1e-6 ? Math.max(0, br - this.R * 0.25) / br : 0;
+    this.open(k, bx * kIn, by * kIn, this.R, this.duration, 1, false);
     w.emit(Ev.Fx, 'gravitics.well', k, bestScore, this.wx[k], this.wy[k], -1);
   }
 
@@ -169,8 +179,8 @@ export class GraviticsSystem implements System {
       sh.collapses[o] = x; sh.collapses[o + 1] = y; sh.collapses[o + 2] = r; sh.collapses[o + 3] = caps;
     }
     if (this.fxN < MAX_WELLS * 3) { const o = this.fxN++ * 3; this.fxBuf[o] = x; this.fxBuf[o + 1] = y; this.fxBuf[o + 2] = r; }
-    if (this.collapse) {
-      const dmg = this.baseDmg * this.implosion * this.yieldMul * (1 + this.perCaptive * caps) * this.dmgMul[k];
+    if (this.baseDmg > 0) {
+      const dmg = this.baseDmg * this.implosion * (1 + this.perCaptive * caps) * this.dmgMul[k];
       w.explode(x, y, r, dmg, { source: 'gravitics', srcTag: 'gravitics', element: this.element, cause, falloff: false });
       if (this.chain && !this.chainW[k]) {
         let spawned = 0;

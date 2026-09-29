@@ -80,7 +80,7 @@ describe('Prestige', () => {
     meta.deepestEver = 30;
     for (let k = 0; k < 3; k++) expect(cmd(sim, { type: 'buy_prestige', node: 'prestige.seed_capital' })).toBeNull();
     expect(meta.prestigeRanks['prestige.seed_capital']).toBe(3);
-    expect(meta.echoes).toBe(100 - 5 - Math.ceil(5 * 1.5) - Math.ceil(5 * 2.25));
+    expect(meta.echoes).toBe(100 - 10 - Math.ceil(10 * 1.5) - Math.ceil(10 * 2.25));   // balance pass: Seed Capital base 5 → 10
     expect(cmd(sim, { type: 'buy_prestige', node: 'prestige.memory_of_steel' })).toBeNull();
     expect(cmd(sim, { type: 'buy_prestige', node: 'prestige.frames' })).toMatch(/wave 40/);
     cmd(sim, { type: 'prestige', frame: 'standard' });

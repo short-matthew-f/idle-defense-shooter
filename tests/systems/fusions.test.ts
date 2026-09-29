@@ -17,13 +17,13 @@ describe('Fusions', () => {
     w.applyStatus(a, 'burn', 1, 180, 'fire', -1, 1);
     const f = fusionEvents(sim, 'fusion.toxic_combustion');
     expect(f.length).toBe(1);
-    expect(f[0].b).toBeCloseTo(pending * 1.5, 3);
+    expect(f[0].b).toBeCloseTo(pending * w.stats.get('fusion.toxic_combustion'), 3);   // rank 1: ×0.5 (balance pass)
     expect(w.enemies.poison[a]).toBe(0);
     const hpB = w.enemies.hp[b];
     ticks(sim, 1);
     const boom = events(sim, (e) => e.type === Ev.Explosion && e.src === 'fusion.toxic_combustion')[0];
     expect(boom.cause).toBe(f[0].id);
-    expect(hpB - w.enemies.hp[b]).toBeGreaterThan(pending);
+    expect(hpB - w.enemies.hp[b]).toBeGreaterThan(0);   // b is 50 units out: falloff + per-target cap (balance pass)
   });
 
   it('Superconductivity: arcs prefer chilled enemies and gain damage per chilled link', () => {

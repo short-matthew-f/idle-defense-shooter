@@ -92,8 +92,8 @@ export const ANOMALIES: AnomalyDef[] = [
   // --- Cursed -------------------------------------------------------------
   {
     id: 'glass_cannon', name: 'Glass Cannon', rarity: 'cursed', pool: 'base',
-    desc: '+80% damage from every source, but −50% max HP.',
-    effects: [fx('combat.power_mul', 'mul', 0.8), fx('bastion.max_hp', 'mul', -0.5)],
+    desc: '+50% damage from every source, but −50% max HP.',
+    effects: [fx('combat.power_mul', 'mul', 0.5), fx('bastion.max_hp_final', 'mul', -0.5)],
   },
   {
     id: 'unstable_isotope', name: 'Unstable Isotope', rarity: 'cursed', pool: 'base', needs: ['ordnance'],

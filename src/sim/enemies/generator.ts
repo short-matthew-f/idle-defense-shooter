@@ -377,9 +377,13 @@ function layout(id: FormationId, c: Ctx, picks: Pick[]): SpawnEntry[] {
         const center = a0 + g * GOLDEN;
         const t0 = g * D / C;
         const H = Math.max(1, Math.ceil(m * 0.3));
+        // The tail stretches over ~70% of this comet's share of the spawn window (at least 8 ticks apart).
+        // Balance pass: with one comet (N ≤ 40) the whole wave used to arrive in ~3.5 s, a burst that
+        // killed early towers dozens of times on wave 6.
+        const step = Math.max(8, Math.floor(((D / C) * 0.7) / Math.max(1, m - H)));
         for (let k = 0; k < m; k++) {
           if (k < H) out.push(entry(picks[from + k], t0 + (k % 3) * 4, center + rng.range(-0.07, 0.07), rng.range(0, 30), k, g));
-          else out.push(entry(picks[from + k], t0 + 20 + (k - H) * 8, center, 0, k, g));
+          else out.push(entry(picks[from + k], t0 + 20 + (k - H) * step, center, 0, k, g));
         }
       }
       return out;

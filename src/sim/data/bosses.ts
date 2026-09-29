@@ -1,7 +1,9 @@
 /**
  * Bosses (design §13). Every fifth wave is a boss that tests one system. Ordinary
- * bosses have 2 phases, Sector finales (20/40/60/80/100) have 3 and hpMul 1.3.
- * BossHP(w) = 12 * EnemyHP(w) * hpMul.
+ * bosses have 2 phases, Sector finales (20/40/60/80/100) have 3 and ~1.3× their neighbours' hpMul.
+ * BossHP(w) = 12 * EnemyHP(w) * hpMul. Balance pass: hpMul rises with the wave (≈ with the Threat
+ * Budget) so boss fights stay 45–120 s instead of shrinking to 20 s as the build outgrows 12× one enemy
+ * (see docs/BALANCE.md).
  *
  * Conventions for WP5 (enemies/bosses/*):
  *  - `phases[i].hpFraction`: phase i begins when hp/maxHp <= hpFraction (phase 0 = 1.0).
@@ -62,7 +64,7 @@ const WP = (angle: number, radius: number, exposedSeconds = 4) => ({ angle, radi
 export const BOSSES: BossDef[] = [
   {
     id: 'breaker', name: 'The Breaker', wave: 5, tests: 'Basic DPS and survival',
-    hpMul: 1, radius: 34, speed: 16, armor: 10, shieldMul: 0,
+    hpMul: 1.0, radius: 34, speed: 16, armor: 10, shieldMul: 0,
     phases: [
       { hpFraction: 1, name: 'Advance', attacks: ['slam', 'stomp_wave'] },
       { hpFraction: 0.5, name: 'Rampage', attacks: ['slam', 'charge', 'stomp_wave'], weakPoint: WP(PI, 26) },
@@ -73,19 +75,19 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'broodheart', name: 'Broodheart', wave: 10, tests: 'Area damage vs spawning swarms',
-    hpMul: 1, radius: 38, speed: 12, armor: 0, shieldMul: 0,
+    hpMul: 0.75, radius: 38, speed: 12, armor: 0, shieldMul: 0,
     phases: [
       { hpFraction: 1, name: 'Gestation', attacks: ['brood_sac', 'spawn_brood'] },
       { hpFraction: 0.5, name: 'Hatching', attacks: ['brood_sac', 'spawn_brood', 'acid_spit'], weakPoint: WP(0, 30) },
     ],
     tell: { name: 'Brood sac swells', counter: 'bombardment', windowSeconds: 1.5, everySeconds: 12, desc: 'A sac bulges on its back; Bombardment on the sac kills the brood inside.' },
-    adds: [{ kind: 'brood', perPhase: 12 }, { kind: 'swarm', perPhase: 6 }],
+    adds: [{ kind: 'brood', perPhase: 9 }, { kind: 'swarm', perPhase: 6 }],
     shape: Shape.Circle, color: [1.00, 0.80, 0.30],
     desc: 'A pulsing mother-sac that never stops birthing.',
   },
   {
     id: 'warden', name: 'The Warden', wave: 15, tests: 'Target priority and shields',
-    hpMul: 1, radius: 36, speed: 14, armor: 15, shieldMul: 0.5,
+    hpMul: 2.1, radius: 36, speed: 14, armor: 15, shieldMul: 0.5,
     phases: [
       { hpFraction: 1, name: 'Bulwark', attacks: ['shield_links', 'shield_pulse'] },
       { hpFraction: 0.5, name: 'Last Stand', attacks: ['shield_links', 'summon_guards', 'shield_pulse'], weakPoint: WP(PI, 28) },
@@ -97,7 +99,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'siege_engine', name: 'The Siege Engine', wave: 20, tests: 'Mixed threats; first Prestige gate',
-    hpMul: 1.3, radius: 46, speed: 12, armor: 25, shieldMul: 0,
+    hpMul: 2.7, radius: 46, speed: 12, armor: 25, shieldMul: 0,
     phases: [
       { hpFraction: 1, name: 'Bombard', attacks: ['siege_volley', 'ram_charge'] },
       { hpFraction: 0.66, name: 'Deploy', attacks: ['ram_charge', 'deploy_turrets', 'siege_volley'], weakPoint: WP(0, 34) },
@@ -110,7 +112,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'iron_maw', name: 'Iron Maw', wave: 25, tests: 'Sustained damage vs extreme HP',
-    hpMul: 1, radius: 44, speed: 10, armor: 40, shieldMul: 0,
+    hpMul: 4.2, radius: 44, speed: 10, armor: 40, shieldMul: 0,
     phases: [
       { hpFraction: 1, name: 'Grinding', attacks: ['maw_open', 'grind'] },
       { hpFraction: 0.5, name: 'Starving', attacks: ['maw_open', 'devour', 'grind'], weakPoint: WP(0, 20, 4) },
@@ -121,7 +123,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'mirror_hive', name: 'Mirror Hive', wave: 30, tests: 'Clones and crowd control',
-    hpMul: 1, radius: 32, speed: 18, armor: 5, shieldMul: 0,
+    hpMul: 4.9, radius: 32, speed: 18, armor: 5, shieldMul: 0,
     phases: [
       { hpFraction: 1, name: 'Reflection', attacks: ['clone_shuffle', 'spawn_clones'] },
       { hpFraction: 0.5, name: 'Hall of Mirrors', attacks: ['clone_shuffle', 'spawn_clones', 'mirror_volley'], weakPoint: WP(PI, 24) },
@@ -133,7 +135,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'storm_crown', name: 'Storm Crown', wave: 35, tests: 'Survival through hazards',
-    hpMul: 1, radius: 36, speed: 14, armor: 10, shieldMul: 0.2,
+    hpMul: 5.6, radius: 36, speed: 14, armor: 10, shieldMul: 0.2,
     phases: [
       { hpFraction: 1, name: 'Gathering', attacks: ['hazard_ring', 'lightning_strikes'] },
       { hpFraction: 0.5, name: 'Tempest', attacks: ['hazard_ring', 'storm_orbit', 'lightning_strikes'], weakPoint: WP(0, 26) },
@@ -145,7 +147,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'distant_saint', name: 'The Distant Saint', wave: 40, tests: 'Ranged artillery and escorts',
-    hpMul: 1.3, radius: 40, speed: 10, armor: 15, shieldMul: 0.3,
+    hpMul: 7, radius: 40, speed: 10, armor: 15, shieldMul: 0.3,
     phases: [
       { hpFraction: 1, name: 'Vigil', attacks: ['halo_charge', 'long_lance'] },
       { hpFraction: 0.66, name: 'Procession', attacks: ['halo_charge', 'escort_call', 'long_lance'], weakPoint: WP(PI, 30) },
@@ -158,7 +160,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'leech_queen', name: 'Leech Queen', wave: 45, tests: 'Shield drain and healing',
-    hpMul: 1, radius: 36, speed: 16, armor: 10, shieldMul: 0.3,
+    hpMul: 6.3, radius: 36, speed: 16, armor: 10, shieldMul: 0.3,
     phases: [
       { hpFraction: 1, name: 'Feeding', attacks: ['feeding_tethers', 'drain_shield'] },
       { hpFraction: 0.5, name: 'Gorged', attacks: ['feeding_tethers', 'spawn_leeches', 'drain_shield'], weakPoint: WP(PI, 26) },
@@ -170,7 +172,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'splinter_king', name: 'Splinter King', wave: 50, tests: 'Multi-stage fragmentation',
-    hpMul: 1, radius: 40, speed: 14, armor: 20, shieldMul: 0,
+    hpMul: 7, radius: 40, speed: 14, armor: 20, shieldMul: 0,
     phases: [
       { hpFraction: 1, name: 'Whole', attacks: ['split_flash', 'fragment_burst'] },
       { hpFraction: 0.5, name: 'Shattered', attacks: ['split_flash', 'reform', 'fragment_burst'], weakPoint: WP(0, 22) },
@@ -182,7 +184,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'null_engine', name: 'Null Engine', wave: 55, tests: 'Damage-type diversity',
-    hpMul: 1, radius: 40, speed: 12, armor: 30, shieldMul: 0.2,
+    hpMul: 7.7, radius: 40, speed: 12, armor: 30, shieldMul: 0.2,
     phases: [
       { hpFraction: 1, name: 'Calibrating', attacks: ['resistance_rotate', 'null_field'] },
       { hpFraction: 0.5, name: 'Overclocked', attacks: ['resistance_rotate', 'node_beam', 'null_field'], weakPoint: WP(PI, 30) },
@@ -193,7 +195,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'chronophage', name: 'The Chronophage', wave: 60, tests: 'Speed changes and bursts',
-    hpMul: 1.3, radius: 42, speed: 20, armor: 20, shieldMul: 0,
+    hpMul: 9.8, radius: 42, speed: 20, armor: 20, shieldMul: 0,
     phases: [
       { hpFraction: 1, name: 'Tick', attacks: ['dilation_pulse', 'time_burst'] },
       { hpFraction: 0.66, name: 'Tock', attacks: ['dilation_pulse', 'accelerate_adds', 'time_burst'], weakPoint: WP(0, 30) },
@@ -206,7 +208,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'hive_fortress', name: 'Hive Fortress', wave: 65, tests: 'Continuous add generation',
-    hpMul: 1, radius: 50, speed: 8, armor: 35, shieldMul: 0,
+    hpMul: 8.4, radius: 50, speed: 8, armor: 35, shieldMul: 0,
     phases: [
       { hpFraction: 1, name: 'Garrison', attacks: ['gate_open', 'spawn_wave'] },
       { hpFraction: 0.5, name: 'Sally Forth', attacks: ['gate_open', 'fortify', 'spawn_wave'], weakPoint: WP(0, 36) },
@@ -218,7 +220,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'redline', name: 'Redline', wave: 70, tests: 'Extreme movement speed',
-    hpMul: 1, radius: 28, speed: 110, armor: 10, shieldMul: 0,
+    hpMul: 8.4, radius: 28, speed: 110, armor: 10, shieldMul: 0,
     phases: [
       { hpFraction: 1, name: 'Warm-up', attacks: ['dash_lane', 'dash'] },
       { hpFraction: 0.5, name: 'Overdrive', attacks: ['dash_lane', 'afterburn_trail', 'dash'], weakPoint: WP(PI, 20, 3) },
@@ -229,7 +231,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'grave_battery', name: 'Grave Battery', wave: 75, tests: 'Reviving elites',
-    hpMul: 1, radius: 40, speed: 10, armor: 25, shieldMul: 0.2,
+    hpMul: 9.1, radius: 40, speed: 10, armor: 25, shieldMul: 0.2,
     phases: [
       { hpFraction: 1, name: 'Charging', attacks: ['revive_beam', 'grave_volley'] },
       { hpFraction: 0.5, name: 'Discharge', attacks: ['revive_beam', 'raise_elites', 'grave_volley'], weakPoint: WP(0, 28) },
@@ -241,7 +243,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'event_horizon', name: 'Event Horizon', wave: 80, tests: 'Spatial control; bends projectiles and drags drones',
-    hpMul: 1.3, radius: 48, speed: 8, armor: 20, shieldMul: 0,
+    hpMul: 11.2, radius: 48, speed: 8, armor: 20, shieldMul: 0,
     phases: [
       { hpFraction: 1, name: 'Accretion', attacks: ['inhale', 'bend_projectiles'] },
       { hpFraction: 0.66, name: 'Lensing', attacks: ['inhale', 'drag_drones', 'bend_projectiles'], weakPoint: WP(0, 34) },
@@ -254,7 +256,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'architect', name: 'The Architect', wave: 85, tests: 'Barriers and corridors',
-    hpMul: 1, radius: 38, speed: 12, armor: 30, shieldMul: 0.3,
+    hpMul: 9.8, radius: 38, speed: 12, armor: 30, shieldMul: 0.3,
     phases: [
       { hpFraction: 1, name: 'Drafting', attacks: ['wall_blueprint', 'raise_barrier'] },
       { hpFraction: 0.5, name: 'Construction', attacks: ['wall_blueprint', 'corridor_shift', 'raise_barrier'], weakPoint: WP(PI, 28) },
@@ -266,7 +268,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'choir', name: 'The Choir', wave: 90, tests: 'Linked shield generators',
-    hpMul: 1, radius: 40, speed: 10, armor: 20, shieldMul: 0.6,
+    hpMul: 9.8, radius: 40, speed: 10, armor: 20, shieldMul: 0.6,
     phases: [
       { hpFraction: 1, name: 'Overture', attacks: ['harmony_sync', 'shield_generators'] },
       { hpFraction: 0.5, name: 'Crescendo', attacks: ['harmony_sync', 'choir_beam', 'shield_generators'], weakPoint: WP(0, 30) },
@@ -278,7 +280,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'last_procession', name: 'Last Procession', wave: 95, tests: 'A boss inside an elite gauntlet',
-    hpMul: 1, radius: 36, speed: 14, armor: 25, shieldMul: 0.2,
+    hpMul: 10.5, radius: 36, speed: 14, armor: 25, shieldMul: 0.2,
     phases: [
       { hpFraction: 1, name: 'March', attacks: ['procession_halt', 'elite_gauntlet'] },
       { hpFraction: 0.5, name: 'Rally', attacks: ['procession_halt', 'rally', 'elite_gauntlet'], weakPoint: WP(PI, 26) },
@@ -290,7 +292,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'crown', name: 'The Crown', wave: 100, tests: 'Synthesis of the game\'s mechanics',
-    hpMul: 1.3, radius: 52, speed: 12, armor: 30, shieldMul: 0.3,
+    hpMul: 12.6, radius: 52, speed: 12, armor: 30, shieldMul: 0.3,
     phases: [
       { hpFraction: 1, name: 'Coronation', attacks: ['slam', 'crown_synthesis', 'siege_volley'] },
       { hpFraction: 0.66, name: 'Regency', attacks: ['shield_links', 'crown_synthesis', 'spawn_clones'], weakPoint: WP(0, 36) },
@@ -303,7 +305,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'deep_graft', name: 'Deep Graft', wave: 105, tests: 'Two boss mechanics at once (Deep Waves)',
-    hpMul: 1.2, radius: 46, speed: 12, armor: 30, shieldMul: 0.2,
+    hpMul: 11.2, radius: 46, speed: 12, armor: 30, shieldMul: 0.2,
     phases: [
       { hpFraction: 1, name: 'Graft', attacks: ['graft_tell', 'graft_primary'] },
       { hpFraction: 0.66, name: 'Rejection', attacks: ['graft_tell', 'graft_secondary'], weakPoint: WP(0, 32) },

@@ -57,8 +57,10 @@ describe('Ballistics', () => {
     w.spawnProjectile = (i) => { shots++; return orig(i); };
     const x0 = w.enemies.x[a];
     for (let t = 0; t < 600; t++) combatTick(sim);
-    expect(shots).toBeGreaterThanOrEqual(11);
-    expect(shots).toBeLessThanOrEqual(13);
+    const expected = 10 * 2 * w.stats.get('ballistics.heavy.fire_rate');   // 10 s at 2 shots/s × Heavy's fire-rate multiplier
+    expect(w.stats.get('ballistics.heavy.fire_rate')).toBeLessThan(1);
+    expect(shots).toBeGreaterThanOrEqual(Math.floor(expected * 0.8));   // first shot waits for the turret to swing
+    expect(shots).toBeLessThanOrEqual(Math.ceil(expected) + 1);
     expect(w.enemies.x[0]).toBeGreaterThan(x0 + 50);
   });
 

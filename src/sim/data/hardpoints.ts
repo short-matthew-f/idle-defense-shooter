@@ -19,7 +19,7 @@ const DOC_G = 1.18;
 export const ORDNANCE: TreeDef = {
   id: 'ordnance', name: 'Ordnance', category: 'hardpoint', forkRequirement: 3,
   shared: [
-    stat('ordnance.damage', 'Warhead Yield', '+8% missile damage per rank (base 25 per missile).', 'mul', 0.08, 15 * K, 1.17, 40, 0, { tags: ['damage'] }),
+    stat('ordnance.damage', 'Warhead Yield', '+12% missile damage per rank (base 25 per missile).', 'mul', 0.12, 15 * K, 1.17, 60, 0, { tags: ['damage'] }),
     mech('ordnance.launchers', 'Launchers', 'The rack starts with 1 launcher; +1 launcher per rank (up to 5). Each launcher fires its own missile.',
       1, flat(1, 4, K), [fx('ordnance.launchers', 'add', 1)]),
     stat('ordnance.tracking', 'Seeker Heads', 'Missiles turn 2.5 radians per second toward their target; +0.15 per rank.', 'add', 0.15, 10 * K, 1.16, 25),
@@ -71,7 +71,7 @@ export const DRONES: TreeDef = {
   shared: [
     mech('drones.count', 'Drone Bay', 'Start with 1 drone; +1 drone per rank (up to 6, drone cap 8).',
       1, flat(1, 5, K), [fx('drones.count', 'add', 1)]),
-    stat('drones.damage', 'Drone Guns', '+8% drone damage per rank (base 6 per shot).', 'mul', 0.08, 15 * K, 1.17, 40, 0, { tags: ['damage'] }),
+    stat('drones.damage', 'Drone Guns', '+15% drone damage per rank (base 16 per shot).', 'mul', 0.15, 15 * K, 1.17, 60, 0, { tags: ['damage'] }),
     stat('drones.orbit_radius', 'Orbit Radius', 'Drones orbit 90 units from the tower; +4 per rank.', 'add', 4, 8 * K, 1.16, 25, 0, { tags: ['range'] }),
     stat('drones.speed', 'Thrusters', 'Drones fly at 160 units per second; +4% per rank.', 'mul', 0.04, 10 * K, 1.16, 25, 0, { tags: ['speed'] }),
     stat('drones.attack_speed', 'Drone Cyclers', 'Each drone fires 1.2 shots per second; +5% per rank.', 'mul', 0.05, 15 * K, 1.17, 35, 0, { tags: ['speed'] }),
@@ -127,8 +127,8 @@ export const DRONES: TreeDef = {
 export const BLADE: TreeDef = {
   id: 'blade', name: 'Orbital Blade', category: 'hardpoint', forkRequirement: 3,
   shared: [
-    stat('blade.damage', 'Edge', '+8% blade damage per rank (base 8 per hit, each enemy hit once per pass).', 'mul', 0.08, 15 * K, 1.17, 40, 0, { tags: ['damage'] }),
-    stat('blade.length', 'Length', 'The blade sweeps from the tower out to 60 units; +3 per rank.', 'add', 3, 12 * K, 1.17, 30, 0, { tags: ['range'] }),
+    stat('blade.damage', 'Edge', '+15% blade damage per rank (base 20 per hit, each enemy hit once per pass).', 'mul', 0.15, 15 * K, 1.17, 60, 0, { tags: ['damage'] }),
+    stat('blade.length', 'Length', 'The blade sweeps from the tower out to 140 units; +3 per rank.', 'add', 3, 12 * K, 1.17, 30, 0, { tags: ['range'] }),
     stat('blade.rotation_speed', 'Rotation Speed', 'The blade turns 3 radians per second; +4% per rank.', 'mul', 0.04, 15 * K, 1.17, 35, 0, { tags: ['speed'] }),
     stat('blade.knockback', 'Knockback', 'Blade hits shove enemies 20 units outward; +2 per rank.', 'add', 2, 8 * K, 1.16, 25, 0, { tags: ['control'] }),
     stat('blade.serration', 'Serration', 'Blade hits apply Bleed (30% of hit damage per second for 3 s) with 3% chance per rank.', 'add', 0.03, 15 * K, 1.18, 30, 0, { tags: ['status'] }),
@@ -138,7 +138,7 @@ export const BLADE: TreeDef = {
       mech('blade.twinning.blades', 'Twin Blades',
         '+1 blade per rank (2 → 4), each on its own radius. Extra blades deal 70% damage.',
         2, flat(2, 3, K), [fx('blade.twinning.blades', 'add', 1)]),
-      stat('blade.twinning.edge', 'Matched Edges', 'Extra blades deal +1.5% of full damage per rank (70% → 100%).', 'add', 0.015, DOC_BASE, DOC_G, 20, 2, { tags: ['damage'] }),
+      stat('blade.twinning.edge', 'Matched Edges', 'Extra blades deal +3% of full damage per rank (70% → 100%).', 'add', 0.03, DOC_BASE, DOC_G, 20, 2, { tags: ['damage'] }),
       mech('blade.twinning.gyre', 'Gyre',
         'Alternate blades counter-rotate, so enemies between two radii are struck twice per crossing.',
         3, flat(3, 1, K)),
@@ -174,10 +174,10 @@ export const LASER: TreeDef = {
   shared: [
     mech('laser.nodes', 'Nodes', 'The polygon starts with 2 orbital nodes joined by a beam; +1 node per rank (up to 5).',
       1, flat(1, 3, K), [fx('laser.nodes', 'add', 1)]),
-    stat('laser.radius', 'Radius', 'Nodes orbit 110 units from the tower; +4 per rank.', 'add', 4, 10 * K, 1.16, 25, 0, { tags: ['range'] }),
+    stat('laser.radius', 'Radius', 'Nodes orbit 170 units from the tower; +4 per rank.', 'add', 4, 10 * K, 1.16, 25, 0, { tags: ['range'] }),
     stat('laser.rotation', 'Rotation', 'The polygon turns 0.6 radians per second; +4% per rank.', 'mul', 0.04, 10 * K, 1.16, 25, 0, { tags: ['speed'] }),
     stat('laser.beam_width', 'Beam Width', 'Beams are 6 units wide; +0.3 per rank.', 'add', 0.3, 12 * K, 1.17, 30),
-    stat('laser.damage', 'Beam Intensity', '+8% beam damage per rank (base 12 damage per second per beam).', 'mul', 0.08, 15 * K, 1.17, 40, 0, { tags: ['damage'] }),
+    stat('laser.damage', 'Beam Intensity', '+15% beam damage per rank (base 60 damage per second per beam).', 'mul', 0.15, 15 * K, 1.17, 60, 0, { tags: ['damage'] }),
     stat('laser.node_durability', 'Node Durability', 'Nodes have 50 HP and rebuild 4 s after being destroyed; +10 HP per rank.', 'add', 10, 8 * K, 1.16, 25, 0, { tags: ['defense'] }),
     mech('laser.pulse', 'Pulse',
       'Every 3 s the beams Pulse for 0.3 s at ×3 width and ×2 damage. Ranks 2 and 3 shorten the interval by 0.4 s each.',
@@ -204,7 +204,7 @@ export const LASER: TreeDef = {
         3, flat(3, 1, K), [], { requires: ['laser.resonance.overlap'] }),
     ]),
     doctrine('laser', 'containment', 'Containment', 'The interior slows enemies; Dynamic Geometry reshapes the polygon.', [
-      stat('laser.containment.field', 'Containment Field', 'Enemies inside the polygon move 2% slower per rank (max 50%).', 'add', 0.02, DOC_BASE, DOC_G, 25, 2, { tags: ['control'] }),
+      stat('laser.containment.field', 'Containment Field', 'Enemies inside the polygon move 4% slower per rank (max 50%).', 'add', 0.04, DOC_BASE, DOC_G, 25, 2, { tags: ['control'] }),
       mech('laser.containment.dynamic_geometry', 'Dynamic Geometry',
         'The polygon stretches toward the densest ring of enemies, moving nodes up to 15% per rank closer or farther.',
         2, flat(2, 3, K), [fx('laser.containment.dynamic_geometry', 'add', 0.15)]),
@@ -225,6 +225,7 @@ export const GRAVITICS: TreeDef = {
   shared: [
     mech('gravitics.wells', 'Wells', 'Place 1 gravity well where its pull catches the most enemies; +1 well per rank (up to 4).',
       1, flat(1, 3, K), [fx('gravitics.wells', 'add', 1)]),
+    stat('gravitics.damage', 'Crushing Depth', 'Every collapsing well crushes what it holds for 60 damage × (1 + 15% per captured enemy); +15% per rank.', 'mul', 0.15, 15 * K, 1.17, 60, 0, { tags: ['damage'] }),
     stat('gravitics.pull', 'Pull Strength', 'Wells drag enemies inward at 120 units per second; +5% per rank.', 'mul', 0.05, 12 * K, 1.17, 30, 0, { tags: ['control'] }),
     stat('gravitics.radius', 'Event Radius', 'Wells catch enemies within 90 units; +3 per rank.', 'add', 3, 12 * K, 1.17, 30, 0, { tags: ['range'] }),
     stat('gravitics.duration', 'Duration', 'Wells hold for 3 s before collapsing; +0.1 s per rank.', 'add', 0.1, 10 * K, 1.16, 25, 0, { tags: ['control'] }),
@@ -233,7 +234,7 @@ export const GRAVITICS: TreeDef = {
   doctrines: [
     doctrine('gravitics', 'collapse', 'Collapse', 'Wells implode for damage scaled by enemies captured.', [
       mech('gravitics.collapse.implosion', 'Implosion',
-        'Collapsing wells implode for 30 damage × (1 + 15% per captured enemy); ranks 2 and 3 add +50% implosion damage each.',
+        'Collapsing wells implode: ×1.5 well damage, +50% per further rank; Yield ranks multiply it further.',
         2, flat(2, 3, K), [fx('gravitics.collapse.implosion', 'add', 0.5)]),
       stat('gravitics.collapse.yield', 'Yield', '+8% implosion damage per rank.', 'mul', 0.08, DOC_BASE, DOC_G, 35, 2, { tags: ['damage'] }),
       mech('gravitics.collapse.chain_collapse', 'Chain Collapse',

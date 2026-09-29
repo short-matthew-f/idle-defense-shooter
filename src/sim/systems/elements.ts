@@ -76,7 +76,7 @@ export class ElementsSystem implements System {
   // fire
   private burnChance = 0; private burnDur = 180; private burnFrac = 0.2;
   private spread = 0; private spreadN = 2; private spreadR = 60;
-  private flash = 0; private flashR = 60; private conflag = false; private flashStacks = 1;
+  private flash = 0; private flashR = 60; private conflag = false; private flashStacks = 1; private flashSrcCap = 1; private flashTgtCap = 0.25; private flashInherit = 0.5;
   private fbEvery = 0; private fbMul = 1; private fbR = 60; private fbStacks = 2; private critsIgnite = 0;
   private sunburst = false; private embers = 8; private emberRange = 90;
   private meteor = false; private meteorEvery = 5; private meteorR = 80; private meteorDur = 4;
@@ -139,6 +139,7 @@ export class ElementsSystem implements System {
     const wild = s.hasDoctrine('fire', 'wildfire'), inferno = s.hasDoctrine('fire', 'inferno');
     this.flash = wild && s.has('fire.wildfire.flashpoint') ? s.get('fire.wildfire.flashpoint') : 0;
     this.flashR = s.get('fire.wildfire.flashpoint.radius') * (s.get('fire.wildfire.tinder') || 1) * this.blastMul;
+    this.flashSrcCap = s.get('fire.wildfire.flashpoint.source_cap'); this.flashTgtCap = s.get('fire.wildfire.flashpoint.target_cap'); this.flashInherit = s.get('fire.wildfire.flashpoint.inherit');
     this.conflag = wild && s.has('fire.wildfire.spread');
     this.fbEvery = inferno && s.has('fire.inferno.fireball_every') ? Math.max(2, Math.round(s.get('fire.inferno.fireball_every'))) : 0;
     this.fbMul = s.get('fire.inferno.fireball_damage') || 1;
@@ -428,7 +429,7 @@ export class ElementsSystem implements System {
     const e = w.enemies;
     // erupt once per Burn episode: "reaching" max stacks, not every refresh while at max
     e.flashUntil[i] = w.tick + Math.max(TICK_RATE, e.burnT[i]);
-    const dmg = Math.max(1e-3, pendingBurn(w, i) * this.flash), stacks = this.conflag ? e.burn[i] : 1, dps = e.burnDps[i];
+    const dmg = Math.max(1e-3, Math.min(pendingBurn(w, i) * this.flash, this.flashSrcCap * e.maxHp[i])), stacks = this.conflag ? e.burn[i] : 1, dps = e.burnDps[i] * this.flashInherit;
     if (this.bursts.push(w, 1, i, dmg, stacks, dps, cause, this.flashR * 0.5) < 0) this.detonateFlash(w, e.x[i], e.y[i], dmg, stacks, dps, cause);
   }
   private drainFlashpoints(w: World): void {
@@ -444,7 +445,7 @@ export class ElementsSystem implements System {
   private detonateFlash(w: World, x: number, y: number, dmg: number, stacks: number, dps: number, cause: number): void {
     const ps = this.flashStacks, pd = this.flashDps;
     this.flashStacks = stacks; this.flashDps = dps;
-    w.explode(x, y, this.flashR, dmg, { source: 'element', srcTag: TAG.flashpoint, element: 'fire', cause, falloff: false });
+    w.explode(x, y, this.flashR, dmg, { source: 'element', srcTag: TAG.flashpoint, element: 'fire', cause, falloff: true, maxHpCap: this.flashTgtCap });
     this.flashStacks = ps; this.flashDps = pd;
   }
   private flashDps = 0;

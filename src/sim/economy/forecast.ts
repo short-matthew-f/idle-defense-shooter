@@ -9,8 +9,10 @@
  *  reclimbSeconds   0.3 × the previous Prestige's time to reach this checkpoint, else 0.35 × this run's time
  *  wallGaugeSeconds seconds until the cheapest not-yet-owned behavior-changing Scrap unlock is
  *                   affordable at the Scrap income of the last 60 s (null: nothing left / no income)
- *  recommended      the rate has sat ≥15% below its peak for one full checkpoint cycle (5 waves)
- *                   and at least wave 20 is cleared
+ *  recommended      the rate has sat ≥15% below its peak for one full checkpoint cycle of PLAY TIME
+ *                   (the median time this run's checkpoints took, at least RECOMMEND_MIN_CYCLE s)
+ *                   and at least wave 20 is cleared. Measured in time, not cleared waves: at a real
+ *                   wall no waves are cleared, which is exactly when the player should Prestige.
  *
  * The ProgressionSystem (run/prestige.ts) calls `trackScrap` every tick and `sampleForecast` at
  * checkpoints / every 60 s. Tracker state is per World (WeakMap; never iterated).
@@ -24,7 +26,8 @@ import { codexMultiplier } from './codex';
 import { buildShop } from './shop';
 
 export const RECOMMEND_DROP = 0.15;
-export const RECOMMEND_WAVES = 5;
+/** Floor on the "one checkpoint cycle" window, in play seconds (early checkpoints fall in 2–3 min). */
+export const RECOMMEND_MIN_CYCLE = 300;
 export const SAMPLE_EVERY_TICKS = 60 * TICK_RATE;
 const HISTORY_CAP = 600;
 const WINDOW = 60;
@@ -80,9 +83,10 @@ export function sampleForecast(w: WorldImpl): void {
 
 /**
  * The recommendation rule over a history (pure; also the unit-tested core): after the peak sample,
- * the trailing samples are all ≥15% below the peak and span at least one checkpoint cycle of waves.
+ * the trailing samples are all ≥15% below the peak and have been for at least `cycleSeconds` of play
+ * (one checkpoint cycle; see checkpointCycleSeconds).
  */
-export function isRecommended(history: readonly { seconds: number; echoes: number; wave?: number }[], deepestCleared: number): boolean {
+export function isRecommended(history: readonly { seconds: number; echoes: number; wave?: number }[], deepestCleared: number, cycleSeconds = RECOMMEND_MIN_CYCLE): boolean {
   if (deepestCleared < 20 || history.length < 2) return false;
   let peak = 0, peakIdx = -1;
   for (let i = 0; i < history.length; i++) { const r = sampleRate(history[i]); if (r > peak) { peak = r; peakIdx = i; } }
@@ -92,9 +96,21 @@ export function isRecommended(history: readonly { seconds: number; echoes: numbe
   if (k <= peakIdx || sampleRate(history[k]) > limit) return false;
   while (k - 1 > peakIdx && sampleRate(history[k - 1]) <= limit) k--;
   // k = first sample of the trailing run below the limit; it must have lasted a checkpoint cycle
-  const start = history[k].wave ?? 0;
-  const now = Math.max(history[history.length - 1].wave ?? 0, deepestCleared);
-  return now - start >= RECOMMEND_WAVES;
+  return history[history.length - 1].seconds - history[k].seconds >= Math.max(RECOMMEND_MIN_CYCLE, cycleSeconds);
+}
+
+/** One checkpoint cycle in play seconds: the median time between this run's checkpoints (≥ the floor). */
+export function checkpointCycleSeconds(run: RunState): number {
+  const cs = run.checkpointSeconds;
+  if (!cs || cs.length < 2) return RECOMMEND_MIN_CYCLE;
+  const d: number[] = [];
+  let prev = 0;
+  for (let k = 1; k < cs.length; k++) { if (cs[k] > 0) { d.push(cs[k] - prev); prev = cs[k]; } }
+  if (!d.length) return RECOMMEND_MIN_CYCLE;
+  d.sort((a, b) => a - b);
+  const m = d.length >> 1;
+  const med = d.length % 2 ? d[m] : (d[m - 1] + d[m]) / 2;
+  return Math.max(RECOMMEND_MIN_CYCLE, med);
 }
 
 function pace(run: RunState): number {
@@ -148,7 +164,7 @@ export function computeForecast(w: WorldImpl): Forecast {
   return {
     echoesNow, echoRate, peakRate, nextBossEchoes, nextBossRate, reclimbSeconds,
     wallGaugeSeconds: wallGaugeSeconds(w),
-    recommended: isRecommended(hist, run.deepestCleared),
+    recommended: isRecommended(hist, run.deepestCleared, checkpointCycleSeconds(run)),
     curve,
   };
 }
@@ -159,5 +175,5 @@ export function forecastRecommends(w: WorldImpl): boolean {
   if (run.deepestCleared < 20) return false;
   const h = run.echoRateHistory;
   const cur = { seconds: run.playSeconds, echoes: prestigeEchoes(w), wave: run.deepestCleared };
-  return isRecommended(h.length ? [...h, cur] : [cur], run.deepestCleared);
+  return isRecommended(h.length ? [...h, cur] : [cur], run.deepestCleared, checkpointCycleSeconds(run));
 }

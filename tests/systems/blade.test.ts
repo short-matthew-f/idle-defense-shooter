@@ -18,7 +18,7 @@ describe('Orbital Blade', () => {
     expect(share(sim, 'blade')).toBeGreaterThan(0);
     const sh = w.shared;
     expect(sh.bladeCount).toBe(1);
-    expect(sh.bladeLens[0]).toBeCloseTo(60, 3);
+    expect(sh.bladeLens[0]).toBeCloseTo(w.stats.get('blade.length'), 3);
   });
 
   it('Serration applies Bleed; Deflection destroys hostile projectiles in the sweep', () => {

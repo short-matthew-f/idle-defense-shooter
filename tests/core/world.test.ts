@@ -20,7 +20,7 @@ describe('World combat primitives', () => {
     expect(k.killed).toBe(true);
     expect(w.enemies.flags[i] & EnemyFlag.Dead).toBeTruthy();
     expect(w.run.scrap - scrap0).toBeCloseTo(scrapPerKill(w.run.wave, 1) * 3, 6);
-    expect(w.tower.ce).toBe(2);
+    expect(w.tower.ce).toBe(1);   // balance pass: ordinary kill CE 2 → 1
     const kill = w.events.recent(0).find((e) => e.type === Ev.Kill)!;
     expect(kill.cause).toBe(k.eventId);
     // dead enemies take no damage; compaction removes them at end of tick
