@@ -10,11 +10,14 @@ import type { InstanceWriter } from './system';
 import type { RenderSnapshot } from './types';
 import { INSTANCE_FLOATS, FX_FLOATS, Shape, FxKind, Ev, EnemyFlag, ProjFlag, ARENA_RADIUS, TOWER_RADIUS } from './types';
 import type { WorldImpl } from './world-impl';
-import { enemyDefByIndex, bossDefByIndex, KIND_LIST } from './content';
+import { enemyDefByIndex, bossDefByIndex, bossIndex, kindIndex, KIND_LIST } from './content';
+import { ROLE_CLONE } from '../enemies/behaviors/kinds';
 import { atan2 } from '../math/lut';
 import { STATUS_NAMES } from './events';
 
 const MAX_FX = 1024;
+const MIRROR_HIVE = bossIndex('mirror_hive');
+const BOSS_ADD = kindIndex('boss_add');
 const HALO_KINDS = new Set(['kamikaze', 'healer', 'warden', 'carrier']);
 const HALO_FLAGS = EnemyFlag.Kamikaze | EnemyFlag.Healer | EnemyFlag.Shielder | EnemyFlag.WeakPointOpen;
 const SOURCE_COLORS: [number, number, number][] = [
@@ -92,7 +95,11 @@ export function writeScene(w: WorldImpl, out: SnapshotWriter, fromEvent: number,
     let shape: number, col: [number, number, number];
     if ((f & EnemyFlag.Boss) || e.bossId[i] >= 0) { const b = bossDefByIndex(e.bossId[i], w.run.wave); shape = b.shape; col = b.color; }   // WP5: boss clones (bossId >= 0) share the boss look
     else { const d = enemyDefByIndex(e.kind[i]); shape = d.shape; col = d.color; }
-    const frac = e.maxHp[i] > 0 ? e.hp[i] / e.maxHp[i] : 1;
+    let frac = e.maxHp[i] > 0 ? e.hp[i] / e.maxHp[i] : 1;
+    // Mirror Hive: its clones (boss_add, clone role, bossId set) and the true boss draw no HP bar,
+    // so bars never give the real one away (the HUD boss bar still shows the true HP).
+    if (e.bossId[i] >= 0 && e.bossId[i] === MIRROR_HIVE) frac = 0;
+    else if (e.kind[i] === BOSS_ADD && e.bossId[i] >= 0 && e.aiB[i] === ROLE_CLONE) frac = 0;
     out.push(e.x[i], e.y[i], e.radius[i], e.angle[i], shape, col[0], col[1], col[2], (f & EnemyFlag.Phased) ? 0.45 : 1, 4, frac, w.stateBits(i));
   }
   for (let i = 0; i < e.count; i++) {

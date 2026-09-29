@@ -2,12 +2,17 @@
  * Game glue (WP7): loads the save, starts the SimClient worker, paces it from the rAF loop,
  * routes snapshots to the renderer and UiState to the DOM UI (≤ 10 Hz), wires taps / hold-aim,
  * autosaves (every 30 s, at checkpoints, when hidden) and credits offline time.
+ *
+ * Testing aid: `?fast` (or `?fast=N`, 1–32, default 8) multiplies the tick budget per frame by N so
+ * browser playtests under a slow software GPU (SwiftShader) reach later waves quickly. The sim
+ * itself is unchanged (same ticks, same determinism); only real-time pacing speeds up.
  */
 import { Ev, type RenderSnapshot, type SaveState, type UiState } from '@sim/core/types';
 import { sectorIndexForWave } from '@sim/data/sectors';
 import { SimClient } from './sim-client';
 import { TickPacer, offlineSecondsOnReturn, HIDDEN_OFFLINE_AFTER_S } from './pacing';
 import { nearestEnemy } from './pick';
+import type { Command } from '@sim/core/types';
 import { clearSave, exportToString, importFromString, loadSave, parkSave, storeSave } from './storage';
 import { canInstall, initInstallPrompt, promptInstall } from './pwa';
 import { GameUi } from '@ui/index';
@@ -20,7 +25,23 @@ const AUTOSAVE_MS = 30_000;
 const UI_MIN_INTERVAL_MS = 100;
 const AIM_INTERVAL_MS = 50;
 
-export interface Game { client: SimClient; ui: GameUi; readonly paused: boolean; readonly ready: boolean; latestUi(): UiState | null }
+export interface Game {
+  client: SimClient; ui: GameUi; readonly paused: boolean; readonly ready: boolean; latestUi(): UiState | null;
+  /** Rejected player commands and sim errors seen this session (debug / playtest aid). */
+  readonly cmdErrors: readonly { message: string; cmd: Command['type'] }[];
+  readonly simErrors: readonly string[];
+  /** Tick-budget multiplier from `?fast` (1 = normal); `setFast` changes it at runtime (playtests). */
+  readonly fast: number;
+  setFast(n: number): void;
+}
+
+/** `?fast` / `?fast=N` query param → tick-budget multiplier (1 when absent). */
+export function fastFactor(search: string): number {
+  const p = new URLSearchParams(search);
+  if (!p.has('fast')) return 1;
+  const v = Number(p.get('fast') || 8);
+  return Number.isFinite(v) ? Math.max(1, Math.min(32, Math.floor(v))) : 8;
+}
 
 export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Game> {
   initInstallPrompt();
@@ -36,6 +57,9 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
   let sector = -1;
   let hiddenAt = 0;
   const pacer = new TickPacer();
+  let fast = fastFactor(location.search);
+  const cmdErrors: { message: string; cmd: Command['type'] }[] = [];
+  const simErrors: string[] = [];
 
   app.renderer.setBloom(prefs().bloom);
 
@@ -100,8 +124,19 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
       storeSave(s).catch((e) => console.warn('[save] store failed:', e));
     };
     let lastErr = '';
-    c.onError = (msg) => {
-      console.error('[sim]', msg);
+    let lastCmdErr = '', lastCmdErrAt = 0;
+    c.onCmdError = (message, cmd) => {
+      cmdErrors.push({ message, cmd });
+      if (cmdErrors.length > 100) cmdErrors.shift();
+      console.info(`[cmd] ${cmd} rejected: ${message}`);
+      const now = performance.now();
+      if (message === lastCmdErr && now - lastCmdErrAt < 1500) return;   // no toast spam for repeated taps
+      lastCmdErr = message; lastCmdErrAt = now;
+      ui.toast(message, 'warn');
+    };
+    c.onError = (msg, stack) => {
+      simErrors.push(msg);
+      console.error('[sim]', msg, stack ?? '');
       if (!ready && save) {
         // The save crashed the sim on init: park it (never overwritten) and start fresh.
         const bad = save; save = null;
@@ -114,7 +149,7 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
         return;
       }
       const head = msg.split('\n')[0];
-      if (head !== lastErr) { lastErr = head; ui.toast(`Simulation error: ${head}`, 'warn'); }
+      if (head !== lastErr) { lastErr = head; ui.toast(`Simulation error (recovering): ${head}`, 'warn'); }
     };
   };
   wire(client);
@@ -142,14 +177,14 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
   // ---------------------------------------------------------------- pacing
   app.onFrame = (dt) => {
     if (!ready || paused || document.hidden) return;
-    const n = pacer.step(dt, latestUi?.run.speedMultiplier ?? 1);
+    const n = pacer.step(dt, (latestUi?.run.speedMultiplier ?? 1) * fast);
     if (n > 0) client.tickBudget(n);
   };
 
   // ---------------------------------------------------------------- offline / hidden tab
   function creditOffline(secs: number): void {
     const long = ((latestUi?.meta.prestigeRanks['prestige.long_patrol'] ?? 0) | 0) > 0;
-    const est = offlineEstimate(lastSave?.run.patrolScrapPerSecond ?? 0, secs, long);
+    const est = offlineEstimate(latestUi?.run.patrolScrapPerSecond ?? lastSave?.run.patrolScrapPerSecond ?? 0, secs, long);
     client.send({ type: 'offline_return', elapsedSeconds: secs });
     ui.expectOffline(secs, est);
   }
@@ -179,9 +214,11 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
   }
   app.input.onTap = (x, y) => {
     if (!ready) return;
+    // The sim resolves which enemy a tap means (designate_at); the drawn snapshot only gates the tap
+    // (was an enemy near?) and snaps ability casts onto the tapped enemy (aim assist).
     const snap = app.snapshot;
     const hit = snap && snap.instances.buffer.byteLength > 0 ? nearestEnemy(snap.instances, snap.instanceCount, x, y) : null;
-    ui.tapField(x, y, hit ? hit.index : null);
+    ui.tapField(x, y, hit ? { x: hit.x, y: hit.y } : null);
   };
   app.input.onAimStart = (a) => {
     if (!ready || paused) return;
@@ -204,5 +241,9 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
     get paused() { return paused; },
     get ready() { return ready; },
     latestUi: () => latestUi,
+    cmdErrors,
+    simErrors,
+    get fast() { return fast; },
+    setFast: (n: number) => { fast = Math.max(1, Math.min(32, Math.floor(n) || 1)); pacer.reset(); },
   };
 }

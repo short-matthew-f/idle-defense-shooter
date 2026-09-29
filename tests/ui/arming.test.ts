@@ -14,7 +14,7 @@ describe('ability arming', () => {
   it('targets the tapped enemy when armed', () => {
     const a = new AbilityArming();
     a.press(1, { ability: 'hunter_mark', ready: true, targeted: 'enemy' });
-    expect(a.tapField(1, 2, 7)).toEqual({ kind: 'command', cmd: { type: 'cast', ability: 'hunter_mark', x: 1, y: 2, target: 7 } });
+    expect(a.tapField(1, 2, { x: 5, y: 6 })).toEqual({ kind: 'command', cmd: { type: 'cast', ability: 'hunter_mark', x: 5, y: 6 } });   // snapped onto the enemy
   });
   it('casts self abilities immediately', () => {
     const a = new AbilityArming();
@@ -39,7 +39,7 @@ describe('ability arming', () => {
   });
   it('designates when idle and disarms when the slot changes', () => {
     const a = new AbilityArming();
-    expect(a.tapField(0, 0, 3)).toEqual({ kind: 'command', cmd: { type: 'designate', enemy: 3 } });
+    expect(a.tapField(0, 0, { x: 12, y: -4 })).toEqual({ kind: 'command', cmd: { type: 'designate_at', x: 12, y: -4 } });
     expect(a.tapField(0, 0, null)).toEqual({ kind: 'none' });
     a.press(0, { ability: 'time_field', ready: true, targeted: 'point' });
     expect(a.sync(['time_field', null])).toBe(false);

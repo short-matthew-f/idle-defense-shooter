@@ -21,7 +21,7 @@ import { SpatialHash } from './spatial';
 import { EventLogImpl, StateBit, STATUS_INDEX } from './events';
 import { StatResolver } from './stats';
 import { selectTarget } from './targeting';
-import { bossDef, bossIndex, enemyDef, flagBitsFor, kindIndex, KIND_LIST, ELITE_LIST } from './content';
+import { bossDef, bossIndex, enemyDef, flagBitsFor, kindIndex, KIND_LIST, ELITE_LIST, BOSS_LIST } from './content';
 import { enemyHp, bossHp, scrapPerKill, THREAT_SPEED_PER_LEVEL } from '../economy/curves';
 import { ELEMENT_ORDER } from '../data/index';
 
@@ -264,7 +264,7 @@ export class WorldImpl implements World {
   private finishKill(i: number, h: HitInfo): void {
     const e = this.enemies, run = this.run, t = this.tower;
     const bits = this.stateBits(i);
-    const killId = this.emitC(Ev.Kill, h.srcTag, i, e.gen[i], bits, e.x[i], e.y[i], h.eventId);
+    const killId = this.events.pushRaw(Ev.Kill, run.tick, h.srcTag, i, e.gen[i], bits, e.x[i], e.y[i], h.eventId, this.victimData(i));
     if (this.events.longestKillChain > run.longestChain) run.longestChain = this.events.longestKillChain;
     this.waveKills++;
     // Scrap
@@ -300,6 +300,25 @@ export class WorldImpl implements World {
     }
   }
 
+  /**
+   * Kill-event payload naming the victim: { kind, elite, boss, bossId? }. The objects are cached per
+   * (kind, elite) / boss id so kills never allocate; consumers copy `data` (events.copy, the worker).
+   */
+  private victimData(i: number): NonNullable<SimEvent['data']> {
+    const e = this.enemies, f = e.flags[i];
+    const boss = (f & EnemyFlag.Boss) !== 0, elite = (f & EnemyFlag.Elite) !== 0;
+    const key = (boss ? 1_000_000 + e.bossId[i] * 2 : e.kind[i] * 2) + (elite ? 1 : 0);
+    let d = this.victimCache.get(key);
+    if (!d) {
+      const kind = KIND_LIST[e.kind[i]] ?? 'grunt';
+      d = boss ? { kind, elite, boss, bossId: BOSS_LIST[e.bossId[i]] ?? 'breaker' } : { kind, elite, boss };
+      Object.freeze(d);
+      this.victimCache.set(key, d);
+    }
+    return d;
+  }
+  private victimCache = new Map<number, NonNullable<SimEvent['data']>>();
+
   addScrap(amount: number): void {
     if (!(amount > 0)) return;
     this.run.scrap += amount; this.scrapEarned += amount; this.waveScrap += amount;
@@ -332,7 +351,9 @@ export class WorldImpl implements World {
     const ec = this.elemCap[status]; if (ec) cap = ec;   // WP2: attuned element tree caps
     if (this.stats.frameFlag('statuses_plus_one')) cap += 1;
     if (status === 'burn' || status === 'poison' || status === 'chill' || status === 'shock') cap += Math.floor(this.stats.get('status.stack_cap_bonus'));   // WP8: Monochrome reward
-    if (this.stats.has('prestige.overflow')) cap *= 2;
+    // Prestige IV Overflow: caps +20% per rank (data/prestige.ts), rounded down, at least +1 per owned node.
+    const overflow = this.stats.rank('prestige.overflow');
+    if (overflow > 0) cap = Math.max(cap + 1, Math.floor(cap * (1 + 0.2 * overflow) + 1e-9));
     return cap;
   }
 
@@ -493,6 +514,7 @@ export class WorldImpl implements World {
     for (let k = 0; k < n; k++) {
       const i = buf[k];
       if (!this.alive(i)) continue;
+      if (e.flags[i] & (EnemyFlag.Phased | EnemyFlag.Burrowed)) continue;   // intangible (design: Phase / Burrow)
       let amt = damage;
       if (falloff) { const dx = e.x[i] - x, dy = e.y[i] - y; const dist = Math.sqrt(dx * dx + dy * dy); amt *= 1 - 0.5 * Math.min(1, dist / Math.max(1, radius)); }
       this.damage(i, amt, { source: opts.source, srcTag: opts.srcTag, element: opts.element ?? null, cause: id, x, y });

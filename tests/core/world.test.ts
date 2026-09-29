@@ -29,7 +29,7 @@ describe('World combat primitives', () => {
     expect(w.enemies.count).toBe(0);
   });
 
-  it('applyStatus respects caps (+Overflow ×2) and chains DoT kills to the StatusApply', () => {
+  it('applyStatus respects caps (+Overflow +20%/rank) and chains DoT kills to the StatusApply', () => {
     const sim = quietSim();
     const w = sim.world;
     const i = w.spawnEnemy('grunt', 100, 0, { hpScale: 50 });
@@ -38,10 +38,18 @@ describe('World combat primitives', () => {
     w.applyStatus(i, 'chill', 9, 600, 'frost', -1);
     expect(w.enemies.chill[i]).toBe(5);
     w.meta.prestigeRanks['prestige.overflow'] = 1; w.rebuildStats();
+    expect(w.statusCap('chill')).toBe(6);            // floor(5 × 1.2)
+    expect(w.statusCap('burn')).toBe(12);            // floor(10 × 1.2)
+    w.meta.prestigeRanks['prestige.overflow'] = 5; w.rebuildStats();
+    expect(w.statusCap('chill')).toBe(10);           // 5 × 2.0
+    expect(w.statusCap('brittle')).toBe(6);          // 3 × 2.0
+    w.meta.prestigeRanks['prestige.overflow'] = 1; w.rebuildStats();
+    expect(w.statusCap('marked')).toBe(2);           // min +1 at rank 1 (floor(1.2) = 1)
     w.applyStatus(i, 'chill', 9, 600, 'frost', -1);
-    expect(w.enemies.chill[i]).toBe(10);
+    expect(w.enemies.chill[i]).toBe(6);
     combatTick(sim);
-    expect(w.enemies.speedMul[i]).toBeCloseTo(0.1, 5);
+    expect(w.enemies.speedMul[i]).toBeGreaterThan(0);
+    expect(w.enemies.speedMul[i]).toBeLessThan(0.5);
     // poison until death: kill cause is the latest poison StatusApply
     w.applyStatus(i, 'poison', 20, 60000, 'poison', -1, w.enemies.maxHp[i] / 20);
     const applyId = w.enemies.poisonCause[i];

@@ -10,6 +10,8 @@ import { abilityDef, bossDef, bossDefByIndex } from './content';
 import { SECTORS } from '../data/index';
 import { computeForecast } from '../economy/forecast';   // WP8
 import { codexHints } from '../economy/codex';           // WP8
+import { nextSlotWaves } from '../run/slots';
+import { allowedSpeed } from '../economy/prestige';
 
 function copy<T>(v: T): T { return JSON.parse(JSON.stringify(v)) as T; }
 
@@ -27,6 +29,7 @@ export function buildUiState(w: WorldImpl, m: RunMachine): UiState {
   const spawned = wave ? m.cursor + (total > wave.spawns.length ? 1 : 0) : 0;
   const sector = wave?.sector ?? SECTORS.find((s) => run.wave >= s.waves[0] && run.wave <= s.waves[1])?.id ?? 'outskirts';
   const abilities: UiState['abilities'] = abilityUi(w);   // WP9: cost, cooldown remaining, ready
+  const slots = nextSlotWaves(w);
   return {
     tick: run.tick,
     run: {
@@ -34,7 +37,12 @@ export function buildUiState(w: WorldImpl, m: RunMachine): UiState {
       scrap: run.scrap, cores: run.cores, attempts: run.attempts, threatDial: run.threatDial, speedMultiplier: run.speedMultiplier,
       playSeconds: run.playSeconds, pendingDraft: run.pendingDraft ? [...run.pendingDraft] : null,
       hardpointSlotsOpen: run.hardpointSlotsOpen, attunementSlotsOpen: run.attunementSlotsOpen, longestChain: run.longestChain,
+      patrolScrapPerSecond: run.patrolScrapPerSecond, ...(run.minThreatDial !== undefined ? { minThreatDial: run.minThreatDial } : {}),
     },
+    activeTrial: w.meta.activeTrial ?? null,
+    nextHardpointWave: slots.hardpoint,
+    nextAttunementWave: slots.attunement,
+    speedAllowed: allowedSpeed(run, w.meta),
     tower: { hp: t.hp, maxHp: t.maxHp, shield: t.shield, maxShield: t.maxShield, barrier: t.barrier, maxBarrier: t.maxBarrier, tempHp: t.tempHp, ce: t.ce, ceCap: t.ceCap },
     build: copy(w.build),
     meta: copy(w.meta),

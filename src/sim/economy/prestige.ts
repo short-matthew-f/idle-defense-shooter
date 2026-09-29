@@ -86,20 +86,26 @@ export function socketCount(meta: MetaState): number {
 /** Highest Threat Dial level: 10, or 20 from Ascension IV. */
 export function maxThreatDial(meta: MetaState): number { return meta.ascension >= 4 ? 20 : 10; }
 
+function speedForRank(r: number): 1 | 2 | 4 | 8 { return r >= 3 ? 8 : r === 2 ? 4 : r === 1 ? 2 : 1; }
+
 /**
- * Speed the driver may run the current wave at: waves at or below the deepest wave ever cleared
- * ("solved") allow ×2/×4/×8 from Accelerated Clearing (automatic) or Speed Controls (manual).
+ * Highest speed the current wave may run at: waves at or below the deepest wave ever cleared
+ * ("solved") allow ×2/×4/×8 by rank from Accelerated Clearing (Prestige I, automatic) or Speed
+ * Controls (Prestige III, manual) — the larger of `autoSpeed` and `manualSpeedCap`.
  */
 export function allowedSpeed(run: RunState, meta: MetaState): 1 | 2 | 4 | 8 {
+  const a = autoSpeed(run, meta), m = manualSpeedCap(run, meta);
+  return a > m ? a : m;
+}
+/** Speed Controls' manual cap on the current wave: ×2/×4/×8 by rank on solved waves, else 1. */
+export function manualSpeedCap(run: RunState, meta: MetaState): 1 | 2 | 4 | 8 {
   if (run.wave > meta.deepestEver) return 1;
-  const r = Math.max(prank(meta, 'prestige.accelerated_clearing'), prank(meta, 'prestige.speed_controls'));
-  return (r >= 3 ? 8 : r === 2 ? 4 : r === 1 ? 2 : 1);
+  return speedForRank(prank(meta, 'prestige.speed_controls'));
 }
 /** Accelerated Clearing's automatic speed for the current wave (1 = none). */
 export function autoSpeed(run: RunState, meta: MetaState): 1 | 2 | 4 | 8 {
   if (run.wave > meta.deepestEver) return 1;
-  const r = prank(meta, 'prestige.accelerated_clearing');
-  return (r >= 3 ? 8 : r === 2 ? 4 : r === 1 ? 2 : 1);
+  return speedForRank(prank(meta, 'prestige.accelerated_clearing'));
 }
 
 // ---------------------------------------------------------------------------

@@ -15,7 +15,9 @@ export class SimClient {
   onReady: ((ui: UiState) => void) | null = null;
   onEvents: ((events: SimEvent[]) => void) | null = null;
   onSave: ((save: SaveState) => void) | null = null;
-  onError: ((message: string) => void) | null = null;
+  onError: ((message: string, stack?: string) => void) | null = null;
+  /** A player command was rejected by the sim (message is player-facing, e.g. "Not enough Scrap"). */
+  onCmdError: ((message: string, cmd: Command['type']) => void) | null = null;
   private saveWaiters: ((s: SaveState) => void)[] = [];
   private inspectWaiters: ((r: { chain: SimEvent[]; sentence: string }) => void)[] = [];
   /** Latest UiState received (null until ready). */
@@ -42,7 +44,8 @@ export class SimClient {
         break;
       }
       case 'inspector': { const w = this.inspectWaiters.shift(); w?.({ chain: msg.chain, sentence: msg.sentence }); break; }
-      case 'error': this.onError?.(msg.message); break;
+      case 'error': this.onError?.(msg.message, msg.stack); break;
+      case 'cmd_error': this.onCmdError?.(msg.message, msg.cmd); break;
     }
   }
 

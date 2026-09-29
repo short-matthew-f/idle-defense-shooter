@@ -51,10 +51,11 @@ describe('tap → nearest enemy', () => {
     [205, 50, 10, 5],    // outline (ignored)
     [-80, -80, 20, 4],   // enemy 2 (big)
   ]);
-  it('finds the nearest layer-4 instance and its ordinal', () => {
-    expect(nearestEnemy(inst, 6, 104, 3)?.index).toBe(0);
-    expect(nearestEnemy(inst, 6, 210, 55)?.index).toBe(1);
-    expect(nearestEnemy(inst, 6, -80, -120)?.index).toBe(2);   // 40 away, radius 20 → 20 ≤ 24
+  it('finds the nearest layer-4 instance and returns its drawn position (the sim resolves the index)', () => {
+    expect(nearestEnemy(inst, 6, 104, 3)).toMatchObject({ x: 100, y: 0 });
+    expect(nearestEnemy(inst, 6, 210, 55)).toMatchObject({ x: 200, y: 50 });
+    expect(nearestEnemy(inst, 6, -80, -106)).toMatchObject({ x: -80, y: -80 });   // 26 away, radius 20 → reach max(24, 28)
+    expect(nearestEnemy(inst, 6, -80, -120)).toBeNull();                          // 40 away: beyond reach (same rule as designate_at)
   });
   it('returns null when nothing is within reach', () => {
     expect(nearestEnemy(inst, 6, 400, 400)).toBeNull();

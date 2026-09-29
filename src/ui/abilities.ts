@@ -100,7 +100,7 @@ export class AbilityBar {
   }
 
   /** Field tap → cast (armed) or designate (idle). Returns true when it produced a command. */
-  tapField(x: number, y: number, enemy: number | null): boolean {
+  tapField(x: number, y: number, enemy: { x: number; y: number } | null): boolean {
     const r = this.arming.tapField(x, y, enemy);
     this.handle(r);
     return r.kind === 'command';

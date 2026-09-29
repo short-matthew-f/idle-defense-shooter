@@ -5,7 +5,7 @@
  *   idle ──press(ready, point|enemy)──▶ armed(slot) ──tapField──▶ idle (+cast)
  *    ▲                                   │ press same slot / cancel / slot emptied
  *    └───────────────────────────────────┘
- * While idle, tapping the field designates the nearest enemy (if any).
+ * While idle, tapping an enemy designates it (`designate_at`: the sim resolves which enemy by position).
  */
 import type { AbilityId } from '@sim/core/ids';
 import type { Command } from '@sim/core/types';
@@ -39,17 +39,18 @@ export class AbilityArming {
   }
 
   /**
-   * Tap on the battlefield at world (x, y); `enemy` is the nearest enemy pool index within reach
-   * (or null). Armed: cast there (targeting that enemy if any). Idle: designate the enemy.
+   * Tap on the battlefield at world (x, y); `enemy` is the drawn position of the enemy under the tap
+   * (or null). Armed: cast there, snapped onto that enemy (aim assist; the sim picks the target by
+   * position). Idle: designate the enemy at that position.
    */
-  tapField(x: number, y: number, enemy: number | null): ArmResult {
+  tapField(x: number, y: number, enemy: { x: number; y: number } | null): ArmResult {
     if (this.armed && this.ability) {
       const ability = this.ability;
       this.cancel();
-      const cmd: Command = enemy !== null ? { type: 'cast', ability, x, y, target: enemy } : { type: 'cast', ability, x, y };
+      const cmd: Command = enemy !== null ? { type: 'cast', ability, x: enemy.x, y: enemy.y } : { type: 'cast', ability, x, y };
       return { kind: 'command', cmd };
     }
-    if (enemy !== null) return { kind: 'command', cmd: { type: 'designate', enemy } };
+    if (enemy !== null) return { kind: 'command', cmd: { type: 'designate_at', x: enemy.x, y: enemy.y } };
     return { kind: 'none' };
   }
 

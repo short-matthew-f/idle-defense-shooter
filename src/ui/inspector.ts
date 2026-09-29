@@ -5,6 +5,7 @@
  */
 import '../styles/inspector.css';
 import { Ev, type SimEvent, type UiState } from '@sim/core/types';
+import { victimName } from '@sim/core/events';
 import { button, h, text, clear } from './dom';
 import { icon } from './icons';
 import { srcCategory } from './content';
@@ -30,6 +31,13 @@ export function victimLabel(bits: number): string {
   const who = bits & 64 ? 'Boss' : bits & 32 ? 'Elite' : bits & 128 ? 'Clump' : 'Enemy';
   const adj = bits & 1 ? 'frozen ' : bits & 4 ? 'burning ' : bits & 8 ? 'poisoned ' : bits & 16 ? 'shocked ' : bits & 2 ? 'chilled ' : '';
   return adj ? `${adj}${who.toLowerCase()}` : who;
+}
+
+/** Label for a Kill event: the victim's name from `data` ("Brute", "elite Runner", "Warden (boss)"), else the state bits. */
+export function killLabel(k: SimEvent): string {
+  const v = victimName(k.data);
+  if (!v) return victimLabel(k.c ?? 0);
+  return v.charAt(0).toUpperCase() + v.slice(1);
 }
 
 export function srcChip(src: string): HTMLElement {
@@ -90,7 +98,7 @@ export class Inspector {
     const now = ui?.tick ?? kills[0].tick;
     for (const k of kills) {
       const ago = Math.max(0, (now - k.tick) / 60);
-      const kind = typeof k.data?.kind === 'string' ? titleCase(k.data.kind) : victimLabel(k.c ?? 0);
+      const kind = killLabel(k);
       const b = button([
         h('span', { class: 'insp-who', text: kind }),
         srcChip(k.src),
@@ -108,7 +116,7 @@ export class Inspector {
     clear(this.detail);
     const chain = r.chain.length ? r.chain : [k];
     this.detail.append(
-      h('p', { class: 'insp-sentence', text: r.sentence || `${victimLabel(k.c ?? 0)} killed by ${k.src}.` }),
+      h('p', { class: 'insp-sentence', text: r.sentence || `${killLabel(k)} killed by ${k.src}.` }),
       h('div', { class: 'insp-chain-len dim small', text: `${chain.length} link${chain.length === 1 ? '' : 's'}` }));
     const diagram = h('ol', { class: 'chain' });
     for (const e of chain) {

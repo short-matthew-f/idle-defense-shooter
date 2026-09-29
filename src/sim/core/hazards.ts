@@ -6,7 +6,9 @@
  */
 import type { WorldImpl } from './world-impl';
 import type { Hazard } from './types';
-import { TICK_DT, TOWER_RADIUS } from './types';
+import { EnemyFlag, TICK_DT, TOWER_RADIUS } from './types';
+
+const INTANGIBLE = EnemyFlag.Phased | EnemyFlag.Burrowed;
 
 const PULSE_TICKS = 15;
 const PULSE_DT = PULSE_TICKS * TICK_DT;
@@ -45,6 +47,7 @@ export function updateHazards(w: WorldImpl): void {
         for (let j = 0; j < n; j++) {
           const en = SCRATCH[j];
           if (!w.alive(en)) continue;
+          if (e.flags[en] & INTANGIBLE) continue;   // Phased / Burrowed enemies are intangible
           if (line) { const rr = h.radius + e.radius[en]; if (segDist2(e.x[en], e.y[en], h) > rr * rr) continue; }
           w.damage(en, amt, { source: 'hazard', srcTag: tag, element: h.element ?? null, cause: h.cause });
         }

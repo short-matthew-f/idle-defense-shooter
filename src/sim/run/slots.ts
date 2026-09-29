@@ -40,6 +40,17 @@ export function attunementSlotWaves(w: WorldImpl): number[] {
   return out;
 }
 
+/**
+ * Wave whose clear opens the NEXT hardpoint / attunement slot, or null when every slot the Frame
+ * (and Trial) allows is already open. Same thresholds and caps as updateSlots.
+ */
+export function nextSlotWaves(w: WorldImpl): { hardpoint: number | null; attunement: number | null } {
+  const hp = hardpointSlotWaves(w), at = attunementSlotWaves(w);
+  const hc = Math.min(hp.length, hardpointCap(w)), ac = Math.min(at.length, attunementCap(w));
+  const ho = w.run.hardpointSlotsOpen, ao = w.run.attunementSlotsOpen;
+  return { hardpoint: ho < hc ? hp[ho] : null, attunement: ao < ac ? at[ao] : null };
+}
+
 /** Recompute open slot counts from deepestCleared (never decreases) and pad the build arrays with nulls. */
 export function updateSlots(w: WorldImpl): void {
   const d = w.run.deepestCleared;

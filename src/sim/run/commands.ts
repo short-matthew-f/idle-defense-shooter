@@ -3,7 +3,8 @@
  * work packages are offered to systems via System.onCommand; unclaimed ones are no-ops.
  */
 import type { Command } from '../core/types';
-import { Ev, NO_ENTITY } from '../core/types';
+import { EnemyFlag, Ev, NO_ENTITY } from '../core/types';
+import type { WorldImpl } from '../core/world-impl';
 import type { RunMachine } from './machine';
 import { purchase, chooseDoctrine, spendKey } from '../economy/shop';
 import { allNodes } from '../core/content';
@@ -12,6 +13,7 @@ import { buyPrestigeNode, chooseDoctrineCmd, commandGuard, doPrestige, saveBluep
 import { endTrial, startTrial } from './trials';                                                                        // WP8
 import { ascend, buyStar } from '../economy/ascension';                                                                 // WP8
 import { abilitySlotCount, secondDesignatorAllowed, trialActive } from '../systems/abilities';   // WP9
+import { allowedSpeed } from '../economy/prestige';
 
 /** Apply one command. Returns an error string (also stored in machine.lastError) or null. */
 export function applyCommand(m: RunMachine, cmd: Command): string | null {
@@ -67,8 +69,13 @@ function dispatch(m: RunMachine, cmd: Command): string | null {
     case 'set_mode': m.setMode(cmd.mode); return null;
     case 'restart_checkpoint': m.startAttempt(true); return null;
     case 'set_speed': {
-      if (cmd.speed !== 1 && run.wave > w.meta.deepestEver) return 'Speed controls only on solved waves';
-      run.speedMultiplier = cmd.speed;
+      // Manual ×2..×8 needs Speed Controls (Prestige III) and a solved wave; Accelerated Clearing's
+      // automatic speed (applied at wave start by run/prestige.ts) may also be selected. ×1 is always allowed.
+      const sp = cmd.speed;
+      if (sp !== 1 && sp !== 2 && sp !== 4 && sp !== 8) return 'Invalid speed';
+      if (sp !== 1 && run.wave > w.meta.deepestEver) return 'Speed controls only on solved waves';
+      if (sp > allowedSpeed(run, w.meta)) return (w.meta.prestigeRanks['prestige.speed_controls'] | 0) > 0 ? `×${sp} needs a higher Speed Controls rank` : 'Manual speed needs Speed Controls (Prestige III)';
+      run.speedMultiplier = sp;
       return null;
     }
     case 'designate': {
@@ -81,6 +88,12 @@ function dispatch(m: RunMachine, cmd: Command): string | null {
       if (slot === 1) { t.designated2 = i; t.designated2Gen = gen; } else { t.designated = i; t.designatedGen = gen; }
       for (const s of w.systems) s.onCommand?.(w, cmd);   // WP5: observers (boss Counters) see designations
       return null;
+    }
+    case 'designate_at': {
+      const i = enemyAt(w, cmd.x, cmd.y);
+      if (i === NO_ENTITY) return 'No enemy there';
+      // Same path as 'designate' (Blackout / second-designator rules, onCommand observers such as boss Counters).
+      return dispatch(m, cmd.slot !== undefined ? { type: 'designate', enemy: i, slot: cmd.slot } : { type: 'designate', enemy: i });
     }
     case 'manual_aim': if (cmd.active && trialActive(w, 'blackout')) return 'Manual aim disabled (Blackout)'; t.manualAim = cmd.active; t.manualAngle = cmd.angle; return null;
     case 'set_ability_slot': {
@@ -120,4 +133,20 @@ function dispatch(m: RunMachine, cmd: Command): string | null {
       return `Unknown command ${(never as { type: string }).type}`;
     }
   }
+}
+
+/**
+ * Live enemy nearest (x, y) whose center is within max(24, radius + 8) units, or NO_ENTITY.
+ * Ties resolve to the lower pool index (ascending scan, strict comparison) so the pick is deterministic.
+ */
+export function enemyAt(w: WorldImpl, x: number, y: number): number {
+  const e = w.enemies;
+  let best = NO_ENTITY, bestD2 = Infinity;
+  for (let i = 0; i < e.count; i++) {
+    if (e.flags[i] & (EnemyFlag.Dead | EnemyFlag.Ally)) continue;
+    const dx = e.x[i] - x, dy = e.y[i] - y, d2 = dx * dx + dy * dy;
+    const reach = Math.max(24, e.radius[i] + 8);
+    if (d2 <= reach * reach && d2 < bestD2) { best = i; bestD2 = d2; }
+  }
+  return best;
 }

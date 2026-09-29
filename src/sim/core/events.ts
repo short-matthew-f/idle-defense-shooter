@@ -12,6 +12,7 @@
  */
 import type { EventLog as IEventLog, SimEvent } from './types';
 import { Ev } from './types';
+import { bossDef, enemyDef } from './content';
 
 export const EVENT_CAPACITY = 16384;
 
@@ -184,13 +185,37 @@ function objectFor(bits: number): string {
   return `the ${adj}${who}`;
 }
 
+/**
+ * Display name of a Kill event's victim from its `data` ({ kind, elite, boss, bossId }):
+ * "Brute", "elite Runner", "Warden (boss)". Null when the event carries no victim data.
+ */
+export function victimName(data: SimEvent['data']): string | null {
+  if (!data || typeof data.kind !== 'string') return null;
+  if (data.boss) {
+    const id = typeof data.bossId === 'string' ? data.bossId : null;
+    const name = id ? bossDef(id).name.replace(/^The\s+/i, '') : 'Boss';
+    return `${name} (boss)`;
+  }
+  const name = enemyDef(data.kind).name || data.kind;
+  return data.elite ? `elite ${name}` : name;
+}
+
+function killObject(e: SimEvent): string {
+  const v = victimName(e.data);
+  if (!v) return objectFor(e.c ?? 0);
+  const bits = e.c ?? 0;
+  const adj = (bits & StateBit.Frozen) ? 'frozen ' : (bits & StateBit.Burning) ? 'burning ' : (bits & StateBit.Poisoned) ? 'poisoned '
+    : (bits & StateBit.Shocked) ? 'shocked ' : (bits & StateBit.Chilled) ? 'chilled ' : '';
+  return `the ${adj}${v}`;
+}
+
 const LAUNCHERS = new Set(['ordnance', 'drones', 'blade', 'laser', 'gravitics', 'ballistics', 'primary', 'ability', 'link', 'chassis', 'infuse', 'fusion']);
 
 function clause(e: SimEvent): { verb: Verb; obj: string; launch?: boolean } {
   const c = e.c ?? 0;
   switch (e.type) {
     case Ev.Hit: return { verb: HIT_VERBS[e.src] ?? ['hit', 'hit'], obj: objectFor(c) };
-    case Ev.Kill: return { verb: ['killed', 'kill'], obj: objectFor(c) };
+    case Ev.Kill: return { verb: ['killed', 'kill'], obj: killObject(e) };
     case Ev.StatusApply: return { verb: STATUS_VERBS[c & 0xff] ?? ['afflicted', 'afflict'], obj: objectFor(c >> 8) };
     case Ev.StatusTick: return { verb: ['wore down', 'wear down'], obj: objectFor(c >> 8) };
     case Ev.Explosion: return { verb: ['detonated', 'detonate'], obj: '' };

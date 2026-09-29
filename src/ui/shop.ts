@@ -22,8 +22,6 @@ const CATEGORIES: { id: Category; label: string }[] = [
   { id: 'chassis', label: 'Chassis' }, { id: 'elements', label: 'Elements' }, { id: 'hardpoints', label: 'Hardpoints' },
   { id: 'cross', label: 'Cross' }, { id: 'cores', label: 'Cores' },
 ];
-const ATTUNE_WAVES = [5, 25, 45];
-const HARDPOINT_WAVES = [10, 30, 55, 75];
 const REFIT_CORES = 3;
 
 interface Chip { id: string; label: string; empty?: boolean }
@@ -287,8 +285,11 @@ export class Shop {
       const isEl = this.cat === 'elements';
       const open = isEl ? ui.run.attunementSlotsOpen : ui.run.hardpointSlotsOpen;
       if (open === 0 && !chip) {
-        const waves = isEl ? ATTUNE_WAVES : HARDPOINT_WAVES;
-        out.push({ t: 'note', text: isEl ? `Your first attunement opens after clearing wave ${waves[0]}. Attuning an element opens its tree, its Infusions and Fusions with other attuned elements.` : `Your first hardpoint slot opens after clearing wave ${waves[0]}. Each slot mounts one weapon system for the rest of this Prestige.` });
+        const next = isEl ? ui.nextAttunementWave : ui.nextHardpointWave;   // run/slots.ts thresholds (Prestige nodes, Frame, Trial)
+        const when = next === null ? null : next <= 0 ? 'now' : `after clearing wave ${next}`;
+        out.push({ t: 'note', text: isEl
+          ? (when ? `Your first attunement opens ${when}. Attuning an element opens its tree, its Infusions and Fusions with other attuned elements.` : 'No attunement slots are available with this Frame or Trial.')
+          : (when ? `Your first hardpoint slot opens ${when}. Each slot mounts one weapon system for the rest of this Prestige.` : 'No hardpoint slots are available with this Frame or Trial.') });
         return out;
       }
       if (chip.startsWith('slot:')) {

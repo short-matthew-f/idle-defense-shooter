@@ -149,8 +149,8 @@ export class GameUi {
     this.pendingOffline = { seconds, estimate, timer };
   }
 
-  /** Battlefield tap (world units) with the nearest enemy index or null. */
-  tapField(x: number, y: number, enemy: number | null): void {
+  /** Battlefield tap (world units) with the drawn position of the enemy under it, or null. */
+  tapField(x: number, y: number, enemy: { x: number; y: number } | null): void {
     if (this.host.isPaused()) return;
     this.abilities.tapField(x, y, enemy);
   }

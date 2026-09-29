@@ -9,10 +9,9 @@ import { confirmDialog, openModal, type ModalHandle } from './modal';
 import { prefs, setPref } from './prefs';
 import type { UiCtx } from './ctx';
 
-/** The active Trial: meta.activeTrial (WP8) when present, else what this device started. */
+/** The active Trial (UiState.activeTrial = meta.activeTrial); before the first UiState, what this device started. */
 export function activeTrial(ui: UiState | null): TrialId | null {
-  const m = ui?.meta as (UiState['meta'] & { activeTrial?: TrialId | null }) | undefined;
-  if (m && 'activeTrial' in m) return m.activeTrial ?? null;
+  if (ui) return ui.activeTrial ?? ui.meta.activeTrial ?? null;
   return prefs().activeTrial;
 }
 export function trialName(id: TrialId | null): string | null { return id ? TRIALS.find((t) => t.id === id)?.name ?? id : null; }

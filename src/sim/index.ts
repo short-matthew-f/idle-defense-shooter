@@ -41,6 +41,11 @@ export class Sim implements ISim {
   private fxFrom = 0;
   private shake = 0;
   private shakeFrom = 0;
+  /** Last rejection of a player-queued command (Directive / Autocast commands are not reported). */
+  private lastErr: string | null = null;
+  private lastErrCmd: Command['type'] | null = null;
+  /** Systems that expose a per-command `lastError` (e.g. abilities: cast rejections). */
+  private errorSystems: { lastError: string | null }[] = [];
 
   constructor(save: SaveState | null = null, seedOrOpts: number | SimOptions = 1) {
     const seed = typeof seedOrOpts === 'number' ? seedOrOpts : seedOrOpts.seed ?? 1;
@@ -58,6 +63,7 @@ export class Sim implements ISim {
     this.plugins = SYSTEM_ORDER.map((f) => f());
     world.setSystems([this.statuses, ...this.plugins, this.towerSystem]);
     for (const s of world.systems) s.init(world);
+    this.errorSystems = world.systems.filter((s) => 'lastError' in s) as unknown as { lastError: string | null }[];
     this.machine = new RunMachine(world);
     this.machine.startAttempt(!save);
   }
@@ -74,7 +80,7 @@ export class Sim implements ISim {
     if (this.queue.length) {
       const q = this.queue;
       this.queue = [];
-      for (const c of q) applyCommand(m, c);
+      for (const c of q) this.applyPlayer(c);
     }
     if (w.pendingCommands.length) {   // WP9: Directive / Autocast commands, same dispatch path
       const q = w.pendingCommands;
@@ -95,6 +101,27 @@ export class Sim implements ISim {
     w.endTick();
     m.advanceClock();
   }
+
+  /** Apply a player command and remember why it was rejected (machine or any system's lastError). */
+  private applyPlayer(c: Command): void {
+    const es = this.errorSystems;
+    for (let k = 0; k < es.length; k++) es[k].lastError = null;
+    let err = applyCommand(this.machine, c);
+    for (let k = 0; err === null && k < es.length; k++) err = es[k].lastError;
+    if (err !== null) { this.lastErr = err; this.lastErrCmd = c.type; }
+  }
+
+  /**
+   * The most recent rejection of a player command since the last call (then cleared), or null.
+   * Collects run/commands.ts errors (machine.lastError) and system errors (abilities' lastError).
+   * `lastErrorCommand` names the rejected command type; read it before taking the error.
+   */
+  takeLastError(): string | null {
+    const e = this.lastErr;
+    this.lastErr = null;
+    return e;
+  }
+  get lastErrorCommand(): Command['type'] | null { return this.lastErrCmd; }
 
   /** Run n ticks (convenience for tests / headless). */
   run(n: number): void { for (let i = 0; i < n; i++) this.step(); }

@@ -341,6 +341,8 @@ export type Command =
   | { type: 'set_speed'; speed: 1 | 2 | 4 | 8 }
   | { type: 'designate'; enemy: number | null; slot?: 0 | 1;
       /** WP9 addition: issued by a Directive (not a human). */ viaDirective?: boolean }
+  /** Integration addition: designate the live enemy nearest (x, y) within max(24, radius + 8) units (UI taps). */
+  | { type: 'designate_at'; x: number; y: number; slot?: 0 | 1 }
   | { type: 'manual_aim'; active: boolean; angle: number }
   | { type: 'cast'; ability: AbilityId; x: number; y: number; target?: number;
       /** WP9/WP5 addition: issued by a Directive or Autocast (Counters earn directives.counter_efficiency). */ viaDirective?: boolean;
@@ -425,7 +427,15 @@ export const enum FxKind { Hit = 0, Kill = 1, Explosion = 2, Spark = 3, Ember = 
 /** Everything the UI draws from, sent ~10 Hz. Plain JSON, no typed arrays. */
 export interface UiState {
   tick: number;
-  run: Pick<RunState, 'wave' | 'checkpoint' | 'deepestCleared' | 'mode' | 'phase' | 'scrap' | 'cores' | 'attempts' | 'threatDial' | 'speedMultiplier' | 'playSeconds' | 'pendingDraft' | 'hardpointSlotsOpen' | 'attunementSlotsOpen' | 'longestChain'>;
+  run: Pick<RunState, 'wave' | 'checkpoint' | 'deepestCleared' | 'mode' | 'phase' | 'scrap' | 'cores' | 'attempts' | 'threatDial' | 'speedMultiplier' | 'playSeconds' | 'pendingDraft' | 'hardpointSlotsOpen' | 'attunementSlotsOpen' | 'longestChain'
+    /* integration additions */ | 'patrolScrapPerSecond' | 'minThreatDial'>;
+  /** Integration additions: the Trial being played (meta.activeTrial), or null. */
+  activeTrial: TrialId | null;
+  /** Wave whose clear opens the next hardpoint / attunement slot (run/slots.ts), or null when no more can open. */
+  nextHardpointWave: number | null;
+  nextAttunementWave: number | null;
+  /** Highest speed multiplier allowed on the current wave (Accelerated Clearing / Speed Controls; 1 = none). */
+  speedAllowed: 1 | 2 | 4 | 8;
   tower: Pick<TowerState, 'hp' | 'maxHp' | 'shield' | 'maxShield' | 'barrier' | 'maxBarrier' | 'tempHp' | 'ce' | 'ceCap'>;
   build: BuildState;
   meta: MetaState;
@@ -508,7 +518,9 @@ export type FromWorker =
   | { t: 'events'; events: SimEvent[] }
   | { t: 'save'; save: SaveState }
   | { t: 'inspector'; chain: SimEvent[]; sentence: string }
-  | { t: 'error'; message: string };
+  | { t: 'error'; message: string; /** integration addition */ stack?: string }
+  /** Integration addition: a player command was rejected (message from the sim). */
+  | { t: 'cmd_error'; message: string; cmd: Command['type'] };
 
 // ---------------------------------------------------------------------------
 // Waves (generator → run). Fixed per Prestige seed: generateWave(seed, wave, dial, ascension).

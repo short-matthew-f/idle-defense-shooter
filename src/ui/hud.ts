@@ -70,7 +70,7 @@ export class Hud {
     }, { class: 'btn mode-btn', title: 'Push: advance and fight bosses. Patrol: loop the four waves after the checkpoint. (P)' });
     this.speedWrap = h('div', { class: 'speed seg', attrs: { role: 'group', 'aria-label': 'Simulation speed' } });
     for (const sp of SPEEDS) {
-      const b = button(`×${sp}`, () => this.pickSpeed(sp), { class: 'btn seg-btn', title: sp === 1 ? 'Normal speed' : `×${sp}: only on waves below your deepest` });
+      const b = button(`×${sp}`, () => this.pickSpeed(sp), { class: 'btn seg-btn', title: sp === 1 ? 'Normal speed' : `×${sp}: solved waves only (Accelerated Clearing runs them automatically; Speed Controls lets you pick)` });
       this.speedBtns.push(b);
       this.speedWrap.appendChild(b);
     }
@@ -178,13 +178,13 @@ export class Hud {
     text(this.modeBtn, r.mode === 'push' ? 'Push' : 'Patrol');
     attr(this.modeBtn, 'aria-pressed', r.mode === 'patrol' ? 'true' : 'false');
     this.modeBtn.classList.toggle('patrol', r.mode === 'patrol');
-    const allowed = r.wave <= ui.meta.deepestEver;
+    const maxSpeed = ui.speedAllowed ?? 1;
     SPEEDS.forEach((sp, i) => {
       const b = this.speedBtns[i];
       const active = sp === r.speedMultiplier;
       b.classList.toggle('active', active);
       attr(b, 'aria-pressed', active ? 'true' : 'false');
-      disable(b, sp !== 1 && !allowed && !active);
+      disable(b, sp > maxSpeed && !active);
     });
     const rec = !!ui.forecast?.recommended;
     show(this.forecastBadge, rec);
