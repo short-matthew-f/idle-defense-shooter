@@ -1,11 +1,4 @@
-/* Transient toasts under the HUD. */
-/* The death card and the toasts share one column under the HUD so they never overlap. */
-.top-overlay {
-  position: absolute; top: calc(var(--safe-top) + var(--hud-h) + 8px); left: 50%; transform: translateX(-50%);
-  display: flex; flex-direction: column; align-items: center; gap: 6px; z-index: 8;
-  width: max-content; max-width: calc(100% - 24px); pointer-events: none !important;
-}
-body.layout-side:not(.panel-closed) .top-overlay { left: calc((100% - var(--panel-w)) / 2); }
+/* Transient toasts (the shell places the layer: above the abilities on Battle, above the tab bar elsewhere). */
 .feed { display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
 .toast {
   --tc: var(--info); display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--radius-s);
@@ -13,9 +6,9 @@ body.layout-side:not(.panel-closed) .top-overlay { left: calc((100% - var(--pane
   box-shadow: var(--shadow); animation: toast-in 0.2s ease-out; transition: opacity 0.3s, transform 0.3s;
 }
 .toast .ico { color: var(--tc); }
-.toast.good { --tc: var(--ok); }
-.toast.warn { --tc: var(--warn); }
-.toast.core { --tc: var(--cores); }
-.toast.codex { --tc: var(--echo); }
+.toast.t-good { --tc: var(--ok); }
+.toast.t-warn { --tc: var(--warn); }
+.toast.t-core { --tc: var(--cores); }
+.toast.t-codex { --tc: var(--echo); }
 .toast.out { opacity: 0; transform: translateY(-6px); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }

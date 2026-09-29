@@ -5,11 +5,10 @@
 import '../styles/prestige.css';
 import type { UiState } from '@sim/core/types';
 import type { PrestigeNodeDef } from '@sim/data/schema';
-import { button, h, holdRepeat, text, disable, show, attr } from './dom';
+import { h, holdRepeat, text, disable, show, attr } from './dom';
 import { icon } from './icons';
 import { fmtNum, nextRankCost } from './format';
 import { PRESTIGE_NODES } from './content';
-import { openModal, type ModalHandle } from './modal';
 import type { UiCtx } from './ctx';
 
 export const LAYERS: { layer: 1 | 2 | 3 | 4; name: string; wave: number; blurb: string }[] = [
@@ -22,14 +21,14 @@ export const LAYERS: { layer: 1 | 2 | 3 | 4; name: string; wave: number; blurb: 
 interface Row { def: PrestigeNodeDef; el: HTMLElement; rank: HTMLElement; btn: HTMLButtonElement; price: HTMLElement }
 
 export class PrestigeShop {
-  private modal: ModalHandle | null = null;
+  shown = false;
   private readonly echoes = h('span', { class: 'echo-val' });
   private readonly rows: Row[] = [];
   private readonly layerEls: { el: HTMLElement; lock: HTMLElement; wave: number }[] = [];
-  private readonly body: HTMLElement;
+  readonly el: HTMLElement;
 
   constructor(private readonly ctx: UiCtx) {
-    this.body = h('div', { class: 'pshop' }, h('div', { class: 'pr-gain' }, icon('echo', 'ico'), this.echoes, h('span', { class: 'dim', text: ' Echoes' })));
+    this.el = h('div', { class: 'pshop' }, h('div', { class: 'pr-gain' }, icon('echo', 'ico'), this.echoes, h('span', { class: 'dim', text: ' Echoes' })));
     for (const L of LAYERS) {
       const lock = h('p', { class: 'node-lock', text: `Opens when your deepest-ever wave reaches ${L.wave}.` });
       const sec = h('section', { class: 'player' }, h('h3', { class: 'sec-title' }, L.name, h('span', { class: 'sec-sub', text: L.blurb })), lock);
@@ -43,15 +42,14 @@ export class PrestigeShop {
         this.rows.push({ def, el, rank, btn, price });
       }
       this.layerEls.push({ el: sec, lock, wave: L.wave });
-      this.body.appendChild(sec);
+      this.el.appendChild(sec);
     }
   }
 
-  get isOpen(): boolean { return !!this.modal?.open; }
-  open(): void {
-    if (this.isOpen) return;
-    this.modal = openModal({ title: 'Prestige upgrades', body: this.body, variant: 'wide', className: 'pshop-modal', onClose: () => { this.modal = null; } });
-    const ui = this.ctx.state(); if (ui) this.update(ui);
+  get isOpen(): boolean { return this.shown; }
+  setShown(on: boolean): void {
+    this.shown = on;
+    const ui = this.ctx.state(); if (on && ui) this.update(ui);
   }
 
   update(ui: UiState): void {

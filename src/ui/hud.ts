@@ -1,17 +1,19 @@
 /**
- * HUD: top bar (wave, Sector, boss, progress + checkpoint pips, enemies alive, tower bars, CE,
- * Scrap/Cores with rate, Push/Patrol, speed, restart, pause/Inspector, Forecast, menu) and the
- * boss bar (phase marks, tell indicator with a shrinking window, weak-point flag).
+ * HUD: the two-row top bar (wave · Sector or boss, Scrap/Cores with rate, pause; HP with shield and
+ * barrier strips, CE; checkpoint-cycle bar), the Battle control chips (Push/Patrol, speed, restart),
+ * the boss bar (phase marks, tell indicator with a shrinking window, weak-point flag) and the status
+ * strip shown on the other screens.
  */
 import '../styles/hud.css';
 import type { AbilityId } from '@sim/core/ids';
 import type { UiState } from '@sim/core/types';
-import { Bar, button, h, show, text, disable, attr, styleVar } from './dom';
+import { Bar, button, h, show, text, attr, styleVar } from './dom';
 import { abilityIcon, icon } from './icons';
 import { fmtNum, fmtRate } from './format';
 import { ABILITY_BY_ID, BOSS_BY_ID, sectorName } from './content';
 import { confirmDialog } from './modal';
 import { setPref } from './prefs';
+import { cycleBar } from './shell-logic';
 import type { UiCtx } from './ctx';
 
 const SPEEDS = [1, 2, 4, 8] as const;
@@ -34,30 +36,41 @@ export class RateMeter {
   }
 }
 
+/** The speeds a chip tap cycles through (never above what this wave allows). */
+export function speedCycle(current: number, allowed: number): 1 | 2 | 4 | 8 {
+  const opts = SPEEDS.filter((s) => s <= Math.max(1, allowed));
+  const i = opts.indexOf(current as 1 | 2 | 4 | 8);
+  return opts[(i + 1) % opts.length] ?? 1;
+}
+
+/**
+ * Top bar: two compact rows plus a 3 px checkpoint-cycle bar.
+ *   row 1: "Wave 13 · The Outskirts" (the boss name during a boss wave) · Scrap + rate · Cores · pause
+ *   row 2: HP (shield and barrier as thin strips on the same bar) · CE (ability cost marks)
+ *   cycle: waves checkpoint+1 … +5 with the wave boundaries as ticks, the boss tick last
+ * The Battle controls (Push / Patrol, speed, restart) are 36 px chips over the arena (`controls`).
+ */
 export class Hud {
   readonly el: HTMLElement;
+  /** Push / Patrol, speed (when > ×1 is allowed), restart: chips over the top-right of the arena. */
+  readonly controls: HTMLElement;
   private readonly waveNum = h('span', { class: 'wave-num' });
-  private readonly sector = h('span', { class: 'wave-sector' });
-  private readonly boss = h('span', { class: 'wave-boss' });
+  private readonly waveSub = h('span', { class: 'wave-sub' });
   private readonly scrap = h('span', { class: 'res-val' });
   private readonly scrapRate = h('span', { class: 'res-rate' });
   private readonly cores = h('span', { class: 'res-val' });
-  private readonly alive = h('span', { class: 'alive-val' });
-  private readonly progress = new Bar('progress', 'Wave progress');
-  private readonly pips: HTMLSpanElement[] = [];
-  private readonly cpLabel = h('span', { class: 'cp-label' });
   private readonly hp = new Bar('hp', 'Tower health');
-  private readonly shield = new Bar('shield thin', 'Shield');
-  private readonly barrier = new Bar('barrier thin', 'Barrier');
+  private readonly shieldStrip = h('i', { class: 'strip shield' });
+  private readonly barrierStrip = h('i', { class: 'strip barrier' });
+  private readonly shieldLbl = h('span', { class: 'bar-aux shield' });
   private readonly ce = new Bar('ce', 'Command Energy');
   private readonly ceMarks = h('div', { class: 'ce-marks' });
+  private readonly cycle = h('div', { class: 'cycle', attrs: { role: 'meter', 'aria-valuemin': '0', 'aria-valuemax': '100' } });
+  private readonly cycleFill = h('div', { class: 'cycle-fill' });
+  private readonly cycleTicks: HTMLElement[] = [];
   private readonly modeBtn: HTMLButtonElement;
-  private readonly speedWrap: HTMLDivElement;
-  private readonly speedBtns: HTMLButtonElement[] = [];
-  private readonly forecastBtn: HTMLButtonElement;
-  private readonly forecastBadge = h('span', { class: 'badge', text: '!' });
+  private readonly speedBtn: HTMLButtonElement;
   private readonly pauseBtn: HTMLButtonElement;
-  private readonly menuBtn: HTMLButtonElement;
   private readonly trialBanner = h('div', { class: 'trial-banner' });
   private readonly trialName = h('span');
   private rate = new RateMeter();
@@ -68,69 +81,52 @@ export class Hud {
   /** Tapping the boss tell (arm / equip its Counter); GameUi wires it to the ability bar. */
   onTell: ((tell: AbilityId | 'designate') => void) | null = null;
 
-  constructor(private readonly ctx: UiCtx) {
+  constructor(ctx: UiCtx) {
     this.modeBtn = button('Push', () => {
       const s = ctx.state(); if (!s) return;
       ctx.host.send({ type: 'set_mode', mode: s.run.mode === 'push' ? 'patrol' : 'push' });
-    }, { class: 'btn mode-btn', title: 'Push: advance and fight bosses. Patrol: loop the four waves after the checkpoint. (P)' });
-    this.speedWrap = h('div', { class: 'speed seg', attrs: { role: 'group', 'aria-label': 'Simulation speed' } });
-    for (const sp of SPEEDS) {
-      const b = button(`×${sp}`, () => this.pickSpeed(sp), { class: 'btn seg-btn', title: sp === 1 ? 'Normal speed' : `×${sp}: solved waves only (Accelerated Clearing runs them automatically; Speed Controls lets you pick)` });
-      this.speedBtns.push(b);
-      this.speedWrap.appendChild(b);
-    }
+    }, { class: 'btn ctl mode-btn', title: 'Push: advance and fight bosses. Patrol: loop the four waves after the checkpoint. (P)' });
+    this.speedBtn = button('×1', () => {
+      const s = ctx.state(); if (!s) return;
+      const next = speedCycle(s.run.speedMultiplier, s.speedAllowed ?? 1);
+      if (next !== s.run.speedMultiplier) ctx.host.send({ type: 'set_speed', speed: next });
+    }, { class: 'btn ctl speed-btn', title: 'Simulation speed: tap to cycle (solved waves only)' });
     const restart = button(icon('restart'), async () => {
       const s = ctx.state();
       const ok = await confirmDialog('Restart from checkpoint?', `The current attempt ends and you restart at wave ${(s?.run.checkpoint ?? 0) + 1}. Scrap and upgrades are kept.`, 'Restart');
       if (ok) ctx.host.send({ type: 'restart_checkpoint' });
-    }, { class: 'btn icon-btn', label: 'Restart from checkpoint' });
-    this.pauseBtn = button(icon('pause'), () => ctx.open('inspector'), { class: 'btn icon-btn', label: 'Pause and open the Kill-Chain Inspector (Space)' });
-    this.forecastBtn = button([icon('forecast'), this.forecastBadge], () => ctx.open('forecast'), { class: 'btn icon-btn forecast-btn', label: 'Prestige Forecast (F)' });
-    this.menuBtn = button(icon('menu'), () => ctx.open('menu'), { class: 'btn icon-btn', label: 'Menu' });
-    this.menuBtn.setAttribute('aria-haspopup', 'menu');
-    this.forecastBadge.hidden = true;
+    }, { class: 'btn ctl icon', label: 'Restart from checkpoint' });
+    this.pauseBtn = button(icon('pause'), () => ctx.open('inspector'), { class: 'btn ctl icon pause-btn', label: 'Pause and open the Kill-Chain Inspector (Space)' });
 
-    for (let i = 0; i < 5; i++) this.pips.push(h('span', { class: 'pip' }));
     this.ce.el.appendChild(this.ceMarks);
+    this.hp.el.append(this.barrierStrip, this.shieldStrip, this.shieldLbl);
+    this.cycle.appendChild(this.cycleFill);
+    for (let i = 0; i < 5; i++) { const t = h('i', { class: 'tick' }); this.cycleTicks.push(t); this.cycle.appendChild(t); }
 
-    const endTrial = button('End trial', async () => {
+    const endTrial = button('End', async () => {
       if (await confirmDialog('End this Trial?', 'Your Trial progress is recorded and the main run resumes where you left it.', 'End trial')) {
         ctx.host.send({ type: 'end_trial' });
         setPref('activeTrial', null);
       }
-    }, { class: 'btn small' });
-    this.trialBanner.append(icon('trials'), this.trialName, endTrial);
+    }, { class: 'btn ctl', label: 'End trial' });
+    this.trialBanner.append(icon('trials', 'ico tiny'), this.trialName, endTrial);
     this.trialBanner.hidden = true;
 
-    this.el = h('header', { class: 'hud', attrs: { 'aria-label': 'Battle status' } },
-      h('div', { class: 'hud-row hud-top' },
-        h('div', { class: 'wave-block' }, this.waveNum, h('div', { class: 'wave-meta' }, this.sector, this.boss)),
+    this.el = h('header', { class: 'topbar', attrs: { 'aria-label': 'Battle status' } },
+      h('div', { class: 'tb-row tb-head' },
+        h('div', { class: 'wave-line' }, this.waveNum, this.waveSub),
         h('div', { class: 'res' },
-          h('div', { class: 'res-item scrap', title: 'Scrap: spend it on upgrades. Banks on every kill and survives death.' }, icon('scrap', 'ico res-ico'), this.scrap, this.scrapRate),
+          h('div', { class: 'res-item scrap', title: 'Scrap: spend it on upgrades. Banks on every kill and survives death.' }, icon('scrap', 'ico res-ico'), h('span', { class: 'res-stack' }, this.scrap, this.scrapRate)),
           h('div', { class: 'res-item cores', title: 'Cores: commitment currency (Exotics, Refits, Doctrine changes, rerolls).' }, icon('cores', 'ico res-ico'), this.cores)),
-        this.menuBtn),
-      h('div', { class: 'hud-row hud-progress' },
-        h('div', { class: 'pips', attrs: { 'aria-hidden': 'true' } }, ...this.pips), this.cpLabel, this.progress.el,
-        h('span', { class: 'alive', title: 'Enemies alive' }, icon('enemy', 'ico tiny'), this.alive)),
-      h('div', { class: 'hud-row hud-bars' },
-        h('div', { class: 'tower-bars' }, this.hp.el, this.shield.el, this.barrier.el),
-        this.ce.el),
-      h('div', { class: 'hud-row hud-controls' }, this.modeBtn, h('div', { class: 'speed-slot' }, this.speedWrap), restart, this.pauseBtn, this.forecastBtn),
-      this.trialBanner);
+        this.pauseBtn),
+      h('div', { class: 'tb-row tb-bars' }, this.hp.el, this.ce.el),
+      this.cycle);
+    this.controls = h('div', { class: 'battle-controls', attrs: { role: 'toolbar', 'aria-label': 'Run controls' } }, this.trialBanner, this.modeBtn, this.speedBtn, restart);
     this.bossBar = new BossBar((t) => this.onTell?.(t));
-    document.addEventListener('pointerdown', (e) => { if (!this.speedWrap.contains(e.target as Node)) this.speedWrap.classList.remove('open'); });
   }
 
   /** Forget income history (offline credit, Prestige) so the rate shows live income only. */
   resetRate(): void { this.rate = new RateMeter(); this.lastRate = 0; }
-
-  private pickSpeed(sp: 1 | 2 | 4 | 8): void {
-    const s = this.ctx.state(); if (!s) return;
-    const narrow = window.matchMedia('(max-width: 599px), (max-height: 499px) and (min-width: 600px) and (orientation: landscape)').matches;
-    if (narrow && !this.speedWrap.classList.contains('open')) { this.speedWrap.classList.add('open'); return; }
-    this.speedWrap.classList.remove('open');
-    if (sp !== s.run.speedMultiplier) this.ctx.host.send({ type: 'set_speed', speed: sp });
-  }
 
   setPaused(p: boolean): void {
     this.pauseBtn.replaceChildren(icon(p ? 'play' : 'pause'));
@@ -145,9 +141,9 @@ export class Hud {
   update(ui: UiState): void {
     const r = ui.run, w = ui.wave, t = ui.tower;
     text(this.waveNum, `Wave ${r.wave}`);
-    text(this.sector, sectorName(w.sector));
     const bossName = w.isBoss && w.bossId ? (BOSS_BY_ID.get(w.bossId)?.name ?? w.bossId) : '';
-    text(this.boss, bossName ? `Boss: ${bossName}` : r.mode === 'patrol' ? 'Patrol' : '');
+    // the boss name replaces the Sector during a boss wave (in full: the Sector is the part that gives way)
+    text(this.waveSub, bossName || (r.mode === 'patrol' ? `Patrol · ${sectorName(w.sector)}` : sectorName(w.sector)));
     this.el.classList.toggle('boss-wave', w.isBoss);
 
     text(this.scrap, fmtNum(r.scrap));
@@ -156,24 +152,31 @@ export class Hud {
     text(this.scrapRate, rate > 0 ? fmtRate(rate) : '');
     text(this.cores, fmtNum(r.cores));
 
-    // checkpoint cycle pips: waves checkpoint+1 … checkpoint+5 (the fifth is the boss)
-    const cp = r.checkpoint;
-    for (let i = 0; i < 5; i++) {
-      const wv = cp + 1 + i, p = this.pips[i];
-      p.classList.toggle('done', wv < r.wave);
-      p.classList.toggle('cur', wv === r.wave);
-      p.classList.toggle('boss', wv % 5 === 0);
-      attr(p, 'title', `Wave ${wv}${wv % 5 === 0 ? ' (boss)' : ''}`);
-    }
-    text(this.cpLabel, `CP ${cp}`);
-    this.progress.set(w.progress, `${Math.round(w.progress * 100)}%`);
-    text(this.alive, String(w.enemiesAlive));
+    const cyc = cycleBar(r.wave, r.checkpoint, w.progress);
+    styleVar(this.cycleFill, '--f', cyc.frac.toFixed(4));
+    cyc.ticks.forEach((tk, i) => {
+      const el = this.cycleTicks[i];
+      styleVar(el, '--at', String(tk.at));
+      el.classList.toggle('boss', tk.boss);
+      el.classList.toggle('done', tk.done);
+      el.classList.toggle('cur', tk.current);
+    });
+    attr(this.cycle, 'aria-valuenow', String(Math.round(cyc.frac * 100)));
+    attr(this.cycle, 'aria-label', `Wave ${r.wave}, ${Math.round(w.progress * 100)}% cleared. Checkpoint ${r.checkpoint}; boss at wave ${Math.ceil((r.checkpoint + 1) / 5) * 5}. ${w.enemiesAlive} enemies alive.`);
 
-    this.hp.set(t.maxHp > 0 ? t.hp / t.maxHp : 0, `HP ${fmtNum(t.hp)}/${fmtNum(t.maxHp)}${t.tempHp > 0 ? ` +${fmtNum(t.tempHp)}` : ''}`, t.maxHp > 0 ? t.tempHp / t.maxHp : 0);
-    show(this.shield.el, t.maxShield > 0);
-    if (t.maxShield > 0) this.shield.set(t.shield / t.maxShield, `Shield ${fmtNum(t.shield)}`);
-    show(this.barrier.el, t.maxBarrier > 0);
-    if (t.maxBarrier > 0) this.barrier.set(t.barrier / t.maxBarrier, `Barrier ${fmtNum(t.barrier)}`);
+    this.hp.set(t.maxHp > 0 ? t.hp / t.maxHp : 0, `HP ${fmtNum(t.hp)}/${fmtNum(t.maxHp)}`, t.maxHp > 0 ? t.tempHp / t.maxHp : 0);
+    this.hp.el.classList.toggle('low', t.maxHp > 0 && t.hp / t.maxHp < 0.3);
+    const sh = t.maxShield > 0, br = t.maxBarrier > 0;
+    show(this.shieldStrip, sh);
+    show(this.barrierStrip, br);
+    if (sh) styleVar(this.shieldStrip, '--f', (t.shield / t.maxShield).toFixed(3));
+    if (br) styleVar(this.barrierStrip, '--f', (t.barrier / t.maxBarrier).toFixed(3));
+    // one extra number on the bar: the shield (blue) if any, else temporary HP (white)
+    const aux = sh && t.shield > 0 ? `+${fmtNum(t.shield)}` : t.tempHp > 0 ? `+${fmtNum(t.tempHp)}` : '';
+    text(this.shieldLbl, aux);
+    this.shieldLbl.classList.toggle('temp', !(sh && t.shield > 0));
+    this.hp.el.classList.toggle('has-aux', aux !== '');
+    attr(this.hp.el, 'aria-label', `Tower health${t.tempHp > 0 ? `, ${fmtNum(t.tempHp)} temporary` : ''}${sh ? `, shield ${fmtNum(t.shield)} of ${fmtNum(t.maxShield)}` : ''}${br ? `, barrier ${fmtNum(t.barrier)}` : ''}`);
     this.ce.set(t.ceCap > 0 ? t.ce / t.ceCap : 0, `CE ${Math.floor(t.ce)}/${Math.floor(t.ceCap)}`);
     const ceKey = ui.abilities.map((a) => Math.round(a.cost)).join(',') + '/' + t.ceCap;
     if (ceKey !== this.ceKey) {
@@ -183,19 +186,48 @@ export class Hud {
 
     text(this.modeBtn, r.mode === 'push' ? 'Push' : 'Patrol');
     attr(this.modeBtn, 'aria-pressed', r.mode === 'patrol' ? 'true' : 'false');
+    attr(this.modeBtn, 'aria-label', r.mode === 'push' ? 'Mode: Push. Tap for Patrol (P)' : 'Mode: Patrol. Tap for Push (P)');
     this.modeBtn.classList.toggle('patrol', r.mode === 'patrol');
     const maxSpeed = ui.speedAllowed ?? 1;
-    SPEEDS.forEach((sp, i) => {
-      const b = this.speedBtns[i];
-      const active = sp === r.speedMultiplier;
-      b.classList.toggle('active', active);
-      attr(b, 'aria-pressed', active ? 'true' : 'false');
-      disable(b, sp > maxSpeed && !active);
-    });
-    const rec = !!ui.forecast?.recommended;
-    show(this.forecastBadge, rec);
-    this.forecastBtn.classList.toggle('alert', rec);
+    // speed only matters once a speed above ×1 is allowed (Accelerated Clearing / Speed Controls)
+    show(this.speedBtn, maxSpeed > 1 || r.speedMultiplier > 1);
+    text(this.speedBtn, `×${r.speedMultiplier}`);
+    this.speedBtn.classList.toggle('fast', r.speedMultiplier > 1);
+    attr(this.speedBtn, 'aria-label', `Speed ×${r.speedMultiplier}; tap for ×${speedCycle(r.speedMultiplier, maxSpeed)}`);
     this.bossBar.update(ui);
+  }
+}
+
+/**
+ * Slim strip at the top of every non-Battle screen on phones: wave, HP as a tiny bar, Scrap. Tapping
+ * it returns to Battle, so a player deep in the shop still sees the tower dying.
+ */
+export class StatusStrip {
+  readonly el: HTMLButtonElement;
+  private readonly wave = h('span', { class: 'ss-wave' });
+  private readonly boss = icon('skull', 'ico tiny ss-boss');
+  private readonly hpFill = h('i', { class: 'ss-hp-fill' });
+  private readonly hpText = h('span', { class: 'ss-hp-text' });
+  private readonly scrap = h('span', { class: 'ss-scrap' });
+  constructor(onTap: () => void) {
+    this.el = button([
+      h('span', { class: 'ss-wave-wrap' }, this.wave, this.boss),
+      h('span', { class: 'ss-hp' }, icon('heart', 'ico tiny'), h('span', { class: 'ss-hp-bar' }, this.hpFill), this.hpText),
+      h('span', { class: 'ss-res' }, icon('scrap', 'ico tiny'), this.scrap),
+      h('span', { class: 'ss-back' }, h('span', { class: 'ss-back-label', text: 'Battle' }), icon('right', 'ico tiny chev')),
+    ], onTap, { class: 'status-strip' });
+  }
+  update(ui: UiState): void {
+    const t = ui.tower;
+    const f = t.maxHp > 0 ? t.hp / t.maxHp : 0;
+    const dead = ui.run.phase === 'dead';
+    text(this.wave, `Wave ${ui.run.wave}`);
+    this.boss.style.display = ui.wave.isBoss ? '' : 'none';
+    styleVar(this.hpFill, '--f', f.toFixed(3));
+    text(this.hpText, dead ? 'Destroyed' : `${Math.round(f * 100)}%`);
+    text(this.scrap, fmtNum(ui.run.scrap));
+    this.el.classList.toggle('low', f < 0.3 || dead);
+    attr(this.el, 'aria-label', `Wave ${ui.run.wave}${ui.wave.isBoss ? ' (boss)' : ''}, tower ${dead ? 'destroyed' : `health ${Math.round(f * 100)}%`}, ${fmtNum(ui.run.scrap)} Scrap. Back to Battle`);
   }
 }
 

@@ -5,7 +5,7 @@ export interface Prefs {
   onboarded: boolean;
   bloom: boolean;
   affordableFirst: boolean;
-  sheetSnap: 'peek' | 'half' | 'full';
+  /** Desktop side panel shown (B toggles it). */
   panelOpen: boolean;
   shopCategory: string;
   shopTree: string;
@@ -16,7 +16,7 @@ export interface Prefs {
 }
 
 const KEY = 'citadel.prefs.v1';
-const DEFAULTS: Prefs = { onboarded: false, bloom: true, affordableFirst: false, sheetSnap: 'peek', panelOpen: true, shopCategory: 'chassis', shopTree: 'ballistics', activeTrial: null, buyCoach: 0 };
+const DEFAULTS: Prefs = { onboarded: false, bloom: true, affordableFirst: false, panelOpen: true, shopCategory: 'chassis', shopTree: 'ballistics', activeTrial: null, buyCoach: 0 };
 
 let cache: Prefs | null = null;
 

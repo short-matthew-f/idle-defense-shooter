@@ -11,3 +11,5 @@
 .tag.missing { color: var(--warn); border-color: var(--warn); }
 .anomaly-card .btn { margin-top: 4px; }
 .draft-timer { margin: 10px 0 0; font-size: 14px; color: var(--text-dim); }
+.draft-foot { display: grid; grid-template-columns: auto 1fr 1fr; gap: 8px; }
+@media (min-width: 600px) { .draft-foot { grid-template-columns: 1fr auto auto; } .draft-foot > :first-child { justify-self: start; } }

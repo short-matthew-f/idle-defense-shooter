@@ -31,6 +31,8 @@ export interface RenderApp {
   onFrame: ((dt: number, now: number) => void) | null;
   /** Freeze visual time (Inspector pause): particles and shake stop. */
   frozen: boolean;
+  /** Skip drawing (a full-screen UI tab covers the arena; saves battery). The sim and pacing keep running. */
+  renderPaused: boolean;
   /** Re-fit the camera to the canvas (after insets change). */
   fit(): void;
 }
@@ -105,6 +107,7 @@ function boot(): RenderApp | null {
     get snapshot() { return latest; },
     onFrame: null,
     frozen: false,
+    renderPaused: false,
     fit,
   };
 
@@ -151,7 +154,7 @@ function boot(): RenderApp | null {
       snap = latest && latest.instances.buffer.byteLength > 0 ? latest : idle;
     }
 
-    renderer.render(snap, paused || app.frozen ? 0 : dt, camera);
+    if (!app.renderPaused || harness) renderer.render(snap, paused || app.frozen ? 0 : dt, camera);
 
     fpsFrames++;
     if (now - fpsAt >= 500) {

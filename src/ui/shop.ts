@@ -114,7 +114,7 @@ export class Shop {
   private nextTree = '';
   private readonly doneChip: HTMLButtonElement;
   private readonly coach = h('span', { class: 'quick-coach', text: 'Tap to buy', title: 'Tap to buy one rank; hold to keep buying' });
-  /** Expand the sheet / panel when a chip jumps to a tree (GameUi wires it). */
+  /** Bring the Upgrades screen forward when a chip, the death card or the Build screen jumps to a tree (GameUi wires it). */
   onReveal: (() => void) | null = null;
   private readonly sortBtn: HTMLButtonElement;
   private readonly catBtns = new Map<Category, { b: HTMLButtonElement; n: HTMLSpanElement }>();
@@ -162,12 +162,14 @@ export class Shop {
       attr(r.el, 'aria-label', `Quick buy ${e.name} for ${fmtNum(e.cost)} Scrap`);
     });
     this.nextChip = button([h('span', { class: 'qc-next', text: 'Next' }), this.nextLabel, this.nextPrice, this.nextEta], () => this.jumpTo(this.nextTree), { class: 'btn chip next-chip' });
-    this.doneChip = button([icon('forecast', 'ico tiny'), 'Every upgrade owned: see the Forecast'], () => this.ctx.open('forecast'), { class: 'btn chip next-chip done-chip' });
+    this.doneChip = button([icon('forecast', 'ico tiny'), 'All owned: see the Forecast'], () => this.ctx.open('forecast'), { class: 'btn chip next-chip done-chip' });
     this.doneChip.hidden = true;
     this.quick = h('div', { class: 'quick' }, h('span', { class: 'quick-label', text: 'Quick buys' }), this.coach, this.slotRow, this.quickRow, this.nextChip, this.doneChip);
+    // quick buys, categories and tree chips stay pinned (a side column on a landscape phone); the list scrolls
     this.el = h('section', { class: 'shop', attrs: { 'aria-label': 'Upgrades' } },
-      h('div', { class: 'shop-head' }, this.catRow),
-      h('div', { class: 'shop-sub' }, this.treeRow, this.sortBtn),
+      h('div', { class: 'shop-side' }, this.quick,
+        h('div', { class: 'shop-head' }, this.catRow),
+        h('div', { class: 'shop-sub' }, this.treeRow, this.sortBtn)),
       this.body);
   }
 
@@ -238,17 +240,20 @@ export class Shop {
     return n;
   }
 
-  /** Show a category / tree (death card, slot chips, "Next" chip) and expand the panel. */
+  /** Show a category / tree (death card, slot chips, "Next" chip, Build screen) and bring Upgrades forward. */
   open(cat: Category, tree?: string): void {
     this.setCategory(cat);
     if (tree) this.setTree(tree);
     this.onReveal?.();
   }
 
-  private jumpTo(tree: string): void {
+  /** Open the tree that `tree` belongs to (a chassis, element, hardpoint or cross tree); `fork` scrolls to its Doctrine fork. */
+  jumpTo(tree: string, fork = false): void {
     const t = TREE_BY_ID.get(tree as TreeId);
     const cat: Category = !t ? 'cross' : (ELEMENTS as string[]).includes(tree) ? 'elements' : (HARDPOINTS as string[]).includes(tree) ? 'hardpoints' : 'chassis';
     this.open(cat, tree);
+    // the screen renders synchronously when it is brought forward; scroll once it has laid out
+    if (fork) requestAnimationFrame(() => { const f = this.body.querySelector('.fork'); (f?.closest('.shop-section') ?? f)?.scrollIntoView({ block: 'start' }); });
   }
 
   /** A purchase happened (Ev.Purchase): retire the first-purchase coach after three. */
@@ -478,8 +483,9 @@ export class Shop {
     return wrap;
   }
 
-  private slotPicker(isEl: boolean, slot: number): HTMLElement {
-    const ui = this.ui!;
+  /** Attune / mount picker for an open slot (the Upgrades slot chip and the Build screen's Mount button). */
+  slotPicker(isEl: boolean, slot: number, onDone?: () => void): HTMLElement {
+    const ui = this.ctx.state() ?? this.ui!;
     const wrap = h('div', { class: 'slot-picker' },
       h('p', { class: 'note', text: isEl ? 'Attune an element to this slot. Attunements lock for the rest of this Prestige.' : 'Mount a weapon system in this slot. Mounts lock for this Prestige (a Refit costs 3 Cores). At most four systems ever: one always sits out.' }));
     const list = isEl ? ELEMENTS.filter((e) => !ui.build.attunements.includes(e)) : HARDPOINTS.filter((hp) => !ui.build.hardpoints.includes(hp));
@@ -493,6 +499,7 @@ export class Shop {
           this.ctx.host.send(isEl ? { type: 'attune', slot, element: id as ElementId } : { type: 'mount_hardpoint', slot, system: id as HardpointId });
           this.tree = id;
           setPref('shopTree', id);
+          onDone?.();
         }, { class: 'btn primary' })));
     }
     return wrap;
@@ -513,7 +520,8 @@ export class Shop {
     return wrap;
   }
 
-  private refitPicker(slot: number): void {
+  /** Refit dialog for a mounted hardpoint slot (Upgrades and the Build screen). */
+  refitPicker(slot: number): void {
     const ui = this.ctx.state();
     if (!ui) return;
     const old = ui.build.hardpoints[slot];

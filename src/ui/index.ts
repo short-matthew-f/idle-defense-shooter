@@ -1,16 +1,16 @@
 /**
- * GameUi: composes the HUD, ability bar, upgrades sheet / side panel, toasts and every screen,
- * and routes keyboard shortcuts. main.ts feeds it UiState (≤ 10 Hz), event batches and field taps.
+ * GameUi: composes the HUD, ability bar, toasts and every screen into the Shell (tab bar, screens,
+ * status strip, history), and routes keyboard shortcuts. main.ts feeds it UiState (≤ 10 Hz), event
+ * batches and field taps.
  */
 import '../styles/theme.css';
 import '../styles/controls.css';
 import { Ev, type SimEvent, type UiState } from '@sim/core/types';
 import { sectorIndexForWave } from '@sim/data/sectors';
 import { h } from './dom';
-import { Hud } from './hud';
+import { Hud, StatusStrip } from './hud';
 import { AbilityBar } from './abilities';
 import { Shop } from './shop';
-import { Sheet } from './sheet';
 import { DraftModal } from './draft';
 import { ForecastPanel } from './forecast';
 import { openPrestige } from './prestige';
@@ -18,14 +18,16 @@ import { PrestigeShop } from './prestige-shop';
 import { ConstellationPanel } from './constellation';
 import { Inspector } from './inspector';
 import { CodexPanel } from './codex';
-import { DirectivesPanel } from './directives';
+import { DirectivesPanel, type AutoTab } from './directives';
 import { TrialsPanel, activeTrial, trialName } from './trials';
-import { openSettings } from './settings';
+import { helpPanel, settingsPanel } from './settings';
 import { Feed } from './feed';
 import { DeathCard } from './death';
 import { maybeOnboard } from './onboard';
 import { showOfflineReturn } from './offline';
-import { openMenu } from './menu';
+import { BuildScreen } from './build';
+import { MoreScreen, PrestigeScreen, type MoreSub } from './screens';
+import { Shell } from './shell';
 import { anyModalOpen, mountModalLayer } from './modal';
 import { sectorAccent } from './content';
 import type { UiHost } from './host';
@@ -36,7 +38,7 @@ export class GameUi {
   readonly hud: Hud;
   readonly abilities: AbilityBar;
   readonly shop: Shop;
-  readonly sheet: Sheet;
+  readonly shell: Shell;
   readonly feed = new Feed();
   readonly death: DeathCard;
   readonly inspector: Inspector;
@@ -47,14 +49,16 @@ export class GameUi {
   private readonly codex = new CodexPanel();
   private readonly directives: DirectivesPanel;
   private readonly trials: TrialsPanel;
-  private readonly topStack: HTMLElement;
+  private readonly build: BuildScreen;
+  private readonly prestigeScreen: PrestigeScreen;
+  private readonly more: MoreScreen;
+  private readonly strip: StatusStrip;
   private latest: UiState | null = null;
   private sector = -1;
-  private hudH = 0;
-  private abilityH = 0;
+  private autoTab: AutoTab = 'directives';
   private pendingOffline: { seconds: number; estimate: number; timer: number } | null = null;
 
-  constructor(private readonly root: HTMLElement, readonly host: UiHost) {
+  constructor(root: HTMLElement, readonly host: UiHost) {
     this.ctx = {
       host,
       state: () => this.latest,
@@ -65,7 +69,6 @@ export class GameUi {
     this.hud = new Hud(this.ctx);
     this.abilities = new AbilityBar(this.ctx);
     this.shop = new Shop(this.ctx);
-    this.sheet = new Sheet(this.shop.quick, this.shop.el);
     this.inspector = new Inspector(this.ctx);
     this.inspector.onPauseChange = (p) => this.hud.setPaused(p);
     this.draft = new DraftModal(this.ctx);
@@ -75,37 +78,50 @@ export class GameUi {
     this.directives = new DirectivesPanel(this.ctx);
     this.trials = new TrialsPanel(this.ctx);
     this.death = new DeathCard(this.ctx, () => this.hud.lastRate);
+    this.build = new BuildScreen(this.ctx, this.shop, this.abilities, this.draft);
+    this.prestigeScreen = new PrestigeScreen(this.ctx, this.forecast, this.pshop, this.constellation);
+    this.strip = new StatusStrip(() => this.shell.go('battle'));
+    this.more = new MoreScreen({
+      codex: { title: 'Chain Codex', el: () => this.codex.el, onShow: () => this.codex.setShown(true, this.latest), onHide: () => this.codex.setShown(false, null) },
+      automation: { title: 'Automation', el: () => this.directives.el, onShow: () => { this.directives.open(this.autoTab); this.directives.setShown(true); }, onHide: () => this.directives.setShown(false) },
+      trials: { title: 'Trials', el: () => this.trials.el, onShow: () => this.trials.setShown(true), onHide: () => this.trials.setShown(false) },
+      settings: { title: 'Settings', el: () => settingsPanel(this.ctx) },
+      help: { title: 'Help & shortcuts', el: () => helpPanel() },
+    }, {
+      go: (sub: MoreSub) => this.shell.go('more', sub),
+      back: () => this.shell.back(),
+      inspector: () => { this.shell.go('battle'); this.inspector.open(); },
+    });
+    this.trials.onStarted = () => this.shell.go('battle');
     this.death.reveal = (cat, tree) => this.shop.open(cat, tree);
-    this.shop.onReveal = () => this.sheet.reveal();
+    this.shop.onReveal = () => this.shell.go('upgrades');
     this.hud.onTell = (t) => {
       if (t === 'designate') { this.feed.toast('Tap the boss where its weak point opens to designate it', 'info'); return; }
       const i = this.abilities.slotOf(t);
       if (i >= 0) this.abilities.press(i); else this.abilities.equip(t);
     };
-    this.topStack = h('div', { class: 'top-stack' }, this.hud.el, this.hud.bossBar.el);
-    const overlay = h('div', { class: 'top-overlay' }, this.death.el, this.feed.el);
-    root.prepend(this.topStack, this.abilities.el, this.sheet.el, this.sheet.reopen, overlay);
-    this.sheet.onLayout = () => this.relayout();
 
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => this.relayout()) : null;
-    ro?.observe(this.hud.el);
-    ro?.observe(this.abilities.el);
-    window.addEventListener('resize', () => this.relayout());
+    const battle = h('div', { class: 'battle-layer' },
+      h('div', { class: 'arena-top' }, this.hud.bossBar.el, this.hud.controls, this.death.el),
+      this.abilities.el);
+    const toasts = h('div', { class: 'toast-layer' }, this.feed.el);
+    this.shell = new Shell(root, host, {
+      topbar: this.hud.el, battle, abilities: this.abilities.el, toasts, strip: this.strip,
+      screens: {
+        upgrades: {
+          el: this.shop.el, ownScroll: true,
+          onShow: () => { if (this.latest) this.shop.update(this.latest, this.hud.lastRate); },
+        },
+        build: { el: this.build.el, onShow: () => this.build.setShown(true), onHide: () => this.build.setShown(false) },
+        prestige: { el: this.prestigeScreen.el, onShow: () => this.prestigeScreen.setShown(true), onHide: () => this.prestigeScreen.setShown(false) },
+        more: { el: this.more.el, onShow: (sub) => this.more.enter(sub), onHide: () => this.more.hide() },
+      },
+    });
     window.addEventListener('keydown', (e) => this.onKey(e));
-    this.relayout();
   }
 
-  /** Recompute sheet snap heights and camera insets. */
-  relayout(): void {
-    this.hudH = Math.ceil(this.hud.el.getBoundingClientRect().height);
-    document.documentElement.style.setProperty('--hud-h', `${this.hudH}px`);
-    this.sheet.layout(this.hudH);
-    const ab = this.abilities.el.offsetParent ? this.abilities.el.getBoundingClientRect() : null;
-    this.abilityH = ab ? Math.ceil(ab.height) : 0;
-    const abW = ab && this.sheet.compact ? Math.ceil(this.abilities.row.getBoundingClientRect().width) + 16 : 0;
-    const i = this.sheet.insets(this.abilityH ? this.abilityH + 12 : 0, abW);
-    this.host.setInsets(i.top + 4, i.right, i.bottom, i.left);
-  }
+  /** Recompute the layout and camera insets. */
+  relayout(): void { this.shell.relayout(); }
 
   /** First UiState: onboarding, accent, initial layout. */
   onReady(ui: UiState): void {
@@ -127,13 +143,17 @@ export class GameUi {
     this.hud.update(ui);
     this.hud.setTrial(trialName(activeTrial(ui)));
     this.abilities.update(ui);
-    this.shop.update(ui, this.hud.lastRate);
+    this.shell.update(ui);
+    if (this.shell.isShown('upgrades')) this.shop.update(ui, this.hud.lastRate);
     this.death.update(ui);
     this.feed.update(ui);
     this.draft.update(ui);
+    this.build.update(ui);
+    this.prestigeScreen.update(ui);
     this.forecast.update(ui);
     this.pshop.update(ui);
     this.constellation.update(ui);
+    this.more.update(ui);
     this.codex.update(ui);
     this.directives.update(ui);
     this.trials.update(ui);
@@ -176,17 +196,17 @@ export class GameUi {
 
   open(s: ScreenId, arg?: unknown): void {
     switch (s) {
-      case 'menu': openMenu(this.ctx); break;
-      case 'forecast': this.forecast.open(); break;
+      case 'menu': this.shell.go('more'); break;
+      case 'forecast': this.prestigeScreen.select('forecast'); this.shell.go('prestige'); break;
       case 'prestige': openPrestige(this.ctx); break;
-      case 'prestige_shop': this.pshop.open(); break;
-      case 'constellation': this.constellation.open(); break;
-      case 'codex': this.codex.open(this.latest); break;
-      case 'directives': this.directives.open((arg as 'directives' | undefined) ?? 'directives'); break;
-      case 'blueprints': this.directives.open('blueprints'); break;
-      case 'trials': this.trials.open(); break;
-      case 'settings': openSettings(this.ctx); break;
-      case 'inspector': this.inspector.toggle(); break;
+      case 'prestige_shop': this.prestigeScreen.select('layers'); this.shell.go('prestige'); break;
+      case 'constellation': this.prestigeScreen.select('ascension'); this.shell.go('prestige'); break;
+      case 'codex': this.shell.go('more', 'codex'); break;
+      case 'directives': this.autoTab = (arg as AutoTab | undefined) ?? 'directives'; this.shell.go('more', 'automation'); break;
+      case 'blueprints': this.autoTab = 'blueprints'; this.shell.go('more', 'automation'); break;
+      case 'trials': this.shell.go('more', 'trials'); break;
+      case 'settings': this.shell.go('more', 'settings'); break;
+      case 'inspector': if (!this.inspector.isOpen) this.shell.go('battle'); this.inspector.toggle(); break;
       case 'abilities': this.abilities.openPicker(Number(arg ?? 0)); break;
     }
   }
@@ -203,16 +223,15 @@ export class GameUi {
       e.preventDefault();
       if (e.repeat) return;
       (document.activeElement as HTMLElement | null)?.blur?.();
-      this.inspector.toggle();
+      this.open('inspector');
       return;
     }
     if (anyModalOpen()) return;
     const k = e.key.toLowerCase();
-    if (k >= '1' && k <= '4') { this.abilities.press(Number(k) - 1); e.preventDefault(); }
+    if (k >= '1' && k <= '4') { if (this.shell.battleVisible) { this.abilities.press(Number(k) - 1); e.preventDefault(); } }
     else if (k === 'escape') this.abilities.cancel();
     else if (k === 'p') { const ui = this.latest; if (ui) this.host.send({ type: 'set_mode', mode: ui.run.mode === 'push' ? 'patrol' : 'push' }); }
-    else if (k === 'b') this.sheet.toggle();
-    else if (k === 'f') this.forecast.open();
+    else if (k === 'b') this.shell.togglePanel();
+    else if (k === 'f') this.open('forecast');
   }
 }
-

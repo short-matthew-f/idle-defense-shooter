@@ -1,6 +1,6 @@
 /* Automation: Directives, Targeting Profiles, Upgrade Queue, Blueprints. */
 .automation { display: flex; flex-direction: column; gap: 8px; }
-.automation > .tabs { border-bottom: 1px solid var(--line); }
+.automation > .tabs { border-bottom: 1px solid var(--line); padding-right: 28px; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
 .auto-content p { margin: 6px 0; }
 .rules { list-style: none; padding: 0; margin: 8px 0; display: flex; flex-direction: column; gap: 6px; }
 .rule { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); }

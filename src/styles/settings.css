@@ -7,3 +7,9 @@
 .keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 4px 0; align-items: center; }
 .keys dd { margin: 0; font-size: 14px; color: var(--text-dim); }
 kbd { display: inline-block; font: 14px var(--mono); padding: 1px 7px; border-radius: 5px; background: var(--bg-3); border: 1px solid var(--line-2); border-bottom-width: 2px; }
+.set-row { min-height: 60px; }
+.set-row.stack { flex-direction: column; align-items: stretch; gap: 4px; }
+.set-row.stack .range-wrap { width: 100%; }
+.range-wrap .dim { min-width: 80px; text-align: right; }
+.help .keys { grid-template-columns: minmax(96px, auto) 1fr; row-gap: 10px; }
+.help .keys dt { font-size: 14px; font-weight: 600; }

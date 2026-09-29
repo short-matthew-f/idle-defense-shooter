@@ -1,12 +1,13 @@
 /**
- * Settings: Clarity slider, bloom, Auto-Prestige, export / import save, hard reset (double
- * confirm), install PWA, keyboard shortcuts, about.
+ * Settings (a More sub-screen): Clarity slider, bloom, Auto-Prestige, export / import save, hard
+ * reset (double confirm), install PWA. Help (another sub-screen): gestures, keyboard shortcuts,
+ * replay the intro, about.
  */
 import '../styles/settings.css';
 import type { UiState } from '@sim/core/types';
 import { button, h } from './dom';
 import { icon } from './icons';
-import { confirmDialog, openModal } from './modal';
+import { confirmDialog } from './modal';
 import { maybeOnboard } from './onboard';
 import { setPref } from './prefs';
 import type { UiCtx } from './ctx';
@@ -14,14 +15,23 @@ import type { UiCtx } from './ctx';
 export const SHORTCUTS: [string, string][] = [
   ['Space', 'Pause and open the Kill-Chain Inspector'],
   ['1 – 4', 'Arm ability slot'],
-  ['Esc', 'Cancel an armed ability / close a panel'],
+  ['Esc', 'Cancel an armed ability / close a dialog / back to Battle'],
   ['P', 'Toggle Push / Patrol'],
-  ['B', 'Show / hide the upgrades panel'],
+  ['B', 'Upgrades (phone) · show or hide the side panel (desktop)'],
   ['F', 'Prestige Forecast'],
 ];
 
-function row(label: string, control: HTMLElement, hint?: string): HTMLElement {
-  return h('div', { class: 'set-row' }, h('div', { class: 'set-label' }, h('span', { text: label }), hint ? h('span', { class: 'dim small', text: hint }) : null), control);
+export const GESTURES: [string, string][] = [
+  ['Tap an enemy', 'Designate it: every weapon prefers it'],
+  ['Hold on the field', 'Steer the main gun toward your finger'],
+  ['Tap an ability', 'Arm it, then tap the field (or an enemy) to cast'],
+  ['Hold an ability', 'Change what is in that slot'],
+  ['Tap a price', 'Buy one rank; hold to keep buying'],
+  ['Swipe back', 'Return to Battle from any screen'],
+];
+
+function row(label: string, control: HTMLElement, hint?: string, stack = false): HTMLElement {
+  return h('div', { class: `set-row${stack ? ' stack' : ''}` }, h('div', { class: 'set-label' }, h('span', { text: label }), hint ? h('span', { class: 'dim small', text: hint }) : null), control);
 }
 
 function toggle(label: string, on: boolean, change: (v: boolean) => void): HTMLLabelElement {
@@ -31,7 +41,8 @@ function toggle(label: string, on: boolean, change: (v: boolean) => void): HTMLL
   return h('label', { class: 'switch' }, input, h('span', { class: 'slider' }));
 }
 
-export function openSettings(ctx: UiCtx): void {
+/** The Settings sub-screen's content (built fresh each time it opens, so it shows current values). */
+export function settingsPanel(ctx: UiCtx): HTMLElement {
   const ui: UiState | null = ctx.state();
   const clarity = ui?.meta.settings.clarity ?? 0.5;
   const val = h('span', { class: 'dim small', text: '' });
@@ -79,17 +90,26 @@ export function openSettings(ctx: UiCtx): void {
 
   const autonomy = ((ui?.meta.prestigeRanks['prestige.autonomy'] ?? 0) | 0) > 0;
   const body = h('div', { class: 'settings' },
-    row('Clarity', h('div', { class: 'range-wrap' }, slider, val), 'Spectacle ↔ Clarity: player effects fade, enemies never do'),
+    row('Clarity', h('div', { class: 'range-wrap' }, slider, val), 'Spectacle ↔ Clarity: player effects fade, enemies never do', true),
     row('Bloom', toggle('Bloom', ctx.host.bloomOn(), (v) => { ctx.host.setBloom(v); setPref('bloom', v); })),
     row('Auto-Prestige', toggle('Auto-Prestige', !!ui?.meta.settings.autoPrestige, (v) => ctx.host.send({ type: 'set_setting', key: 'autoPrestige', value: v })), autonomy ? 'Lets a Prestige Directive fire' : 'Needs Autonomy (Prestige IV) and a Prestige Directive'),
     h('h3', { class: 'sec-title', text: 'Save' }),
     h('p', { class: 'dim small', text: 'Autosaves to this device every 30 s and at every checkpoint.' }),
     h('div', { class: 'row gap wrap' }, exportBtn, downloadBtn), exportArea,
     importArea, h('div', { class: 'row gap wrap' }, importBtn),
+    h('h3', { class: 'sec-title', text: 'App' }),
+    h('div', { class: 'row gap wrap' }, install, reset));
+  return body;
+}
+
+/** The Help sub-screen: gestures, keyboard shortcuts, the intro again, about. */
+export function helpPanel(): HTMLElement {
+  return h('div', { class: 'settings help' },
+    h('h3', { class: 'sec-title', text: 'Touch' }),
+    h('dl', { class: 'keys' }, ...GESTURES.flatMap(([k, d]) => [h('dt', { text: k }), h('dd', { text: d })])),
     h('h3', { class: 'sec-title', text: 'Keyboard' }),
     h('dl', { class: 'keys' }, ...SHORTCUTS.flatMap(([k, d]) => [h('dt', null, h('kbd', { text: k })), h('dd', { text: d })])),
     h('h3', { class: 'sec-title', text: 'About' }),
     h('p', { class: 'dim small', text: 'Project Citadel: an idle tower-defense game where the tower is the character and each Prestige is a new machine. No dailies, no streaks, nothing decays.' }),
-    h('div', { class: 'row gap wrap' }, install, button('Replay intro', () => maybeOnboard(true), { class: 'btn ghost' }), reset));
-  openModal({ title: 'Settings', body, className: 'settings-modal' });
+    h('div', { class: 'row gap wrap' }, button('Replay intro', () => maybeOnboard(true), { class: 'btn' })));
 }

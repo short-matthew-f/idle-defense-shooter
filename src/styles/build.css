@@ -1,0 +1,41 @@
+/* Build screen: the Prestige's commitments. */
+.build { display: flex; flex-direction: column; gap: 6px; }
+.bs-frame { background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 14px; padding: 14px 16px; }
+.bs-frame-head { display: flex; gap: 12px; align-items: center; }
+.bs-frame-head .ico { color: var(--accent); }
+.bs-frame-label { font-size: 14px; color: var(--text-dim); }
+.bs-frame-name { font-size: 20px; font-weight: 800; line-height: 1.2; }
+.bs-frame-trait { margin: 10px 0 6px; font-size: 15px; line-height: 1.45; }
+.bs-frame-caps { margin: 0; font-size: 14px; color: var(--accent); }
+.bs-section .sec-title { margin-top: 18px; }
+.bs-list { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.bs-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); min-height: 68px; }
+.bs-ico { flex: none; width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: var(--bg-3); color: var(--text-dim); }
+.bs-num { font-weight: 800; font-size: 16px; color: var(--text); }
+.bs-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.bs-name { font-weight: 700; font-size: 15px; line-height: 1.3; }
+.bs-sub { font-size: 14px; color: var(--text-dim); line-height: 1.4; }
+.bs-act { display: flex; gap: 6px; flex: none; align-items: center; }
+.bs-act .btn.small .chev { margin-right: -4px; }
+.bs-row.open .bs-ico { color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--bg-3)); outline: 1px dashed var(--accent); outline-offset: -1px; }
+.bs-row.locked .bs-name { color: var(--text-dim); }
+.bs-row.locked .bs-ico { color: var(--text-faint); background: var(--bg-2); }
+.bs-row.chosen .bs-ico { color: var(--ok); }
+.bs-tree { color: var(--text-dim); font-weight: 600; }
+.bs-anomalies { display: grid; gap: 10px; padding: 12px 0 4px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.bs-socket { border: 1px dashed var(--line-2); border-radius: 12px; padding: 14px; font-size: 14px; color: var(--text-dim); display: grid; place-items: center; min-height: 64px; text-align: center; }
+.btn.bs-draft { justify-content: flex-start; width: 100%; margin: 0 0 6px; min-height: 52px; border-color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, var(--bg-3)); white-space: normal; text-align: left; animation: pulse 1.8s infinite; }
+.btn.bs-draft .ico { color: var(--warn); }
+.bs-cores-bal { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; }
+.bs-cores-bal .ico { color: var(--cores); }
+.bs-cores-val { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.btn.bs-core-row {
+  justify-content: flex-start; gap: 12px; width: 100%; min-height: 64px; padding: 8px 4px; background: transparent; border: 0;
+  border-bottom: 1px solid var(--line); border-radius: 0; text-align: left; white-space: normal; font-weight: 400;
+}
+.btn.bs-core-row:hover:not(:disabled) { background: var(--bg-2); }
+.bs-core-row .price { font-weight: 700; font-size: 15px; }
+.bs-core-row .price.short { opacity: 0.5; }
+.chev { color: var(--text-faint); flex: none; }
+.bs-doc { color: var(--accent); font-weight: 600; }
+.btn.bs-draft .bs-name { flex: 1; }

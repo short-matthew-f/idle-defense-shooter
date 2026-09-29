@@ -12,7 +12,6 @@ import { h, text, clear } from './dom';
 import { icon } from './icons';
 import { ANOMALIES, BOSSES, CHASSIS_LINKAGES, FUSIONS, INFUSIONS, TRIADS, WEAPON_LINKAGES } from './content';
 import { titleCase } from './format';
-import { openModal, type ModalHandle } from './modal';
 
 export interface CodexEntry { id: string; name: string; desc: string; alt?: string[] }
 export interface CodexGroup { name: string; entries: CodexEntry[] }
@@ -33,7 +32,8 @@ export function codexGroups(): CodexGroup[] {
 }
 
 export class CodexPanel {
-  private modal: ModalHandle | null = null;
+  shown = false;
+  readonly el: HTMLElement;
   private readonly groups = codexGroups();
   private readonly known = new Set(this.groups.flatMap((g) => g.entries.flatMap((e) => [e.id, ...(e.alt ?? [])])));
   private readonly summary = h('div', { class: 'codex-summary' });
@@ -41,12 +41,12 @@ export class CodexPanel {
   private readonly list = h('div', { class: 'codex-groups' });
   private key = '';
 
-  get isOpen(): boolean { return !!this.modal?.open; }
-  open(ui: UiState | null): void {
-    if (this.isOpen) return;
-    this.key = '';
-    this.modal = openModal({ title: 'Chain Codex', body: h('div', { class: 'codex' }, this.summary, this.hints, this.list), variant: 'wide', className: 'codex-modal', onClose: () => { this.modal = null; } });
-    if (ui) this.update(ui);
+  constructor() { this.el = h('div', { class: 'codex' }, this.summary, this.hints, this.list); }
+
+  get isOpen(): boolean { return this.shown; }
+  setShown(on: boolean, ui: UiState | null): void {
+    this.shown = on;
+    if (on) { this.key = ''; if (ui) this.update(ui); }
   }
 
   update(ui: UiState): void {

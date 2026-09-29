@@ -10,7 +10,7 @@ import { button, h, text, clear, disable } from './dom';
 import { icon } from './icons';
 import { ACTIONS, ACT_KINDS, CONDITIONS, COND_KINDS, MAX_CONDITIONS, SYSTEM_LABELS, TARGETING_PROFILES, defaultAction, defaultCondition, describeDirective, describeUpgradeRule, directiveSlots, moveItem, newDirective, serializeDirectives, type ActKind, type CondKind, type ParamSpec } from './directive-model';
 import { FRAME_BY_ID, TREE_LABEL, nodeName } from './content';
-import { openModal, type ModalHandle, confirmDialog } from './modal';
+import { confirmDialog } from './modal';
 import type { UiCtx } from './ctx';
 
 export type AutoTab = 'directives' | 'targeting' | 'queue' | 'blueprints';
@@ -35,7 +35,7 @@ function paramInput(spec: ParamSpec, value: unknown, onChange: (v: string | numb
 }
 
 export class DirectivesPanel {
-  private modal: ModalHandle | null = null;
+  shown = false;
   private tab: AutoTab = 'directives';
   private readonly tabRow = h('div', { class: 'tabs', attrs: { role: 'tablist' } });
   private readonly content = h('div', { class: 'auto-content' });
@@ -46,10 +46,14 @@ export class DirectivesPanel {
   private queueKey = '';
   private dragFrom = -1;
 
-  constructor(private readonly ctx: UiCtx) {}
+  readonly el: HTMLElement;
+  constructor(private readonly ctx: UiCtx) { this.el = h('div', { class: 'automation' }, this.tabRow, this.content); }
 
-  get isOpen(): boolean { return !!this.modal?.open; }
+  get isOpen(): boolean { return this.shown; }
 
+  setShown(on: boolean): void { this.shown = on; }
+
+  /** Show a tab with fresh drafts of the live Directives and Upgrade Queue (the screen is being opened). */
   open(tab: AutoTab = 'directives'): void {
     const ui = this.ctx.state();
     if (!ui) return;
@@ -59,7 +63,6 @@ export class DirectivesPanel {
     this.queue = clone(ui.meta.upgradeQueue);
     this.queueKey = JSON.stringify(this.queue);
     this.editing = -1;
-    if (!this.isOpen) this.modal = openModal({ title: 'Automation', body: h('div', { class: 'automation' }, this.tabRow, this.content), variant: 'wide', className: 'auto-modal', onClose: () => { this.modal = null; } });
     this.render();
   }
 

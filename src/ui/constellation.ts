@@ -10,7 +10,7 @@ import { button, h, text, disable, show } from './dom';
 import { icon } from './icons';
 import { fmtNum, nextRankCost } from './format';
 import { STAR_NODES } from './content';
-import { confirmDialog, openModal, type ModalHandle } from './modal';
+import { confirmDialog } from './modal';
 import type { UiCtx } from './ctx';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -47,7 +47,7 @@ export function layoutStars(nodes: readonly StarNodeDef[]): Map<string, StarPos>
 }
 
 export class ConstellationPanel {
-  private modal: ModalHandle | null = null;
+  shown = false;
   private readonly svg: SVGSVGElement;
   private readonly nodeEls = new Map<string, SVGGElement>();
   private readonly stars = h('span', { class: 'star-val' });
@@ -60,7 +60,8 @@ export class ConstellationPanel {
   private readonly ascendText = h('p', { class: 'dim' });
   private readonly ascendBtn: HTMLButtonElement;
   private selected: StarNodeDef | null = null;
-  private readonly body: HTMLElement;
+  readonly el: HTMLElement;
+  private readonly lockCard = h('div', { class: 'locked-card' }, icon('lock', 'ico'), h('p', { text: 'Ascension opens after beating The Crown at wave 100. It resets the climb for Stars, which buy Constellation nodes: new rules that last forever. You can explore the map now.' }));
 
   constructor(private readonly ctx: UiCtx) {
     const pos = layoutStars(STAR_NODES);
@@ -118,18 +119,17 @@ export class ConstellationPanel {
       if (ok) { ctx.host.send({ type: 'ascend' }); ctx.host.saveNow(); }
     }, { class: 'btn primary wide' });
     this.ascendWrap.append(this.ascendText, this.ascendBtn);
-    this.body = h('div', { class: 'constellation' },
+    this.el = h('div', { class: 'constellation' }, this.lockCard,
       h('div', { class: 'pr-gain' }, icon('star', 'ico'), this.stars, h('span', { class: 'dim', text: ' Stars' })),
       h('div', { class: 'const-legend dim small' }, h('span', { class: 'lg major' }, '● Major: a system'), h('span', { class: 'lg bridge' }, '◆ Bridge: cross-system rule'), h('span', { class: 'lg minor' }, '• Minor: numbers')),
       this.svg, this.detail, this.ascendWrap);
     this.select(STAR_NODES[0] ?? null);
   }
 
-  get isOpen(): boolean { return !!this.modal?.open; }
-  open(): void {
-    if (this.isOpen) return;
-    this.modal = openModal({ title: 'Ascension & Constellation', body: this.body, variant: 'wide', className: 'const-modal', onClose: () => { this.modal = null; } });
-    const ui = this.ctx.state(); if (ui) this.update(ui);
+  get isOpen(): boolean { return this.shown; }
+  setShown(on: boolean): void {
+    this.shown = on;
+    const ui = this.ctx.state(); if (on && ui) this.update(ui);
   }
 
   private select(n: StarNodeDef | null): void {
@@ -167,6 +167,7 @@ export class ConstellationPanel {
       disable(this.dBuy, maxed || !reqOk || m.stars < cost);
     }
     const can = ui.run.deepestCleared >= 100;
+    show(this.lockCard, !can && m.ascension === 0);
     text(this.ascendText, can ? `The Crown has fallen. Ascension ${m.ascension + 1} is open.` : `Ascension opens after beating The Crown at wave 100 (deepest this Prestige: ${ui.run.deepestCleared}). Ascensions so far: ${m.ascension}.`);
     show(this.ascendBtn, can);
   }

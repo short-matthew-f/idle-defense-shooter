@@ -8,7 +8,7 @@ import type { AnomalyId, AnomalyRarity } from '@sim/core/ids';
 import type { UiState } from '@sim/core/types';
 import { TICK_RATE } from '@sim/core/types';
 import { button, h, text } from './dom';
-import { rarityIcon } from './icons';
+import { icon, rarityIcon } from './icons';
 import { ANOMALY_BY_ID, TREE_LABEL } from './content';
 import { openModal, type ModalHandle } from './modal';
 import { titleCase } from './format';
@@ -39,6 +39,9 @@ export function draftSecondsLeft(ticksLeft: number | null): number | null {
 export class DraftModal {
   private modal: ModalHandle | null = null;
   private key = '';
+  /** The draft the player set aside with "Later" (the Build tab badge and screen bring it back). */
+  private laterKey = '';
+  private offers = '';
   private readonly countdown = h('p', { class: 'draft-timer', attrs: { 'aria-live': 'off' } });
   constructor(private readonly ctx: UiCtx) {}
 
@@ -53,11 +56,29 @@ export class DraftModal {
         : `If you don't choose, ${first} is picked automatically in ${secs}s.`);
     }
     const key = d ? d.join(',') + `|${ui.run.cores}|${ui.build.anomalies.join(',')}` : '';
-    if (key === this.key && (!!this.modal?.open === !!d)) return;
+    const offers = d ? d.join(',') : '';
+    if (offers !== this.offers) { this.offers = offers; this.laterKey = ''; }   // a new draft always shows itself
+    const later = !!offers && this.laterKey === offers;
+    if (key === this.key && (!!this.modal?.open === (!!d && !later))) return;
     this.key = key;
-    this.modal?.close();
+    this.close();
+    if (d && d.length && !later) this.show(ui, d);
+  }
+
+  get pending(): boolean { return !!this.offers; }
+
+  /** Bring a set-aside draft back (Build screen, tab badge). */
+  open(): void {
+    this.laterKey = '';
+    this.key = '';
+    const ui = this.ctx.state();
+    if (ui) this.update(ui);
+  }
+
+  private close(): void {
+    const m = this.modal;
     this.modal = null;
-    if (d && d.length) this.show(ui, d);
+    m?.close();
   }
 
   private show(ui: UiState, offers: AnomalyId[]): void {
@@ -66,13 +87,15 @@ export class DraftModal {
     for (const id of offers) {
       cards.appendChild(anomalyCard(id, ui, button('Pick', () => (full ? this.replace(id) : this.pick(id)), { class: 'btn primary' })));
     }
-    const skip = button('Skip (+1 Core)', () => this.ctx.host.send({ type: 'pick_anomaly', anomaly: null }), { class: 'btn' });
-    const reroll = button('Reroll (1 Core)', () => this.ctx.host.send({ type: 'reroll_anomaly' }), { class: 'btn', disabled: ui.run.cores < 1 });
+    const skip = button(['Skip', h('span', { class: 'price cores' }, '+1', icon('cores', 'ico tiny'))], () => this.ctx.host.send({ type: 'pick_anomaly', anomaly: null }), { class: 'btn', label: 'Skip: gain 1 Core' });
+    const later = button('Later', () => { this.laterKey = this.offers; this.close(); }, { class: 'btn ghost', title: 'Decide from the Build screen; the draft still auto-picks when its timer runs out' });
+    const reroll = button(['Reroll', h('span', { class: 'price cores' }, '1', icon('cores', 'ico tiny'))], () => this.ctx.host.send({ type: 'reroll_anomaly' }), { class: 'btn', disabled: ui.run.cores < 1, label: 'Reroll for 1 Core' });
     if (ui.run.cores < 1) reroll.title = 'Needs 1 Core';
     const body = h('div', { class: 'draft' },
       h('p', { class: 'dim', text: `Anomalies bend the rules for this Prestige. Sockets: ${ui.build.anomalies.length}/${ui.build.anomalySockets}${full ? ' (full: picking replaces one)' : ''}.` }),
       cards, this.countdown);
-    this.modal = openModal({ title: 'Anomaly draft', body, footer: h('div', { class: 'row end gap' }, reroll, skip), dismissable: false, variant: 'wide', className: 'draft-modal' });
+    this.modal = openModal({ title: 'Anomaly draft', body, footer: h('div', { class: 'draft-foot' }, later, reroll, skip), variant: 'wide', className: 'draft-modal',
+      onClose: () => { if (this.modal) { this.modal = null; this.laterKey = this.offers; } } });
   }
 
   private pick(id: AnomalyId, replace?: number): void {

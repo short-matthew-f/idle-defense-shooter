@@ -86,6 +86,7 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
       location.reload();
     },
     setInsets: (t, r, b, l) => { app.camera.setInsets(t, r, b, l); },
+    setRenderPaused: (p) => { app.renderPaused = p; },
     canInstall,
     install: promptInstall,
     saveNow: () => { if (ready) client.requestSave(); },

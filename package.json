@@ -17,6 +17,7 @@
     "test:watch": "vitest",
     "sim": "tsx sim-cli/main.ts",
     "sim:accept": "tsx sim-cli/accept.ts",
+    "e2e": "npm run build && node tests/e2e/e2e.mjs",
     "check": "npm run typecheck && npm run lint && npm run test"
   },
   "devDependencies": {

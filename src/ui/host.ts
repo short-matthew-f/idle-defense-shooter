@@ -14,6 +14,8 @@ export interface UiHost {
   hardReset(): Promise<void>;
   /** Screen space the UI covers (px), so the camera keeps the arena clear. */
   setInsets(top: number, right: number, bottom: number, left: number): void;
+  /** Stop / resume drawing the arena while a full-screen tab covers it (the sim keeps running). */
+  setRenderPaused(paused: boolean): void;
   canInstall(): boolean;
   install(): Promise<boolean>;
   /** Save to IndexedDB now (after major actions such as Prestige). */

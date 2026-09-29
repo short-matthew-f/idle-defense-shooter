@@ -5,3 +5,4 @@ coverage/
 *.log
 .DS_Store
 sim-out/
+tests/e2e/out/

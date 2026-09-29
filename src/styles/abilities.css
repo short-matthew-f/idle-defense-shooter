@@ -1,15 +1,12 @@
-/* Ability bar: floats above the bottom sheet (phones) or at the bottom of the field (desktop). */
+/* Ability bar: bottom-centre over the arena, just above the tab bar (phones) or the field's bottom edge (desktop). */
 .abilities {
-  position: absolute; left: 50%; transform: translateX(-50%);
-  bottom: calc(var(--sheet-h) + var(--safe-bottom) + 10px);
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: 14px;
   display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 4;
-  transition: bottom 0.22s ease;
 }
-body.layout-side .abilities { bottom: calc(16px + var(--safe-bottom)); left: calc((100% - var(--panel-w)) / 2); }
-body.layout-side.panel-closed .abilities { left: 50%; }
-.ability-row { display: flex; gap: 12px; }
+body.shell-desktop .abilities { bottom: calc(16px + var(--safe-bottom)); }
+.ability-row { display: flex; gap: 14px; }
 .btn.ability {
-  position: relative; width: 60px; height: 60px; padding: 0; border-radius: 50%;
+  position: relative; width: 56px; height: 56px; padding: 0; border-radius: 50%;
   border: 2px solid var(--line-2);
   background: conic-gradient(color-mix(in srgb, var(--ce) 60%, transparent) calc(var(--ce, 0) * 360deg), var(--bg-3) 0);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
@@ -18,7 +15,7 @@ body.layout-side.panel-closed .abilities { left: 50%; }
   content: ''; position: absolute; inset: 3px; border-radius: 50%; z-index: 2; pointer-events: none;
   background: conic-gradient(rgba(0, 0, 0, 0.7) calc(var(--cd, 0) * 360deg), transparent 0);
 }
-.ab-ico { width: 48px; height: 48px; border-radius: 50%; background: var(--bg-2); display: grid; place-items: center; color: var(--text-dim); }
+.ab-ico { width: 44px; height: 44px; border-radius: 50%; background: var(--bg-2); display: grid; place-items: center; color: var(--text-dim); }
 .ab-ico .ico { width: 26px; height: 26px; }
 .btn.ability.ready { border-color: var(--ce); }
 .btn.ability.ready .ab-ico { color: var(--text); }
@@ -50,11 +47,7 @@ body.arming #game { cursor: crosshair; }
 .abp-desc, .abp-meta { font-size: 14px; color: var(--text-dim); }
 .btn.ability.suggest { border-color: var(--ce); animation: pulse 1.6s infinite; --warn: var(--ce); }
 
-/* Landscape phone: the abilities are a column on the left edge of the field. */
-body.layout-compact .abilities {
-  left: calc(8px + var(--safe-left)); top: calc(var(--hud-h) + 10px); bottom: auto; transform: none; align-items: flex-start;
-}
-body.layout-compact .ability-row { flex-direction: column; gap: 12px; }
-body.layout-compact .btn.ability { width: 52px; height: 52px; }
-body.layout-compact .ab-ico { width: 42px; height: 42px; }
-body.layout-compact .arm-hint { order: 2; }
+/* Landscape phone: the abilities are a column at the left edge of the arena, next to the rail. */
+body.shell-rail .abilities { left: 12px; top: 50%; bottom: auto; transform: translateY(-50%); align-items: flex-start; }
+body.shell-rail .ability-row { flex-direction: column; gap: 14px; }
+body.shell-rail .arm-hint { order: 2; }

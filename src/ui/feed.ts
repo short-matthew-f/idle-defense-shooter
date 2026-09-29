@@ -19,7 +19,7 @@ export class Feed {
   private lastSlots: { hp: number; at: number } | null = null;
 
   toast(msg: string, kind: ToastKind = 'info', ms = 3600): void {
-    const t = h('div', { class: `toast ${kind}` }, icon(ICON[kind], 'ico tiny'), h('span', { text: msg }));
+    const t = h('div', { class: `toast t-${kind}` }, icon(ICON[kind], 'ico tiny'), h('span', { text: msg }));
     this.el.appendChild(t);
     while (this.el.children.length > 4) this.el.firstElementChild?.remove();
     window.setTimeout(() => { t.classList.add('out'); window.setTimeout(() => t.remove(), 300); }, ms);
@@ -48,16 +48,16 @@ export class Feed {
     // A new slot is the biggest power step in the early game and nothing else announces it.
     const hp = ui.run.hardpointSlotsOpen, at = ui.run.attunementSlotsOpen;
     if (this.lastSlots) {
-      if (at > this.lastSlots.at && ui.build.attunements.filter(Boolean).length < at) this.toast('Attunement slot open: choose an element in Upgrades', 'good', 6000);
-      if (hp > this.lastSlots.hp && ui.build.hardpoints.filter(Boolean).length < hp) this.toast('Hardpoint slot open: mount a weapon system in Upgrades', 'good', 6000);
+      if (at > this.lastSlots.at && ui.build.attunements.filter(Boolean).length < at) this.toast('Attunement slot open: attune an element (Build or Upgrades)', 'good', 6000);
+      if (hp > this.lastSlots.hp && ui.build.hardpoints.filter(Boolean).length < hp) this.toast('Hardpoint slot open: mount a weapon system (Build or Upgrades)', 'good', 6000);
     }
     this.lastSlots = { hp, at };
     const rec = !!ui.forecast?.recommended;
-    if (rec && !this.lastRec) this.toast('Prestige recommended: see the Forecast', 'warn', 6000);
+    if (rec && !this.lastRec) this.toast('Prestige recommended: see the Prestige tab', 'warn', 6000);
     this.lastRec = rec;
     // The run machine parks Push at wave 100 until Ascension V opens the Deep Waves (run/machine.ts).
     const gate = ui.run.mode === 'push' && ui.run.wave >= 100 && ui.run.deepestCleared >= 100 && ui.meta.ascension < 5;
-    if (gate && !this.lastGate) this.toast('Wave 100 cleared: the Deep Waves open at Ascension V. Ascend from Menu → Ascension, or Patrol meanwhile.', 'warn', 9000);
+    if (gate && !this.lastGate) this.toast('Wave 100 cleared: the Deep Waves open at Ascension V. Ascend from Prestige → Ascension, or Patrol meanwhile.', 'warn', 9000);
     this.lastGate = gate;
   }
 }

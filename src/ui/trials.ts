@@ -5,7 +5,7 @@ import type { UiState } from '@sim/core/types';
 import { button, h, clear } from './dom';
 import { icon } from './icons';
 import { TRIALS } from '@sim/data/index';
-import { confirmDialog, openModal, type ModalHandle } from './modal';
+import { confirmDialog } from './modal';
 import { prefs, setPref } from './prefs';
 import type { UiCtx } from './ctx';
 
@@ -17,16 +17,18 @@ export function activeTrial(ui: UiState | null): TrialId | null {
 export function trialName(id: TrialId | null): string | null { return id ? TRIALS.find((t) => t.id === id)?.name ?? id : null; }
 
 export class TrialsPanel {
-  private modal: ModalHandle | null = null;
-  private readonly body = h('div', { class: 'trials' });
+  shown = false;
+  readonly el = h('div', { class: 'trials' });
+  /** After a Trial starts: go back to Battle (the shell wires it). */
+  onStarted: (() => void) | null = null;
   private key = '';
   constructor(private readonly ctx: UiCtx) {}
-  get isOpen(): boolean { return !!this.modal?.open; }
+  get isOpen(): boolean { return this.shown; }
 
-  open(): void {
-    if (this.isOpen) return;
+  setShown(on: boolean): void {
+    this.shown = on;
+    if (!on) return;
     this.key = '';
-    this.modal = openModal({ title: 'Trials', body: this.body, variant: 'wide', className: 'trials-modal', onClose: () => { this.modal = null; } });
     const ui = this.ctx.state(); if (ui) this.update(ui);
   }
 
@@ -37,9 +39,9 @@ export class TrialsPanel {
     const key = JSON.stringify([unlocked, act, ui.meta.trials]);
     if (key === this.key) return;
     this.key = key;
-    clear(this.body);
-    if (!unlocked) this.body.appendChild(h('div', { class: 'locked-card' }, icon('lock', 'ico'), h('p', { text: 'Trials unlock with the Prestige II node "Trials". A Trial is a separate run slot: your main run pauses and is preserved.' })));
-    this.body.appendChild(h('p', { class: 'dim small', text: 'Three tiers each: reach waves 30, 60 and 90 under the constraint. Echo upgrades apply.' }));
+    clear(this.el);
+    if (!unlocked) this.el.appendChild(h('div', { class: 'locked-card' }, icon('lock', 'ico'), h('p', { text: 'Trials unlock with the Prestige II node "Trials". A Trial is a separate run slot: your main run pauses and is preserved.' })));
+    this.el.appendChild(h('p', { class: 'dim small', text: 'Three tiers each: reach waves 30, 60 and 90 under the constraint. Echo upgrades apply.' }));
     for (const t of TRIALS) {
       const done = ui.meta.trials[t.id] ?? 0;
       const pips = h('div', { class: 'tiers', attrs: { 'aria-label': `${done} of 3 tiers complete` } },
@@ -51,9 +53,9 @@ export class TrialsPanel {
           if (!(await confirmDialog(`Start ${t.name}?`, `${t.constraint} Your main run pauses and is preserved until you end the Trial.`, 'Start'))) return;
           this.ctx.host.send({ type: 'start_trial', trial: t.id });
           setPref('activeTrial', t.id);
-          this.modal?.close();
+          this.onStarted?.();
         }, { class: 'btn primary', disabled: !unlocked || act !== null });
-      this.body.appendChild(h('div', { class: `trial${isAct ? ' active' : ''}${done >= 3 ? ' complete' : ''}` },
+      this.el.appendChild(h('div', { class: `trial${isAct ? ' active' : ''}${done >= 3 ? ' complete' : ''}` },
         h('div', { class: 'trial-main' }, h('div', { class: 'trial-name', text: t.name }),
           h('p', { class: 'trial-c' }, h('b', { text: 'Constraint: ' }), t.constraint),
           h('p', { class: 'trial-r' }, h('b', { text: 'Reward: ' }), t.reward), pips),

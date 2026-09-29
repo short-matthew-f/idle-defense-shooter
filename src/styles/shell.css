@@ -1,0 +1,124 @@
+/*
+ * Shell layout: tab bar, full-screen screens, status strip, the Battle layer over the arena, toasts.
+ *   body.shell-phone    portrait phone: bottom tab bar (60 px + safe area), screens cover the arena
+ *   body.shell-rail     landscape phone: a left navigation rail, screens to its right
+ *   body.shell-desktop  ≥ 900 px: arena left, the screens as tabs of a right side panel
+ * body.tab-<id> names the screen on show (tab-battle when only the arena is).
+ * Safe areas: every edge that touches the screen edge pads with env(safe-area-inset-*) (base.css tokens).
+ */
+:root { --top-h: 0px; --tab-h: 0px; --rail-w: 84px; --panel-w: 380px; --gutter: 16px; }
+
+/* ---------------------------------------------------------------- tab bar */
+.tabbar {
+  position: absolute; z-index: 9; display: flex; align-items: stretch;
+  background: rgba(11, 14, 20, 0.97); backdrop-filter: blur(10px);
+}
+.tab-btn {
+  position: relative; flex: 1 1 0; min-width: 0; min-height: 56px; padding: 6px 2px 4px; margin: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  background: transparent; border: 0; color: var(--text-dim); cursor: pointer; font: inherit; touch-action: manipulation;
+}
+.tab-ico { position: relative; display: grid; place-items: center; width: 52px; height: 28px; border-radius: 14px; }
+.tab-ico .ico { width: 24px; height: 24px; }
+.tab-label { font-size: 14px; font-weight: 600; line-height: 16px; white-space: nowrap; letter-spacing: -0.01em; }
+.tab-btn:hover .tab-ico { background: var(--bg-3); }
+.tab-btn.active { color: var(--text); }
+.tab-btn.active .tab-ico { background: color-mix(in srgb, var(--accent) 26%, transparent); color: var(--accent); }
+.tab-btn.active .tab-label { font-weight: 700; }
+/* badges are the one place text may be under 14 px */
+.tab-badge {
+  position: absolute; top: -5px; left: calc(50% + 7px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+  font-size: 11px; font-weight: 800; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums;
+  background: var(--accent); color: var(--on-accent); box-shadow: 0 0 0 2px var(--bg-0);
+}
+.tab-badge.alert { background: var(--warn); color: #000; animation: pulse 1.8s infinite; }
+.tab-badge.new { background: var(--ok); color: #03170c; }
+.panel-close { display: none; }
+
+body.shell-phone .tabbar {
+  left: 0; right: 0; bottom: 0; height: calc(60px + var(--safe-bottom));
+  padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left); border-top: 1px solid var(--line);
+}
+body.shell-rail .tabbar {
+  top: 0; bottom: 0; left: 0; width: calc(var(--rail-w) + var(--safe-left)); flex-direction: column; justify-content: center; gap: 2px;
+  padding: var(--safe-top) 0 var(--safe-bottom) var(--safe-left); border-right: 1px solid var(--line);
+}
+body.shell-rail .tab-btn { flex: 0 1 64px; min-height: 52px; }
+body.shell-desktop .tabbar {
+  top: 0; right: 0; width: calc(var(--panel-w) + var(--safe-right)); height: calc(64px + var(--safe-top));
+  padding: var(--safe-top) calc(var(--safe-right) + 4px) 0 4px; border-bottom: 1px solid var(--line); border-left: 1px solid var(--line);
+}
+body.shell-desktop .tab-btn.t-battle { display: none; }
+body.shell-desktop .panel-close { display: inline-flex; flex: none; align-self: center; }
+body.shell-desktop.panel-closed .tabbar { display: none; }
+
+/* ---------------------------------------------------------------- screens */
+.screens { position: absolute; z-index: 7; display: none; flex-direction: column; background: var(--bg-0); }
+body.shell-phone:not(.tab-battle) .screens, body.shell-rail:not(.tab-battle) .screens { display: flex; }
+body.shell-phone .screens { top: 0; left: 0; right: 0; bottom: var(--tab-h); padding: var(--safe-top) var(--safe-right) 0 var(--safe-left); }
+body.shell-rail .screens { top: 0; right: 0; bottom: 0; left: calc(var(--rail-w) + var(--safe-left)); padding: var(--safe-top) var(--safe-right) var(--safe-bottom) 0; }
+body.shell-desktop .screens {
+  display: flex; top: calc(64px + var(--safe-top)); right: 0; bottom: 0; width: calc(var(--panel-w) + var(--safe-right));
+  padding: 0 var(--safe-right) var(--safe-bottom) 0; background: #0e121a; border-left: 1px solid var(--line);
+}
+body.shell-desktop.panel-closed .screens { display: none; }
+.screen {
+  flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  padding: 12px var(--gutter) 28px;
+}
+.screen.own-scroll { overflow: hidden; padding: 0; display: flex; flex-direction: column; }
+.screen:focus { outline: none; }
+
+/* ---------------------------------------------------------------- status strip (non-Battle screens, phones) */
+.status-strip {
+  flex: none; display: flex; align-items: center; gap: 12px; min-height: 44px; margin: 8px var(--gutter) 6px; padding: 0 8px 0 12px;
+  border-radius: 12px; background: var(--bg-2); border: 1px solid var(--line); color: var(--text);
+  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; text-align: left; touch-action: manipulation;
+}
+.status-strip:hover { background: var(--bg-3); }
+.ss-wave-wrap { display: flex; align-items: center; gap: 4px; white-space: nowrap; flex: none; }
+.ss-boss { color: var(--bad); }
+.ss-hp { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; overflow: hidden; }
+.ss-hp > .ico { color: var(--hp); }
+.ss-hp-bar { position: relative; flex: 1; max-width: 88px; min-width: 32px; height: 6px; border-radius: 3px; background: var(--bg-4); overflow: hidden; }
+.ss-hp-fill { position: absolute; top: 0; bottom: 0; left: 0; width: calc(var(--f, 1) * 100%); background: var(--hp); transition: width 0.15s linear; }
+.ss-hp-text { color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ss-res { display: flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ss-res .ico { color: var(--scrap); }
+.ss-back { display: flex; align-items: center; gap: 0; color: var(--accent); white-space: nowrap; }
+.status-strip.low { border-color: var(--bad); animation: pulse 1.4s infinite; --warn: var(--bad); }
+.status-strip.low .ss-hp-text { color: var(--bad); }
+@media (max-width: 370px) { .ss-back-label { display: none; } .ss-back .ico { width: 18px; height: 18px; } }
+
+/* ---------------------------------------------------------------- Battle */
+.topbar { position: absolute; z-index: 5; top: 0; left: 0; right: 0; }
+body.shell-rail .topbar { left: calc(var(--rail-w) + var(--safe-left)); }
+body.shell-desktop .topbar { right: calc(var(--panel-w) + var(--safe-right)); }
+body.shell-desktop.panel-closed .topbar { right: 0; }
+
+.battle-layer { position: absolute; z-index: 4; top: var(--top-h); left: 0; right: 0; bottom: var(--tab-h); pointer-events: none !important; }
+body.shell-rail .battle-layer { left: calc(var(--rail-w) + var(--safe-left)); bottom: 0; }
+body.shell-desktop .battle-layer { right: calc(var(--panel-w) + var(--safe-right)); bottom: 0; }
+body.shell-desktop.panel-closed .battle-layer { right: 0; }
+.battle-layer > *, .arena-top > * { pointer-events: auto; }
+/* while a full-screen tab covers the arena the Battle overlay is inert (kept laid out for measuring) */
+body.shell-phone:not(.tab-battle) :is(.topbar, .battle-layer), body.shell-rail:not(.tab-battle) :is(.topbar, .battle-layer) { visibility: hidden; }
+
+.arena-top {
+  position: absolute; top: 8px; left: calc(var(--safe-left) + 12px); right: calc(var(--safe-right) + 12px);
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none;
+}
+body.shell-rail .arena-top { left: 12px; }
+.arena-top > .boss-bar { align-self: stretch; }
+.arena-top > .death-card { align-self: center; }
+
+/* toasts: above the abilities on Battle, above the tab bar elsewhere */
+.toast-layer {
+  position: absolute; z-index: 8; left: 50%; transform: translateX(-50%); bottom: calc(var(--tab-h) + 96px);
+  width: max-content; max-width: calc(100% - 24px); pointer-events: none !important;
+}
+body.shell-phone:not(.tab-battle) .toast-layer { bottom: calc(var(--tab-h) + 16px); }
+body.shell-phone.tab-battle.arming .toast-layer { bottom: calc(var(--tab-h) + 150px); }
+body.shell-rail .toast-layer { left: calc(50% + var(--rail-w) / 2); bottom: calc(var(--safe-bottom) + 16px); }
+body.shell-desktop .toast-layer { left: calc((100% - var(--panel-w)) / 2); bottom: 104px; }
+body.shell-desktop.panel-closed .toast-layer { left: 50%; }

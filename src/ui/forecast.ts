@@ -9,7 +9,6 @@ import { button, h, show, text, attr } from './dom';
 import { icon } from './icons';
 import { echoesFor, fmtDuration, fmtNum } from './format';
 import { chartGeometry } from './chart';
-import { openModal, type ModalHandle } from './modal';
 import type { UiCtx } from './ctx';
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -26,7 +25,8 @@ function readout(label: string, hint: string): Readout {
 }
 
 export class ForecastPanel {
-  private modal: ModalHandle | null = null;
+  /** Set by the shell while the Prestige screen shows the Forecast. */
+  shown = false;
   private readonly banner = h('div', { class: 'recommend', attrs: { role: 'status' } }, icon('prestige', 'ico'), h('span', { text: 'Prestige recommended: your Echo rate has passed its peak.' }));
   private readonly locked = h('p', { class: 'note' });
   private readonly echoesNow = readout('Echoes now', 'Echoes if you Prestige this second');
@@ -44,13 +44,13 @@ export class ForecastPanel {
   private readonly prestigeBtn: HTMLButtonElement;
   private chartKey = '';
   private readonly chartWrap: HTMLElement;
-  private readonly body: HTMLElement;
+  readonly el: HTMLElement;
 
   constructor(private readonly ctx: UiCtx) {
     this.chart.append(svg('line', { x1: '6', y1: '114', x2: '314', y2: '114', class: 'fc-base' }), this.area, this.line, this.peakDot, this.peakLbl, this.nowDot);
     this.chartWrap = h('div', { class: 'fc-chart-wrap' }, this.chart, this.axis);
     this.prestigeBtn = button([icon('prestige'), 'Prestige…'], () => ctx.open('prestige'), { class: 'btn primary wide' });
-    this.body = h('div', { class: 'forecast' },
+    this.el = h('div', { class: 'forecast' },
       this.banner, this.locked,
       h('div', { class: 'readouts' }, this.echoesNow.el, this.rate.el, this.next.el, this.reclimb.el, this.wall.el),
       this.chartWrap,
@@ -58,14 +58,12 @@ export class ForecastPanel {
       this.prestigeBtn);
   }
 
-  get isOpen(): boolean { return !!this.modal?.open; }
-  open(): void {
-    if (this.isOpen) return;
-    this.modal = openModal({ title: 'Prestige Forecast', body: this.body, className: 'forecast-modal', onClose: () => { this.modal = null; } });
+  get isOpen(): boolean { return this.shown; }
+  setShown(on: boolean): void {
+    this.shown = on;
     const ui = this.ctx.state();
-    if (ui) this.update(ui);
+    if (on && ui) this.update(ui);
   }
-  close(): void { this.modal?.close(); }
 
   update(ui: UiState): void {
     if (!this.isOpen) return;
