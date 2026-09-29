@@ -1,0 +1,202 @@
+/**
+ * StatResolver: DerivedStats over BuildState + MetaState + content.
+ *
+ * Rule (additive-multiplier convention):
+ *   value(key) = (BASE(key) + Σ add.perRank·rank) × (1 + Σ mul.perRank·rank), then `set` overrides
+ * where BASE(key) = BASE_STATS[key] ?? CORE_DEFAULTS[key] ?? 0. All `mul` effects on one key are
+ * summed before multiplying (two +10% nodes give ×1.2, not ×1.21). Several `set` effects: the last
+ * source in resolution order wins. Test/debug overrides (`override`) win over everything.
+ *
+ * Effect sources, in resolution order: tree nodes (shared, doctrine, exotic; doctrine nodes only
+ * while their doctrine is active, scaled by doctrineStrength), fusions/triads (both/all elements
+ * attuned), weapon/chassis linkages (both halves mounted), infusions (system mounted + element
+ * attuned), ability rank nodes, Frame effects (rank 1), socketed Anomalies (rank 1), Prestige
+ * nodes (meta.prestigeRanks), Constellation nodes (meta.constellation).
+ *
+ * `rank(id)` returns the EFFECTIVE rank (0 for nodes of inactive doctrines, unmounted systems,
+ * unattuned elements; +1 on Fusions for frames flagged `fusions_start_rank1`).
+ */
+import type { DerivedStats } from './world';
+import type { BuildState, MetaState } from './types';
+import type { ElementId, TreeId, WeaponSystemId } from './ids';
+import type { StatEffect } from '../data/schema';
+import { BASE_STATS } from '../data/index';
+import { allNodes, nodeInfo, frameDef, anomalyDef, type NodeInfo } from './content';
+
+/** Bases the core relies on even if data/base-stats.ts lacks them. */
+export const CORE_DEFAULTS: Record<string, number> = {
+  'ballistics.damage': 10, 'ballistics.attack_speed': 2, 'ballistics.range': 300, 'ballistics.projectile_speed': 420,
+  'ballistics.crit_chance': 0.05, 'ballistics.crit_damage': 1.5, 'ballistics.target_acquisition': 0,
+  'ballistics.multishot.count': 1, 'ballistics.multishot.penalty': 0.35,
+  'ballistics.piercing.count': 0, 'ballistics.piercing.retention': 0.5, 'ballistics.piercing.velocity': 0,
+  'ballistics.ricochet.bounces': 0, 'ballistics.ricochet.range': 120,
+  'ballistics.heavy.size': 1, 'ballistics.heavy.knockback': 0, 'ballistics.heavy.damage': 1,
+  'ballistics.execution': 0, 'ballistics.execution.ce_refund': 0,
+  'bastion.max_hp': 100, 'bastion.armor': 0, 'bastion.shield_capacity': 0, 'bastion.shield_recharge': 0,
+  'bastion.regeneration': 0, 'bastion.resistance': 0,
+  'reactor.global_attack_speed': 1, 'reactor.cooldown_reduction': 0, 'reactor.energy_recycling': 0,
+  'economy.scrap_mul': 1, 'economy.ce_cap': 100, 'economy.core_drop_chance': 0.02, 'economy.first_clear_mul': 3,
+  'combat.power_mul': 1,
+};
+
+export function baseStat(key: string): number {
+  const b = (BASE_STATS as Record<string, number> | undefined)?.[key];
+  return b ?? CORE_DEFAULTS[key] ?? 0;
+}
+
+export class StatResolver implements DerivedStats {
+  private values = new Map<string, number>();
+  private ranks = new Map<string, number>();
+  private overrides = new Map<string, number>();
+  private add = new Map<string, number>();
+  private mul = new Map<string, number>();
+  private set = new Map<string, number>();
+  /** Incremented on every rebuild so systems can cheaply detect changes. */
+  version = 0;
+
+  constructor(public build: BuildState, public meta: MetaState) { this.rebuild(); }
+
+  bind(build: BuildState, meta: MetaState): void { this.build = build; this.meta = meta; this.rebuild(); }
+
+  /** Test / tooling hook: force a stat to a value (applied after `set`). Pass NaN to clear. */
+  override(key: string, value: number): void {
+    if (Number.isNaN(value)) this.overrides.delete(key); else this.overrides.set(key, value);
+    this.rebuild();
+  }
+  clearOverrides(): void { this.overrides.clear(); this.rebuild(); }
+
+  rebuild(): void {
+    this.version++;
+    const add = this.add, mul = this.mul, set = this.set, ranks = this.ranks;
+    add.clear(); mul.clear(); set.clear(); ranks.clear();
+    const apply = (effects: readonly StatEffect[], scale: number): void => {
+      for (let k = 0; k < effects.length; k++) {
+        const e = effects[k];
+        if (e.op === 'add') add.set(e.stat, (add.get(e.stat) ?? 0) + e.perRank * scale);
+        else if (e.op === 'mul') mul.set(e.stat, (mul.get(e.stat) ?? 0) + e.perRank * scale);
+        else set.set(e.stat, e.perRank * (scale > 0 ? 1 : 0));
+      }
+    };
+    const nodes = allNodes();
+    for (let i = 0; i < nodes.length; i++) {
+      const info = nodes[i];
+      const r = this.effectiveRank(info);
+      if (r > 0) ranks.set(info.def.id, r);
+      if (r <= 0) continue;
+      let scale = r;
+      if (info.doctrine && info.tree) scale *= this.doctrineStrength(info.tree, info.doctrine);
+      if (info.def.effects.length) {
+        // `set` effects apply at full value once the node has a rank
+        apply(info.def.effects, scale);
+      }
+    }
+    // ids ranked in the build but unknown to the content index (content still arriving)
+    for (const id of Object.keys(this.build.ranks)) if (!ranks.has(id) && !nodeInfo(id)) { const r = this.build.ranks[id] | 0; if (r > 0) ranks.set(id, r); }
+    const frame = frameDef(this.build.frame);
+    apply(frame.effects, 1);
+    for (const a of this.build.anomalies) { const d = anomalyDef(a); if (d) apply(d.effects, 1); }
+
+    const values = this.values;
+    values.clear();
+    const keys = new Set<string>();
+    for (const k of Object.keys(CORE_DEFAULTS)) keys.add(k);
+    if (BASE_STATS) for (const k of Object.keys(BASE_STATS)) keys.add(k);
+    for (const k of add.keys()) keys.add(k);
+    for (const k of mul.keys()) keys.add(k);
+    for (const k of set.keys()) keys.add(k);
+    for (const k of this.overrides.keys()) keys.add(k);
+    for (const k of keys) {
+      let v = (baseStat(k) + (add.get(k) ?? 0)) * (1 + (mul.get(k) ?? 0));
+      const s = set.get(k); if (s !== undefined) v = s;
+      const o = this.overrides.get(k); if (o !== undefined) v = o;
+      values.set(k, v);
+    }
+  }
+
+  private rawRank(info: NodeInfo): number {
+    const id = info.def.id;
+    if (info.group === 'prestige') return this.meta.prestigeRanks[id] | 0;
+    if (info.group === 'star') return this.meta.constellation[id] | 0;
+    return this.build.ranks[id] | 0;
+  }
+
+  private effectiveRank(info: NodeInfo): number {
+    let r = this.rawRank(info);
+    switch (info.group) {
+      case 'tree': {
+        const t = info.tree!;
+        if (!this.treeActive(t)) return 0;
+        if (info.doctrine && !this.hasDoctrine(t, info.doctrine)) return 0;
+        break;
+      }
+      case 'fusion': case 'triad': {
+        if (!info.elements!.every((e) => this.attuned(e))) return 0;
+        if (info.group === 'fusion' && frameDef(this.build.frame).flags.includes('fusions_start_rank1')) r = Math.min(info.def.maxRank, r + 1);
+        break;
+      }
+      case 'link': if (!this.mounted(info.pair![0] as WeaponSystemId) || !this.mounted(info.pair![1] as WeaponSystemId)) return 0; break;
+      case 'chassis_link': if (!this.mounted(info.pair![1] as WeaponSystemId)) return 0; break;
+      case 'infuse': if (!this.mounted(info.system!) || !this.attuned(info.elements![0])) return 0; break;
+      default: break;
+    }
+    return r;
+  }
+
+  treeActive(tree: string): boolean {
+    if (tree === 'ballistics' || tree === 'bastion' || tree === 'reactor') return true;
+    if (tree === 'fire' || tree === 'lightning' || tree === 'poison' || tree === 'frost') return this.attuned(tree);
+    return this.mounted(tree as WeaponSystemId);
+  }
+
+  get(key: string): number { const v = this.values.get(key); return v !== undefined ? v : baseStat(key); }
+  has(nodeId: string): boolean { return this.rank(nodeId) >= 1; }
+  rank(nodeId: string): number {
+    const r = this.ranks.get(nodeId);
+    if (r !== undefined) return r;
+    if (nodeInfo(nodeId)) return 0;   // known node with effective rank 0
+    if (nodeId.startsWith('prestige.')) return this.meta.prestigeRanks[nodeId] | 0;
+    if (nodeId.startsWith('star.')) return this.meta.constellation[nodeId] | 0;
+    if (nodeId.startsWith('frame.')) return this.build.frame === nodeId.slice(6) ? 1 : 0;
+    return this.build.ranks[nodeId] | 0;
+  }
+  /** Raw purchased rank regardless of doctrine/mount state (shop, refunds). */
+  purchasedRank(nodeId: string): number { return this.build.ranks[nodeId] | 0; }
+  doctrine(tree: string): string | null { return this.build.doctrines[tree as TreeId] ?? null; }
+  hasDoctrine(tree: string, doctrine: string): boolean {
+    return this.build.doctrines[tree as TreeId] === doctrine || this.build.secondDoctrines[tree as TreeId] === doctrine;
+  }
+  doctrineStrength(tree: string, doctrine: string): number {
+    if (this.build.doctrines[tree as TreeId] === doctrine) return 1;
+    if (this.build.secondDoctrines[tree as TreeId] !== doctrine) return 0;
+    const f = this.build.frame;
+    if ((f === 'monolith' && tree === 'ballistics') || (f === 'bulwark' && tree === 'bastion')) return 1;
+    const dual = (this.meta.prestigeRanks['prestige.dual_doctrine'] | 0) > 0 || f === 'singularity_core';
+    if (dual) return 0.6;
+    if (tree === 'ballistics' && this.hasAnomaly('spare_barrel')) return 0.5;
+    return 0.6;
+  }
+  /** May `tree` hold a second doctrine right now (Monolith, Bulwark, Singularity Core, Spare Barrel, Dual Doctrine)? */
+  secondDoctrineAllowed(tree: string): boolean {
+    const f = this.build.frame;
+    if (f === 'monolith' && tree === 'ballistics') return true;
+    if (f === 'bulwark' && tree === 'bastion') return true;
+    if (f === 'singularity_core') return true;
+    if (tree === 'ballistics' && this.hasAnomaly('spare_barrel')) return true;
+    if ((this.meta.prestigeRanks['prestige.dual_doctrine'] | 0) > 0) {
+      // Dual Doctrine: one chosen tree — the first tree that takes a second doctrine
+      const used = Object.keys(this.build.secondDoctrines).filter((t) => this.build.secondDoctrines[t as TreeId]);
+      return used.length === 0 || used.includes(tree);
+    }
+    return false;
+  }
+  hasAnomaly(id: string): boolean { return this.build.anomalies.includes(id as never); }
+  mounted(system: WeaponSystemId | string): boolean {
+    if (system === 'primary') return true;
+    if (this.build.hardpoints.includes(system as never)) return true;
+    return frameDef(this.build.frame).freeMount === system;
+  }
+  attuned(element: ElementId | string): boolean { return this.build.attunements.includes(element as never); }
+  frameFlag(flag: string): boolean { return frameDef(this.build.frame).flags.includes(flag); }
+  /** All resolved keys (debug / UI). */
+  entries(): [string, number][] { return [...this.values.entries()]; }
+}

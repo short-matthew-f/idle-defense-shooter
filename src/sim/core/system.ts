@@ -10,6 +10,7 @@
  */
 import type { World } from './world';
 import type { ElementId, StatusId, WeaponSystemId } from './ids';
+import type { Command } from './types';
 
 export interface HitInfo {
   enemy: number;                // enemy pool index
@@ -42,6 +43,13 @@ export interface System {
   onKill?(world: World, hit: HitInfo): void;
   onStatusApply?(world: World, enemy: number, status: StatusId, stacks: number, srcTag: string, cause: number): void;
   onTowerHit?(world: World, damage: number, enemy: number, cause: number): void;
+  /**
+   * WP1 addition. Enemy pool compaction happened at end of tick: remap[oldIndex] = newIndex or -1 if freed
+   * (valid for old indices < oldCount). Systems caching enemy indices across ticks repair them here.
+   */
+  onCompact?(world: World, remap: Int32Array, oldCount: number): void;
+  /** WP1 addition. Commands the core does not handle (cast, set_directives, ...) are offered to systems; return true if consumed. */
+  onCommand?(world: World, cmd: Command): boolean;
   /** Push render instances for this system's visible parts (blades, beams, wells, drones). */
   render?(world: World, out: InstanceWriter): void;
 }

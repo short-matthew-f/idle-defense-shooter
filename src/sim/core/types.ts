@@ -75,6 +75,29 @@ export interface EnemyPool {
   lastCause: Int32Array;
   /** Count merged into this entity when kind === clump. */
   clumpCount: Uint16Array;
+  // --- WP1 additions ------------------------------------------------------
+  /** Index into the current WaveDef.spawns for formation steering; -1 = free-roaming (adds, fragments). */
+  spawnIdx: Int32Array;
+  /** Formation progress in ticks (advances by speedMul each tick; chill slows the script itself). */
+  formT: Float32Array;
+  /** Movement multiplier written by the statuses system each tick (chill/frozen/stagger); others may multiply it further. */
+  speedMul: Float32Array;
+  /** Ticks until this enemy may attack again (contact / ranged). */
+  attackT: Uint16Array;
+  /** Event id of this enemy's Spawn event (cause for its own attacks). */
+  spawnEv: Int32Array;
+  /** Scrap weight k for ScrapPerKill (EnemyDef.scrapMul). */
+  scrapMul: Float32Array;
+  /** Contact damage at wave 1 (EnemyDef.contactDamage); scaled by 1.06^wave at hit time. */
+  contact: Float32Array;
+  /** Event id of the StatusApply that last refreshed each DoT (kill-chain parent of the DoT damage). */
+  burnCause: Int32Array; poisonCause: Int32Array; bleedCause: Int32Array;
+  /** DoT damage accumulated since the last StatusTick event (emitted once per second). */
+  burnAcc: Float32Array; poisonAcc: Float32Array; bleedAcc: Float32Array;
+  /** Bleed damage per stack per second. */
+  bleedDps: Float32Array;
+  /** 'static' status stacks (Lightning Chain doctrine). */
+  staticStacks: Uint8Array; staticT: Uint16Array;
 }
 
 export const enum EnemyFlag {
@@ -123,8 +146,18 @@ export interface ProjectilePool {
   cause: Int32Array;             // event id that launched it (kill-chain parent)
   lastHit: Int32Array;           // last enemy index hit (avoid double hits)
   hitMask: Uint32Array;          // small bloom filter of hit enemy indices for pierce
+  // --- WP1 additions ------------------------------------------------------
+  tag: Uint16Array;              // interned srcTag id (World.tagId / tagName)
+  critMul: Float32Array;         // crit damage multiplier (e.g. ballistics.crit_damage)
+  retention: Float32Array;       // fraction of damage kept per pierce
+  pierceSpeed: Float32Array;     // fractional velocity gain per pierce
+  bounceRange: Float32Array;     // ricochet search radius
+  knock: Float32Array;           // knockback units per hit (0 = none)
+  execBonus: Float32Array;       // bonus damage fraction vs enemies below 30% HP
+  pierced: Uint8Array;           // enemies pierced so far
 }
-export const enum ProjFlag { Crit = 1 << 0, Homing = 1 << 1, Manual = 1 << 2, Marked = 1 << 3, CrossedBeam = 1 << 4, CrossedBlade = 1 << 5, Lensed = 1 << 6, Echo = 1 << 7, FromDrone = 1 << 8, Hostile = 1 << 9, Duplicate = 1 << 10, Cluster = 1 << 11 }
+export const enum ProjFlag { Crit = 1 << 0, Homing = 1 << 1, Manual = 1 << 2, Marked = 1 << 3, CrossedBeam = 1 << 4, CrossedBlade = 1 << 5, Lensed = 1 << 6, Echo = 1 << 7, FromDrone = 1 << 8, Hostile = 1 << 9, Duplicate = 1 << 10, Cluster = 1 << 11,
+  /** WP1 additions */ LastRites = 1 << 12, ReturnFire = 1 << 13, Stagger = 1 << 14, Dead = 1 << 15 }
 
 // ---------------------------------------------------------------------------
 // Tower, systems, and status of the run
@@ -198,6 +231,8 @@ export interface RunState {
   speedMultiplier: 1 | 2 | 4 | 8;
   patrolScrapPerSecond: number; // measured, for offline estimate
   longestChain: number;
+  /** Scrap spent per tree/system this Prestige (Refit refunds 60% of the removed system's spend). */
+  spentByTree: Record<string, number>;
 }
 
 export interface MetaState {
@@ -305,6 +340,8 @@ export interface SimEvent {
   x: number; y: number;  // position for FX and the Inspector
   /** Optional structured payload; keep small. */
   data?: Record<string, number | string | boolean>;
+  /** Extra numeric (not hashed): Hit/Kill = enemy state bits (see core/events.ts StateBit); StatusApply = status index | stateBits<<8. */
+  c?: number;
 }
 
 /** Ring buffer of recent events plus a hash of the whole stream (determinism test). */
@@ -400,6 +437,8 @@ export interface RunSave {
   anomaliesOfferedAt: number[]; hardpointSlotsOpen: number; attunementSlotsOpen: number; patrolScrapPerSecond: number; longestChain: number;
   build: BuildState;
   prngState: [number, number, number, number];
+  /** WP1 addition: Scrap spent per tree (Refit refunds). Optional for old saves. */
+  spentByTree?: Record<string, number>;
 }
 
 // ---------------------------------------------------------------------------
@@ -413,7 +452,9 @@ export type ToWorker =
   | { t: 'want_snapshot' }
   | { t: 'want_save' }
   | { t: 'inspector'; enemyIndex: number; gen: number }
-  | { t: 'set_clarity'; value: number };
+  | { t: 'set_clarity'; value: number }
+  /** WP1 addition: hand transferred snapshot buffers back to the worker for reuse (double buffering). */
+  | { t: 'return_buffer'; instances: Float32Array; fx: Float32Array };
 export type FromWorker =
   | { t: 'ready'; ui: UiState }
   | { t: 'snapshot'; snap: RenderSnapshot }

@@ -4,7 +4,8 @@
  * fusions → linkages → anomalies → bastion/reactor → cleanup.
  */
 import type { System } from '../core/system';
+import { BallisticsSystem } from './ballistics';
 
 export const SYSTEM_ORDER: (() => System)[] = [
-  // WP1: () => new Ballistics(),
+  () => new BallisticsSystem(),                 // WP1: primary weapon
 ];
