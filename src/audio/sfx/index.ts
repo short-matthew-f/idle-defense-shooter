@@ -4,11 +4,12 @@ import { ELEMENTS } from './elements';
 import { SYSTEMS } from './systems';
 import { ABILITY_SFX } from './abilities';
 import { META } from './meta';
+import { ACTIVE_SFX } from './active';
 import type { SfxDef } from './types';
 
 export type { SfxDef, SfxParams } from './types';
 
-const ALL = { ...COMBAT, ...ELEMENTS, ...SYSTEMS, ...ABILITY_SFX, ...META } satisfies Record<string, SfxDef>;
+const ALL = { ...COMBAT, ...ELEMENTS, ...SYSTEMS, ...ABILITY_SFX, ...META, ...ACTIVE_SFX } satisfies Record<string, SfxDef>;
 export type SfxId = keyof typeof ALL;
 export const SFX: Record<SfxId, SfxDef> = ALL;
 
@@ -22,6 +23,7 @@ export const SFX_GROUPS = {
   systems: Object.keys(SYSTEMS) as SfxId[],
   abilities: Object.keys(ABILITY_SFX) as SfxId[],
   meta: Object.keys(META) as SfxId[],
+  active: Object.keys(ACTIVE_SFX) as SfxId[],
 };
 
 export function sfxDef(id: SfxId): SfxDef { return SFX[id]; }

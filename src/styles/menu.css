@@ -35,4 +35,4 @@ body.shell-desktop .seg-ctl { box-shadow: 0 -12px 0 #0e121a; }
 .seg-dot.on { display: inline-block; }
 
 /* Prestige tab before the first Prestige (progressive reveal): a one-line teaser */
-.ps-teaser { margin: 0 0 12px; padding: 10px 12px; border-radius: 12px; border: 1px dashed var(--line-2); color: var(--text); font-size: 14px; line-height: 19px; }
+.ps-teaser { margin: 0 0 20px; padding: 10px 12px; border-radius: 12px; border: 1px dashed var(--line-2); color: var(--text); font-size: 14px; line-height: 19px; }

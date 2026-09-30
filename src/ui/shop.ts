@@ -223,7 +223,7 @@ export class Shop {
         h('div', { class: 'shop-sub' }, this.treeRow),
         h('div', { class: 'shop-tools' }, h('span', { class: 'qty-label', text: 'Buy', attrs: { 'aria-hidden': 'true' } }), this.qtySeg, h('span', { class: 'tools-gap' }), this.sortBtn)),
       this.body);
-    this.qtyTools = [this.el.querySelector('.qty-label') as HTMLElement, this.qtySeg];
+    this.qtyTools = [this.el.querySelector('.shop-tools') as HTMLElement];   // quantity selector (and the sort toggle beside it)
   }
 
   private get f(): Features { return this.ctx.features(); }
@@ -411,7 +411,7 @@ export class Shop {
     this.syncQty();
     this.ui = ui;
     // open slots first: a new weapon system or element is the biggest step change there is
-    const slots = openSlots(ui);
+    const slots = openSlots(ui).filter((x) => this.f[x.cat]);   // a slot's chip waits for its category (progression.ts)
     const sk = slots.map((x) => `${x.cat}:${x.slot}`).join(',');
     if (sk !== this.slotKey) {
       this.slotKey = sk;

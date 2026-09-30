@@ -21,8 +21,10 @@ import { etaSeconds, nextPurchase } from './advice';
 /** Stage thresholds on the best wave cleared (index = stage). Stage 7 = first Prestige or STAGE7_WAVE. */
 export const STAGE_WAVES = [0, 5, 6, 10, 12, 15, 20] as const;
 export const STAGE7_WAVE = 25;
-/** Affordable rows (Scrap, unlocked, not maxed, in a visible category) that also reveal the bulk tools early. */
+/** Affordable rows (Scrap, unlocked, not maxed, in a visible category) that also reveal the bulk tools early… */
 export const BULK_ROWS = 12;
+/** …but not before this best wave (at the first checkpoint a death banks enough Scrap for 12+ cheap rows at once). */
+export const BULK_ROWS_MIN_WAVE = 10;
 
 export const FEATURE_IDS = [
   // stage 0: the tower, one Upgrade button (3 stats)
@@ -135,8 +137,8 @@ export function stageOf(s: ProgressState): number {
   return st;
 }
 
-/** Stage at which a feature appears by wave alone (for docs/tests; null if only by Prestige). */
-export function stageOfFeature(id: FeatureId): number | null {
+/** Stage at which a feature appears by wave alone (7 for the ones only a Prestige reveals). */
+export function stageOfFeature(id: FeatureId): number {
   const w = UNLOCKS[id].wave;
   if (w === null) return 7;
   if (w >= STAGE7_WAVE) return 7;
@@ -191,7 +193,7 @@ export function features(s: ProgressState, opts: FeatureOpts = {}): Features {
   const pr = s.meta.prestigeRanks ?? {};
   if ((pr['prestige.directives'] | 0) > 0 || (pr['prestige.blueprint_slots'] | 0) > 0 || (s.meta.directives ?? []).length > 0) f.automation = true;
   if ((pr['prestige.trials'] | 0) > 0 || !!s.activeTrial) f.trials = true;
-  if (!f.bulk && affordableRows(shop, f) >= BULK_ROWS) f.bulk = true;
+  if (!f.bulk && best >= BULK_ROWS_MIN_WAVE && affordableRows(shop, f) >= BULK_ROWS) f.bulk = true;
 
   // ---- consistency: a category needs its screen, a screen needs the tab bar
   if (f.elements || f.hardpoints || f.cross || f.cores || f.bulk) { f.upgradesTab = true; f.chassisAll = true; }
@@ -271,7 +273,7 @@ const WHY: Record<StarterReason, (label: string) => string> = {
   pressure: () => 'Fire Rate: enemies arrive faster than you kill them',
   damage: () => 'Damage: every shot hits harder',
   rate: () => 'Fire Rate: more shots, faster kills',
-  saving: (l) => `${l}: next upgrade, keep killing to afford it`,
+  saving: (l) => `Next: ${l}. Kills earn the Scrap`,
 };
 
 /**

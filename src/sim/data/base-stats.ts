@@ -27,7 +27,7 @@ export const BASE_STATS: Record<string, number> = {
   'ballistics.execution': 0,               // bonus damage fraction vs enemies below 30% HP
   'ballistics.execution.ce_refund': 0,     // CE refunded per primary kill on an injured enemy
   // Bastion
-  'bastion.max_hp': 100,
+  'bastion.max_hp': 150,
   'bastion.armor': 0,
   'bastion.shield_capacity': 0,
   'bastion.shield_recharge': 0,            // shield/s after 3 s without damage (plus 10% capacity/s baseline)

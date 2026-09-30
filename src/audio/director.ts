@@ -162,6 +162,13 @@ export class AudioDirector {
       case Ev.BarrierBreak: this.play(o, 'barrier_break'); break;
       case Ev.SecondCore: this.play(o, 'second_core'); break;
       case Ev.CoreDrop: this.play(o, 'core_drop', pan); break;
+      // Active edge (systems/active.ts)
+      case Ev.Assist: this.play(o, 'assist', pan); break;
+      case Ev.SalvageCollect:
+        if (e.src === 'salvage.tap') this.play(o, 'salvage_pluck', pan, { size: Math.max(0, (e.b | 0) - 1) });
+        else this.play(o, 'salvage_passive', pan);
+        break;
+      case Ev.Overcharge: this.play(o, 'overcharge_thump', 0, { size: e.a ? 1 : 0.55 }); break;
       case Ev.BoonPicked: if (e.src !== 'decline') this.play(o, 'boon_pick'); break;   // Boons
       case Ev.DoctrineChosen: case Ev.Mounted: case Ev.Attuned: case Ev.AnomalyPicked:
         this.play(o, 'purchase', 0, { pitch: scaleNote(o.key.root + 24, pentatonicFor(o.key.mode), 7) });

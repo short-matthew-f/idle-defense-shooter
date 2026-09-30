@@ -6,7 +6,7 @@
   position: absolute; z-index: 4; left: 50%; transform: translateX(-50%); bottom: 14px;
   display: flex; flex-direction: column; align-items: center; gap: 6px; width: min(360px, calc(100% - 32px));
 }
-body.shell-rail .starter { left: 12px; transform: none; bottom: calc(12px + var(--safe-bottom)); width: 260px; align-items: stretch; }
+body.shell-rail .starter { left: 12px; transform: none; bottom: calc(12px + var(--safe-bottom)); width: 320px; align-items: stretch; }
 body.shell-desktop .starter { bottom: calc(16px + var(--safe-bottom)); }
 .btn.st-btn {
   width: 100%; min-height: 60px; padding: 6px 18px; border-radius: 16px; justify-content: space-between; gap: 12px;
@@ -22,7 +22,7 @@ body.shell-desktop .starter { bottom: calc(16px + var(--safe-bottom)); }
 .st-main .ico { width: 24px; height: 24px; }
 .st-sub { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 1px; font-size: 14px; font-weight: 700; line-height: 17px; }
 .st-sub .price { display: inline-flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; }
-.btn.st-btn.ready .st-sub .price { color: inherit; }
+.btn.st-btn.ready .st-sub .price, .btn.st-btn.ready .st-sub .price .ico { color: inherit; }
 .st-why {
   margin: 0; max-width: 100%; padding: 3px 10px; border-radius: 10px; background: rgba(11, 13, 18, 0.72);
   color: var(--text); font-size: 14px; font-weight: 600; line-height: 18px; text-align: center;
@@ -44,5 +44,9 @@ body.shell-desktop .starter { bottom: calc(16px + var(--safe-bottom)); }
 body.starter-on { --boon-bottom: 150px; }
 body.shell-phone.tab-battle.starter-on .toast-layer { bottom: calc(var(--tab-h) + 156px); }
 body.shell-desktop.starter-on .toast-layer { bottom: 164px; }
+/* a boon offer sits above the panel; toasts and coach banners above the offer */
+body.shell-phone.tab-battle.starter-on.boon-open .toast-layer { bottom: calc(var(--tab-h) + var(--boon-h) + var(--boon-bottom) + 8px); }
+body.shell-desktop.starter-on.boon-open .toast-layer { bottom: calc(var(--boon-h) + var(--boon-bottom) + 8px); }
+body.starter-on.boon-open .arena-top { bottom: calc(var(--boon-h) + var(--boon-bottom) + 8px); }
 body.starter-on .arena-top { bottom: 156px; }
 body.shell-rail.starter-on { --boon-bottom: calc(var(--safe-bottom) + 8px); }

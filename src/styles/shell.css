@@ -128,7 +128,6 @@ body.shell-desktop.panel-closed .toast-layer { left: 50%; }
 /* stage 0: no tab bar; the Battle overlay keeps clear of the home indicator instead */
 body.no-tabbar:not(.shell-desktop) .tabbar { display: none; }
 body.shell-phone.no-tabbar .battle-layer { bottom: var(--safe-bottom); }
-body.shell-rail.no-tabbar .toast-layer { left: 50%; }
 /* a newly revealed tab: "New" pulses until it is opened */
 .tab-badge.fresh { animation: pulse-new 1.8s infinite; }
 @keyframes pulse-new { 0%, 100% { box-shadow: 0 0 0 2px var(--bg-0), 0 0 0 2px color-mix(in srgb, var(--ok) 70%, transparent); } 50% { box-shadow: 0 0 0 2px var(--bg-0), 0 0 0 8px transparent; } }

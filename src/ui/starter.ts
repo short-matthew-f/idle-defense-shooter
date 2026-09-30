@@ -63,7 +63,7 @@ export class StarterPanel {
     if (key !== this.key) {
       this.key = key;
       if (p) {
-        text(this.what, `${p.label} ${p.entry.rank + 1}`);
+        text(this.what, `${p.label} · Lv ${p.entry.rank + 1}`);
         this.price.replaceChildren(icon('scrap', 'ico tiny'), fmtNum(p.entry.cost), eta);
         text(this.why, p.why);
         this.btn.classList.toggle('ready', p.affordable);

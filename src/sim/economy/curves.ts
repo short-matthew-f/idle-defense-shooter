@@ -13,7 +13,7 @@
 import { growth, log } from '../math/lut';
 import type { NodeDef } from '../data/schema';
 
-export const ENEMY_HP_BASE = 7;
+export const ENEMY_HP_BASE = 6;
 export const ENEMY_HP_GROWTH = 1.14;
 export const ASCENSION_HP_GROWTH = 1.6;
 export const THREAT_HP_PER_LEVEL = 0.12;
@@ -72,16 +72,15 @@ export function nodeCost(def: NodeDef, rank: number): { cost: number; currency: 
 }
 
 /**
- * Stat-line depth (onboarding pass, docs/BALANCE.md). Every Scrap-priced stat node's rank cap is its data maxRank
- * (authored × STAT_RANK_SCALE) × statDepth, rounded up. Depth grows with the Echoes the player has ever earned,
- * read as the wave that pays them (`echoDepthWave`): a first Prestige's stat lines run out around wave 25–30, which
- * is the first wall; each Prestige deepens every line, so the next wall sits ~10 waves further; from ~wave 60 of
- * Prestige history the lines are at full depth (the tuned late game).
- *   depth(D*) = min(1, STAT_DEPTH_FIRST + STAT_DEPTH_PER_WAVE · max(0, D* − STAT_DEPTH_REF)),  D* = echoDepthWave
+ * The Frontier (onboarding pass, docs/BALANCE.md): the first Prestige's wall. Enemies on waves past the Frontier get
+ * FRONTIER_GROWTH× more HP per wave beyond it (bosses and escorts included), so a run hits a real wall a wave or two
+ * past it. The Frontier sits at FRONTIER_FIRST until the player has earned Echoes, then at STEP waves past the depth
+ * those lifetime Echoes are worth (`echoDepthWave`): Prestiging from wave 28 moves it to 38, from 38 to 48, and so
+ * on. Once it passes the depth a build can reach anyway (~70+) it no longer matters, so the late game is unchanged.
  */
-export const STAT_DEPTH_FIRST = 0.6;
-export const STAT_DEPTH_REF = 18;
-export const STAT_DEPTH_PER_WAVE = 0.016;
+export const FRONTIER_FIRST = 28;
+export const FRONTIER_STEP = 10;
+export const FRONTIER_GROWTH = 3.5;
 
 /** The wave whose Prestige pays `echoes` (inverse of echoesFor at T = 0); 0 below one wave-20 payout. */
 export function echoDepthWave(echoes: number): number {
@@ -89,10 +88,15 @@ export function echoDepthWave(echoes: number): number {
   return 20 + log(echoes / 10) / log(1.2);
 }
 
-/** Fraction of each stat node's full rank cap that is open, given lifetime Echoes. */
-export function statDepthFor(lifetimeEchoes: number): number {
+/** Frontier wave for a player who has earned `lifetimeEchoes` Echoes in total. */
+export function frontierFor(lifetimeEchoes: number): number {
   const d = echoDepthWave(lifetimeEchoes);
-  return Math.min(1, STAT_DEPTH_FIRST + STAT_DEPTH_PER_WAVE * Math.max(0, d - STAT_DEPTH_REF));
+  return d > 0 ? Math.max(FRONTIER_FIRST, Math.round(d) + FRONTIER_STEP) : FRONTIER_FIRST;
+}
+
+/** Enemy HP multiplier on `wave` for a Frontier at `frontier` (1 at or before it). */
+export function frontierHpMul(wave: number, frontier: number): number {
+  return wave > frontier ? growth(FRONTIER_GROWTH, wave - frontier) : 1;
 }
 
 /** Echoes paid by a Prestige with deepest cleared wave D and Threat Dial T. */

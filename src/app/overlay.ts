@@ -5,11 +5,13 @@
  *     tagged aux1 = RETICLE_MARK (core/snapshot.ts); here it is redrawn at least 12 CSS px wide (the
  *     sim's ring is sized in world units, a few px on a phone)
  *   - aim line: tower → pointer while hold-to-aim steers the primary
+ *   - salvage crates (active edge): the sim's layer-7 Diamond tagged aux1 = SALVAGE_MARK is redrawn at least 7 CSS px
+ *     wide with a 13 px ring, so the crate is a thumb target on a phone (the sim draws it in world units)
  *   - touch test markers (More → Help → Touch test): where the game computed a tap, calibration rings
  * Sizes are in CSS pixels converted with the camera scale, so they read the same on every screen.
  * Pure over typed arrays (no DOM, no GL); allocates nothing per frame.
  */
-import { INSTANCE_FLOATS, Shape, ARENA_RADIUS, TOWER_RADIUS, RETICLE_MARK } from '@sim/core/types';
+import { INSTANCE_FLOATS, Shape, ARENA_RADIUS, TOWER_RADIUS, RETICLE_MARK, SALVAGE_MARK } from '@sim/core/types';
 import type { TouchMarker } from '@ui/host';
 
 export const OVERLAY_LAYER = 7;
@@ -18,6 +20,10 @@ const RIPPLE_S = 0.35;
 /** Is instance `o` (float offset) the sim's designation reticle? */
 export function isReticle(f: Float32Array, o: number): boolean {
   return f[o + 9] === OVERLAY_LAYER && f[o + 4] === Shape.Ring && f[o + 11] === RETICLE_MARK;
+}
+/** Is instance `o` a salvage crate (systems/active.ts)? */
+export function isCrate(f: Float32Array, o: number): boolean {
+  return f[o + 9] === OVERLAY_LAYER && f[o + 4] === Shape.Diamond && f[o + 11] === SALVAGE_MARK;
 }
 
 export class FieldOverlay {
@@ -53,10 +59,17 @@ export class FieldOverlay {
     const px = 1 / Math.max(1e-6, scale);   // world units per CSS px
     if (instances) {
       const n = Math.min(instanceCount, Math.floor(instances.length / INSTANCE_FLOATS));
-      let marks = 0;
-      for (let i = 0; i < n && marks < 8; i++) {
+      let marks = 0, crates = 0;
+      for (let i = 0; i < n && (marks < 8 || crates < 8); i++) {
         const o = i * INSTANCE_FLOATS;
-        if (!isReticle(instances, o)) continue;
+        if (crates < 8 && isCrate(instances, o)) {
+          const r = Math.max(instances[o + 2], 7 * px), rr = Math.max(instances[o + 2] * 1.6, 13 * px);
+          this.push(instances[o], instances[o + 1], rr, Shape.Ring, 1, 0.86, 0.42, 0.7, Math.min(0.5, (2 * px) / rr));
+          this.push(instances[o], instances[o + 1], r, Shape.Diamond, 1, 0.86, 0.42, 1);
+          crates++;
+          continue;
+        }
+        if (marks >= 8 || !isReticle(instances, o)) continue;
         const r = Math.max(instances[o + 2], 12 * px);
         this.push(instances[o], instances[o + 1], r, Shape.Ring, 1, 0.42, 0.42, 0.95, Math.min(0.5, (2.5 * px) / r));
         marks++;

@@ -2,7 +2,7 @@
  * Just-in-time coach banners (they replace the old three intro cards): one short sentence the moment a
  * feature is revealed (src/ui/progression.ts), in a small non-blocking banner with "Got it". Never a
  * modal. Which ones were read is per-device presentation state in prefs (coachSeen); what is revealed
- * never depends on it. Help lists every message the player has unlocked and can replay them.
+ * never depends on it. Help lists every message the player has unlocked.
  */
 import '../styles/coach.css';
 import { button, h, show, text } from './dom';
@@ -34,19 +34,31 @@ export const COACH: readonly CoachMsg[] = [
   { id: 'machine', feature: 'quartermaster', icon: 'more', text: 'A new machine. Automation and Trials open in More as you earn them.' },
 ];
 
+/** Explainers tied to an event that can come at any stage (an offer, a draft), not to a stage. */
+const EVENT_COACH: ReadonlySet<CoachId> = new Set<CoachId>(['boons', 'anomalies']);
+
 /** What makes a message urgent right now (its thing is on screen): it jumps the queue. */
 export interface CoachLive { boonOffer: boolean; draft: boolean }
 
 /**
- * The message to show now, or null: an unread message whose feature is on, those whose subject is live
- * (a boon offer, an Anomaly draft) first, else the earliest in reveal order.
+ * The message to show now, or null, among unread messages whose feature is on: an event explainer whose subject is
+ * live (a boon offer, an Anomaly draft) first; else the NEWEST stage message (an older unread one is stale: reading
+ * the newer one retires it, see staleWith); else an event explainer.
  */
 export function pendingCoach(f: Features, seen: ReadonlySet<string>, live: CoachLive = { boonOffer: false, draft: false }): CoachMsg | null {
   if (f.unlockAll) return null;
   const open = COACH.filter((m) => f[m.feature] && !seen.has(m.id));
   if (!open.length) return null;
   const urgent = open.find((m) => (m.id === 'boons' && live.boonOffer) || (m.id === 'anomalies' && live.draft));
-  return urgent ?? open[0];
+  const stage = open.filter((m) => !EVENT_COACH.has(m.id));
+  return urgent ?? stage[stage.length - 1] ?? open[0];
+}
+
+/** Reading `id` also retires these: the older stage messages (an event explainer retires only itself). */
+export function staleWith(id: CoachId): CoachId[] {
+  if (EVENT_COACH.has(id)) return [id];
+  const i = COACH.findIndex((m) => m.id === id);
+  return COACH.slice(0, i + 1).filter((m) => !EVENT_COACH.has(m.id)).map((m) => m.id);
 }
 
 /** Messages the player has unlocked (Help lists them). */
@@ -68,10 +80,9 @@ export class CoachBanner {
   private readonly ico = h('span', { class: 'coach-ico' });
   private readonly msg = h('span', { class: 'coach-text' });
   private cur: CoachMsg | null = null;
-
   constructor() {
     const ok = button('Got it', () => this.dismiss(), { class: 'btn small coach-ok' });
-    this.el = h('div', { class: 'coach', attrs: { role: 'status', 'aria-live': 'polite' } }, this.ico, this.msg, ok);
+    this.el = h('div', { class: 'coach-banner', attrs: { role: 'status', 'aria-live': 'polite' } }, this.ico, this.msg, ok);
     this.el.hidden = true;
   }
 
@@ -93,7 +104,7 @@ export class CoachBanner {
   dismiss(): void {
     const id = this.cur?.id;
     if (!id) return;
-    markCoachSeen([id]);
+    markCoachSeen(staleWith(id));
     this.cur = null;
     show(this.el, false);
   }
@@ -106,5 +117,3 @@ export function markCoachSeen(ids: readonly string[]): void {
   if (seen.size !== before) setPref('coachSeen', [...seen]);
 }
 
-/** Help → "Show tips again": every unlocked message replays, one at a time. */
-export function resetCoach(): void { setPref('coachSeen', []); }

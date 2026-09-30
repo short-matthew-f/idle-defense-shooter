@@ -11,7 +11,7 @@ export const ACTIVE = {
     /** Seconds between two assist shots (sim time). Taps inside the cooldown do nothing (no queue, no error). */
     cooldown: 0.6,
     /** Damage per assist shot as a multiple of the primary's current shot damage (ballistics.damage). */
-    damageMul: 1.25,
+    damageMul: 1.0,
     /** Crit chance bonus on top of ballistics.crit_chance (like manual aim). */
     critBonus: 0.1,
     /** Sim-side tap reach around an enemy centre: max(reach, radius + pad) world units. */
@@ -25,7 +25,7 @@ export const ACTIVE = {
     /** First wave that drops crates. */
     fromWave: 2,
     /** Drop chance per kill: ordinary, elite, boss (a clump rolls as ordinary but carries its merged Scrap). */
-    chance: 0.05, eliteChance: 0.35, bossChance: 1,
+    chance: 0.04, eliteChance: 0.25, bossChance: 1,
     /** A crate is worth this many times its kill's Scrap (uniform, own PRNG stream). */
     valueMin: 4, valueMax: 8,
     /** Seconds a crate drifts from the kill to the tower (every crate lives exactly this long). */
@@ -46,7 +46,7 @@ export const ACTIVE = {
     unlockWave: 12,
     meterMax: 100,
     /** Meter points per landed primary hit, at most shotCapPerSecond per second from shots (token bucket). */
-    meterPerHit: 1, shotCapPerSecond: 4,
+    meterPerHit: 1, shotCapPerSecond: 3,
     /** Hold time (s, real-time: sim ticks ÷ speed multiplier) at which the charge ring meets the target ring. */
     chargeSeconds: 1.0,
     /** The perfect window (s of hold). Releases outside it still fire, at weakMul. */

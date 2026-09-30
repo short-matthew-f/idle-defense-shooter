@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { ShopEntry } from '../../src/sim/core/types';
 import {
-  BULK_ROWS, CONTENT_POOL, FEATURE_IDS, STAGE_WAVES, STAGE7_WAVE, STARTER_NODES, UNLOCKS, affordableRows, allFeatures, bestWave, contentPool, features,
+  BULK_ROWS, BULK_ROWS_MIN_WAVE, CONTENT_POOL, FEATURE_IDS, STAGE_WAVES, STAGE7_WAVE, STARTER_NODES, UNLOCKS, affordableRows, allFeatures, bestWave, contentPool, features,
   stageOf, stageOfFeature, starterPick, type FeatureId, type Features, type ProgressState, type StarterState,
 } from '../../src/ui/progression';
-import { COACH, initialSeen, pendingCoach, unlockedCoach } from '../../src/ui/coach';
+import { COACH, initialSeen, pendingCoach, staleWith, unlockedCoach } from '../../src/ui/coach';
 import { tabBadges, tabReachable, tabsShown, type BadgeState } from '../../src/ui/shell-logic';
 import { ELEMENTS, HARDPOINTS } from '../../src/ui/content';
 
@@ -104,10 +104,11 @@ describe('unlock ladder: never hides what the player owns or has pending', () =>
     expect(at0({ shop: [entry('bastion.armor', { rank: 2 })] }).chassisAll).toBe(true);
     expect(at0({ shop: [entry('bastion.max_hp', { rank: 2 })] }).chassisAll).toBe(false);   // a starter stat is not "the whole Chassis"
   });
-  it('bulk tools appear early once ≥ BULK_ROWS visible rows are affordable', () => {
+  it('bulk tools appear early (from BULK_ROWS_MIN_WAVE) once ≥ BULK_ROWS visible rows are affordable', () => {
     const rows = Array.from({ length: BULK_ROWS }, (_, i) => entry(`ballistics.n${i}`, { affordable: true }));
-    expect(features(state(5, { shop: rows })).bulk).toBe(true);
-    expect(features(state(5, { shop: rows.slice(1) })).bulk).toBe(false);
+    expect(features(state(BULK_ROWS_MIN_WAVE, { shop: rows })).bulk).toBe(true);
+    expect(features(state(BULK_ROWS_MIN_WAVE, { shop: rows.slice(1) })).bulk).toBe(false);
+    expect(features(state(5, { shop: rows })).bulk).toBe(false);   // not at the first checkpoint: one layer at a time
     // at stage 0 only the three starter stats are visible rows
     expect(affordableRows(rows, { chassisAll: false, elements: false, hardpoints: false, cross: false })).toBe(0);
     expect(affordableRows([...rows, entry('link.x', { tree: 'link', affordable: true })], { chassisAll: true, elements: true, hardpoints: true, cross: false })).toBe(BULK_ROWS);
@@ -190,15 +191,19 @@ describe('the stage-0 Upgrade button', () => {
     expect(s.affordable).toBe(false);
     expect(s.label).toBe('Damage');
     expect(s.eta).toBe(3);
-    expect(s.why).toMatch(/^Damage: next upgrade/);
+    expect(s.why).toBe('Next: Damage. Kills earn the Scrap');
     expect(starterPick(st({ shop: [] }))).toBeNull();
   });
 });
 
 describe('coach banners', () => {
-  it('one message per reveal, oldest first; a live boon offer or draft jumps the queue', () => {
+  it('one message per reveal, the newest stage first; a live boon offer or draft jumps the queue', () => {
     expect(pendingCoach(features(state(0)), new Set())?.id).toBe('start');
     expect(pendingCoach(features(state(5)), new Set(['start']))?.id).toBe('checkpoint');
+    expect(pendingCoach(features(state(6)), new Set())?.id).toBe('elements');   // 'start' / 'checkpoint' unread: stale
+    expect(staleWith('elements')).toEqual(['start', 'checkpoint', 'elements']);
+    expect(staleWith('boons')).toEqual(['boons']);
+    expect(pendingCoach(features(state(15)), new Set(staleWith('bulk')))?.id).toBe('boons');   // event explainers after the stage ones
     const offer = features(state(0, { run: { deepestCleared: 0, boonOffer: ['x'] as never } }));
     expect(pendingCoach(offer, new Set(), { boonOffer: true, draft: false })?.id).toBe('boons');
     expect(pendingCoach(features(state(5)), new Set(['start', 'checkpoint']))).toBeNull();

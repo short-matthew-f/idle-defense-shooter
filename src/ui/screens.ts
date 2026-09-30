@@ -83,7 +83,7 @@ export class PrestigeScreen {
     for (const s of PRESTIGE_SEGS) {
       const x = this.btns.get(s.id)!;
       const lock = s.lock(ui);
-      show(x.lock, !!lock);
+      x.lock.style.display = lock ? '' : 'none';   // an SVG icon: `hidden` does not apply
       x.b.title = lock ?? '';
       attr(x.b, 'aria-label', lock ? `${s.label} (locked: ${lock})` : s.label);
       const alert = s.id === 'forecast' ? !!ui.forecast?.recommended : s.id === 'ascension' ? ui.run.deepestCleared >= 100 : false;
@@ -103,7 +103,7 @@ export const MORE_ITEMS: MoreItem[] = [
   { id: 'automation', label: 'Automation', icon: 'directives', hint: 'Directives, Targeting, Upgrade Queue, Blueprints', lock: (ui) => (pr(ui, 'directives') || pr(ui, 'blueprint_slots') ? null : 'Prestige II'), reveal: 'automation' },
   { id: 'trials', label: 'Trials', icon: 'trials', hint: 'Constraint runs with permanent rewards', lock: (ui) => (pr(ui, 'trials') ? null : 'Prestige II'), reveal: 'trials' },
   { id: 'settings', label: 'Settings', icon: 'settings', hint: 'Clarity, sound, saves, unlock everything, start over' },
-  { id: 'help', label: 'Help & shortcuts', icon: 'info', hint: 'Gestures, keys, the tips again' },
+  { id: 'help', label: 'Help & shortcuts', icon: 'info', hint: 'Tips, gestures, keys' },
 ];
 
 export interface SubScreen { title: string; el: () => HTMLElement; onShow?: () => void; onHide?: () => void }

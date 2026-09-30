@@ -131,3 +131,29 @@ describe('boxToView', () => {
     expect(o).toEqual({ x: 102, y: 400 });
   });
 });
+
+describe('claimed holds (active edge: Overcharge on the tower)', () => {
+  it('a hold the app claims never becomes manual aim; lifting ends it, a second finger cancels it', async () => {
+    const { vi } = await import('vitest');
+    vi.useFakeTimers();
+    try {
+      const { cam, c, input } = setup();
+      const log: string[] = [];
+      input.onAimStart = () => log.push('aim');
+      input.onHoldStart = (x, y) => { log.push(`hold ${Math.round(Math.hypot(x, y))}`); return Math.hypot(x, y) < 40; };
+      input.onHoldEnd = (cancelled) => log.push(cancelled ? 'cancel' : 'release');
+      const tower = drawn(cam, c, 0, 0);
+      c.fire('pointerdown', 1, tower.x, tower.y); vi.advanceTimersByTime(input.holdMs + 10); c.fire('pointerup', 1, tower.x, tower.y);
+      expect(log).toEqual(['hold 0', 'release']);
+      log.length = 0;
+      c.fire('pointerdown', 1, tower.x, tower.y); vi.advanceTimersByTime(input.holdMs + 10); c.fire('pointerdown', 2, tower.x + 80, tower.y);
+      expect(log).toEqual(['hold 0', 'cancel']);
+      c.fire('pointerup', 2, tower.x + 80, tower.y); c.fire('pointerup', 1, tower.x, tower.y);
+      log.length = 0;
+      const far = drawn(cam, c, 300, 0);   // not claimed: the hold steers manual aim as before
+      c.fire('pointerdown', 1, far.x, far.y); vi.advanceTimersByTime(input.holdMs + 10); c.fire('pointerup', 1, far.x, far.y);
+      expect(log[0]).toMatch(/^hold /);
+      expect(log[1]).toBe('aim');
+    } finally { vi.useRealTimers(); }
+  });
+});

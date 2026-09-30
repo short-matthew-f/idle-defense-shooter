@@ -64,7 +64,7 @@ const WP = (angle: number, radius: number, exposedSeconds = 4) => ({ angle, radi
 export const BOSSES: BossDef[] = [
   {
     id: 'breaker', name: 'The Breaker', wave: 5, tests: 'Basic DPS and survival',
-    hpMul: 1.0, radius: 34, speed: 16, armor: 10, shieldMul: 0,
+    hpMul: 0.8, radius: 34, speed: 16, armor: 10, shieldMul: 0,
     phases: [
       { hpFraction: 1, name: 'Advance', attacks: ['slam', 'stomp_wave'] },
       { hpFraction: 0.5, name: 'Rampage', attacks: ['slam', 'charge', 'stomp_wave'], weakPoint: WP(PI, 26) },
@@ -75,7 +75,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'broodheart', name: 'Broodheart', wave: 10, tests: 'Area damage vs spawning swarms',
-    hpMul: 0.6, radius: 38, speed: 12, armor: 0, shieldMul: 0,
+    hpMul: 0.6, radius: 38, speed: 8, armor: 0, shieldMul: 0,
     phases: [
       { hpFraction: 1, name: 'Gestation', attacks: ['brood_sac', 'spawn_brood'] },
       { hpFraction: 0.5, name: 'Hatching', attacks: ['brood_sac', 'spawn_brood', 'acid_spit'], weakPoint: WP(0, 30) },
@@ -99,7 +99,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'siege_engine', name: 'The Siege Engine', wave: 20, tests: 'Mixed threats; first Prestige gate',
-    hpMul: 1.6, radius: 46, speed: 12, armor: 25, shieldMul: 0,
+    hpMul: 0.6, radius: 46, speed: 12, armor: 25, shieldMul: 0,
     phases: [
       { hpFraction: 1, name: 'Bombard', attacks: ['siege_volley', 'ram_charge'] },
       { hpFraction: 0.66, name: 'Deploy', attacks: ['ram_charge', 'deploy_turrets', 'siege_volley'], weakPoint: WP(0, 34) },
@@ -112,7 +112,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'iron_maw', name: 'Iron Maw', wave: 25, tests: 'Sustained damage vs extreme HP',
-    hpMul: 4.2, radius: 44, speed: 10, armor: 40, shieldMul: 0,
+    hpMul: 2.2, radius: 44, speed: 10, armor: 40, shieldMul: 0,
     phases: [
       { hpFraction: 1, name: 'Grinding', attacks: ['maw_open', 'grind'] },
       { hpFraction: 0.5, name: 'Starving', attacks: ['maw_open', 'devour', 'grind'], weakPoint: WP(0, 20, 4) },

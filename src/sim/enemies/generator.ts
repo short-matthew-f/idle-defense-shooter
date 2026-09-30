@@ -27,6 +27,7 @@ import { BOSS_BY_ID, bossForWave } from '../data/bosses';
 import { FORMATIONS, FORMATION_BY_ID, medianDifficulty, isFair } from '../data/formations';
 import { SECTORS, INTRO_WAVE, sectorIndexForWave, sectorIndex } from '../data/sectors';
 import { FORMATION_CONST } from './formations';
+import { frontierHpMul } from '../economy/curves';
 
 /** Hard cap on spawns per wave (design §20 entity budget). */
 export const MAX_SPAWNS = MAX_ENEMIES;
@@ -579,7 +580,9 @@ function applyElites(rng: Prng, spawns: SpawnEntry[], wave: number, threatDial: 
 // Entry point
 // ---------------------------------------------------------------------------
 export function generateWave(prestigeSeed: number, wave: number, threatDial: number, ascension: number,
-  /** WP8 addition: Scatter Trial — every ordinary wave uses a spread formation (Scattered Rain). */ opts?: { scatter?: boolean }): WaveDef {
+  /** WP8 addition: Scatter Trial — every ordinary wave uses a spread formation (Scattered Rain). Onboarding pass: `frontier`
+   *  hardens every spawn on waves past it (economy/curves.ts frontierHpMul); absent = no Frontier. */
+  opts?: { scatter?: boolean; frontier?: number }): WaveDef {
   const w = wave < 1 ? 1 : Math.floor(wave);
   const rng = new Prng(waveSeed(prestigeSeed, w));
   const sectorDef = SECTORS[sectorIndexForWave(w)];
@@ -587,7 +590,7 @@ export function generateWave(prestigeSeed: number, wave: number, threatDial: num
   const isBoss = bossId !== null;
   const budget = threatBudget(w);
   const dial = threatDial > 0 ? threatDial : 0;
-  const dialScale = 1 + 0.12 * dial;
+  const waveHpScale = (1 + 0.12 * dial) * (opts?.frontier !== undefined ? frontierHpMul(w, opts.frontier) : 1);
   const counterCap = (ascension > 0 ? 0.35 : 0.2) * budget;
   const D = waveDuration(w);
   const a0 = rng.next() * TAU;
@@ -612,11 +615,11 @@ export function generateWave(prestigeSeed: number, wave: number, threatDial: num
       const batch = k >> 3;
       spawns.push(entry(picks[k], Math.min(D - 1, batch * Math.min(90, D / batches)), a0, 0, k, 1));
     }
-    for (const s of spawns) s.hpScale *= dialScale;
+    for (const s of spawns) s.hpScale *= waveHpScale;
     applyElites(rng, spawns, w, dial, ascension, bossId === 'last_procession');
     // The boss itself is never an elite.
     spawns[0].elite = [];
-    spawns[0].hpScale = dialScale;
+    spawns[0].hpScale = waveHpScale;
   } else {
     let tpl = pickTemplate(rng, w, ascension);
     if (opts?.scatter) tpl = FORMATION_BY_ID.scattered_rain;   // WP8: same RNG draws, spread layout
@@ -627,7 +630,7 @@ export function generateWave(prestigeSeed: number, wave: number, threatDial: num
     const picks = mergeToCap(spend(rng, roster, eff, counterCap), MAX_SPAWNS);
     spawns = layout(tpl.id, { rng, p: params, D, a0 }, picks);
     fitWindow(spawns, D);
-    for (const s of spawns) s.hpScale *= dialScale;
+    for (const s of spawns) s.hpScale *= waveHpScale;
     applyElites(rng, spawns, w, dial, ascension, false);
   }
 

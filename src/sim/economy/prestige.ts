@@ -20,7 +20,7 @@ import type { FrameId, TrialId } from '../core/ids';
 import type { NodeInfo } from '../core/content';
 import { Ev } from '../core/types';
 import { nodeInfo } from '../core/content';
-import { echoesFor, nodeCost, statDepthFor } from './curves';
+import { echoesFor, frontierFor, nodeCost } from './curves';
 import { codexMultiplier } from './codex';
 
 /** Deepest-ever wave that opens each Prestige layer (index = layer − 1). */
@@ -190,33 +190,27 @@ export function lifetimeEchoes(meta: MetaState): number {
   return total;
 }
 
-// Memo for statDepth (shop evaluation calls it once per entry). Keyed by the MetaState object and checked
-// against the only inputs that can change lifetime Echoes, so it is a pure cache (never iterated).
-interface DepthMemo { echoes: number; count: number; rankSum: number; depth: number }
-const depthMemo = new WeakMap<MetaState, DepthMemo>();
+// Memo for frontierWave (the machine reads it at every wave start, the UI at ≤ 10 Hz). Keyed by the MetaState
+// object and checked against the only inputs that can change lifetime Echoes, so it is a pure cache (never iterated).
+interface FrontierMemo { echoes: number; count: number; rankSum: number; frontier: number }
+const frontierMemo = new WeakMap<MetaState, FrontierMemo>();
 
 /**
- * Open fraction of every stat node's rank cap (economy/curves.ts statDepthFor): shallow on the first Prestige
- * (the first wall), deeper with every Echo earned. The UI reads the result through ShopEntry.maxRank.
+ * The Frontier (economy/curves.ts frontierFor): waves past it are hardened. Wave 28 until the first Prestige pays
+ * Echoes, then ~10 waves past the depth of the player's lifetime Echoes.
  */
-export function statDepth(meta: MetaState): number {
+export function frontierWave(meta: MetaState): number {
   let rankSum = 0;
   for (const id in meta.prestigeRanks) rankSum += meta.prestigeRanks[id] | 0;
-  const m = depthMemo.get(meta);
-  if (m && m.echoes === meta.echoes && m.count === meta.prestigeCount && m.rankSum === rankSum) return m.depth;
-  const depth = statDepthFor(lifetimeEchoes(meta));
-  depthMemo.set(meta, { echoes: meta.echoes, count: meta.prestigeCount, rankSum, depth });
-  return depth;
+  const m = frontierMemo.get(meta);
+  if (m && m.echoes === meta.echoes && m.count === meta.prestigeCount && m.rankSum === rankSum) return m.frontier;
+  const frontier = frontierFor(lifetimeEchoes(meta));
+  frontierMemo.set(meta, { echoes: meta.echoes, count: meta.prestigeCount, rankSum, frontier });
+  return frontier;
 }
 
-/** A stat node's rank cap at a given depth (data maxRank × depth, rounded up, at least 1). */
-export function statRankCap(maxRank: number, depth: number): number {
-  return Math.max(1, Math.ceil(maxRank * depth - 1e-9));
-}
-
-/** Rank cap including stat-line depth (tree stat nodes) and Fusion Apex (+1 on Fusions from Ascension II). */
+/** Rank cap including Fusion Apex (+1 on Fusions from Ascension II). */
 export function effectiveMaxRank(w: WorldImpl, info: NodeInfo): number {
-  if (info.group === 'tree' && info.def.kind === 'stat') return statRankCap(info.def.maxRank, statDepth(w.meta));
   return info.def.maxRank + (info.group === 'fusion' && w.meta.ascension >= 2 ? 1 : 0);
 }
 

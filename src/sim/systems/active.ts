@@ -340,7 +340,7 @@ export class ActiveSystem implements System {
     const ta = now - this.tracerTick;
     if (ta >= 0 && ta < A.tracerTicks) {
       const a = atan2(this.tracerY, this.tracerX), f = 1 - ta / A.tracerTicks;
-      out.push(cos(a) * BARREL, sin(a) * BARREL, 1.6 + 1.4 * f, 0, Shape.Line, 1, 0.95, 0.7, 0.85 * f, 2, this.tracerX, this.tracerY);
+      out.push(cos(a) * BARREL, sin(a) * BARREL, 2.4 + 2.2 * f, 0, Shape.Line, 1, 0.95, 0.7, 0.9 * f, 2, this.tracerX, this.tracerY);
     }
     // overcharge: meter pips around the tower, then the charge ring closing on the target ring
     if (overchargeUnlocked(w)) {

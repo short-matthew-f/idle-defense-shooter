@@ -37,7 +37,7 @@ import { rollDraft } from './draft';
 import { clearBoons, offerForBossClear, openBoonOffer } from './boons';   // Boons
 import { ASCENSION_WAVE, deepWavesUnlocked } from '../economy/ascension';
 import { trialWave } from './trials';                 // WP8
-import { trialHas } from '../economy/prestige';       // WP8
+import { frontierWave, trialHas } from '../economy/prestige';       // WP8; frontierWave: onboarding pass
 import { ARENA_RADIUS } from '../core/types';
 
 export const PHASE_TICKS = { between: 2 * TICK_RATE, wave_clear: 1.5 * TICK_RATE, dead: 1.5 * TICK_RATE } as const;
@@ -155,7 +155,9 @@ export class RunMachine {
   startWave(): void {
     const w = this.w, run = w.run;
     // WP8: Scatter Trial forces spread formations; Swarmstorm post-processes the wave (run/trials.ts)
-    const wave = trialWave(w, generateWave(run.prestigeSeed, run.wave, run.threatDial, w.meta.ascension, { scatter: trialHas(w.trial, 'scatter') }));
+    // Onboarding pass: waves past the Frontier are hardened (economy/prestige.ts frontierWave); Trials have no Frontier
+    const wave = trialWave(w, generateWave(run.prestigeSeed, run.wave, run.threatDial, w.meta.ascension,
+      { scatter: trialHas(w.trial, 'scatter'), ...(w.trial ? {} : { frontier: frontierWave(w.meta) }) }));
     w.wave = wave;
     this.cursor = 0; this.bossIndex = NO_ENTITY; this.clumpIndex = NO_ENTITY;
     run.waveTick = 0;

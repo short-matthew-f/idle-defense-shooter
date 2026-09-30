@@ -170,6 +170,8 @@ export class Shell {
     this.view = r.show;
     if (this.view.tab !== 'battle') this.panel = this.view;
     this.apply();
+    // Forward / Back onto a tab that is no longer revealed (Unlock everything switched off): Battle instead
+    if (!this.reachable(this.view.tab)) this.go('battle');
   }
 
   private run(ops: NavOp[]): void {

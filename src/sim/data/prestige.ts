@@ -10,16 +10,18 @@
 import type { PrestigeNodeDef, StatEffect } from './schema';
 
 const ECHO_GROWTH = 1.5;
+/** Accelerated Clearing's Echo prices by rank (see the node). */
+export const AC_PRICES = [10, 1500, 60000];
 
 function node(
   layer: 1 | 2 | 3 | 4, id: string, name: string, desc: string,
-  base: number, maxRank: number, effects: StatEffect[] = [],
+  base: number | number[], maxRank: number, effects: StatEffect[] = [],
 ): PrestigeNodeDef {
   const full = `prestige.${id}`;
   return {
     id: full, name, desc, layer,
     kind: maxRank > 5 ? 'stat' : 'mechanic',
-    maxRank, cost: { base, growth: ECHO_GROWTH },
+    maxRank, cost: typeof base === 'number' ? { base, growth: ECHO_GROWTH } : { flat: base },
     tier: (layer - 1) as 0 | 1 | 2 | 3,
     effects: effects.length ? effects : [{ stat: full, op: 'add', perRank: 1 }],
     tags: ['prestige', `layer${layer}`],
@@ -33,9 +35,11 @@ const e = (stat: string, op: StatEffect['op'], perRank: number): StatEffect => (
 export const PRESTIGE_NODES: PrestigeNodeDef[] = [
   // --- Prestige I — Inheritance (wave 20): compress mastered content -------
   node(1, 'seed_capital', 'Seed Capital', 'Start each Prestige with 150 Scrap per rank.', 10, 20, [e('economy.start_scrap', 'add', 150)]),
-  node(1, 'memory_of_steel', 'Memory of Steel', 'Start each Prestige with 2 free ranks of Caliber (primary damage) per rank.', 16, 10, [e('prestige.memory_of_steel', 'add', 2)]),
-  node(1, 'memory_of_motion', 'Memory of Motion', 'Start each Prestige with 2 free ranks of Autoloader (primary attack speed) per rank.', 16, 10, [e('prestige.memory_of_motion', 'add', 2)]),
-  node(1, 'accelerated_clearing', 'Accelerated Clearing', 'Waves below your previous best run at ×2 speed; ×4 at rank 2, ×8 at rank 3.', 1500, 3),
+  node(1, 'memory_of_steel', 'Memory of Steel', 'Start each Prestige with 1 free rank of Caliber (primary damage) per rank.', 16, 10, [e('prestige.memory_of_steel', 'add', 1)]),
+  node(1, 'memory_of_motion', 'Memory of Motion', 'Start each Prestige with 1 free rank of Autoloader (primary attack speed) per rank.', 16, 10, [e('prestige.memory_of_motion', 'add', 1)]),
+  // Onboarding pass: a flat ladder, not ×1.5. Rank 1 (×2) is a first-Prestige pick; ×4 / ×8 on solved waves would make
+  // every reclimb take a few % of the previous run (§3 wants 25–40%), so they cost what Prestiges 3–4 and 5–6 pay.
+  node(1, 'accelerated_clearing', 'Accelerated Clearing', 'Waves below your previous best run at ×2 speed; ×4 at rank 2, ×8 at rank 3.', AC_PRICES, 3),
   node(1, 'boss_bounty', 'Boss Bounty', 'Bosses pay +25% Scrap per rank.', 12, 20, [e('economy.boss_scrap_mul', 'add', 0.25)]),
   node(1, 'checkpoint_dividend', 'Checkpoint Dividend', 'The first reach of each checkpoint in a Prestige pays a bonus of 25% per rank of that boss wave\'s kill Scrap.', 20, 10, [e('prestige.checkpoint_dividend', 'add', 0.25)]),
   node(1, 'scrap_resonance', 'Scrap Resonance', '+5% Scrap from every source per rank.', 10, 50, [e('economy.scrap_mul', 'add', 0.05)]),

@@ -214,7 +214,7 @@ export class Hud {
     }
 
     const f = this.feats;
-    show(this.coresItem, !f || f.cores || f.boons || r.cores > 0 && f.runControls);
+    show(this.coresItem, !f || f.cores || f.boons || (r.cores > 0 && f.runControls));   // Cores show once there are any (first boss) or they buy something
     show(this.modeBtn, !f || f.runControls || r.mode === 'patrol');
     text(this.modeBtn, r.mode === 'push' ? 'Push' : 'Patrol');
     attr(this.modeBtn, 'aria-pressed', r.mode === 'patrol' ? 'true' : 'false');

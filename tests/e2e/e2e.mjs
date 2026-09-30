@@ -11,6 +11,9 @@
 //   phone reach       (Reachability, docs/reviews/REACHABILITY.md) a save with Spare Barrel, Second Opinion and the Third
 //                     Tactical Slot: choose a second Ballistics Doctrine on the fork, the third ability slot appears,
 //                     is assigned from its picker and cast, and two enemies are designated (HUD "2/2"), one cleared by a re-tap
+//   phone onboard     (progressive reveal, src/ui/progression.ts) a fresh save: no tab bar, one Upgrade button that buys,
+//                     a coach banner; saves at waves 5 / 6 / 10: the tab bar appears with Battle + Upgrades ("New"), Elements
+//                     appears, Build + More appear; Settings → Unlock everything shows every tab, switching it off hides them
 //   phone touch       (docs/TOUCH.md) More → Help → Touch test: the canvas marker lands on the tap; calibration with honest
 //                     taps says "accurate" and stores nothing; a synthetic 40 px pointer offset (taps read 40 px below the
 //                     finger) is measured, calibrated away (prefs touchCal), survives a reload, and Reset restores identity
@@ -18,7 +21,8 @@
 //
 // Environment: PLAYWRIGHT_DIR (a directory holding the `playwright` package; default: the global npm root),
 // CHROMIUM (browser executable; default: Playwright's own), E2E_URL (skip the preview server and test this URL),
-// E2E_OUT (screenshots; default tests/e2e/out), E2E_SKIP_DESKTOP=1 / E2E_SKIP_PHONE=1 / E2E_SKIP_REACH=1 / E2E_SKIP_TOUCH=1.
+// E2E_OUT (screenshots; default tests/e2e/out), E2E_SKIP_DESKTOP=1 / E2E_SKIP_PHONE=1 / E2E_SKIP_REACH=1 / E2E_SKIP_TOUCH=1 /
+// E2E_SKIP_ONBOARD=1. The walkthroughs that need every tab run with ?showall=1 (Unlock everything for the session).
 import { createRequire } from 'node:module';
 import { spawn, execSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -53,7 +57,7 @@ if (!BASE) {
     await new Promise((r) => setTimeout(r, 300));
   }
 }
-const URL = `${BASE}?fast=8`;
+const URL = `${BASE}?fast=8&showall=1`;
 
 const browser = await chromium.launch({
   executablePath: CHROMIUM,
@@ -86,6 +90,7 @@ try {
   if (!process.env.E2E_SKIP_DESKTOP) await desktop();
   if (!process.env.E2E_SKIP_PHONE) await phone();
   if (!process.env.E2E_SKIP_REACH) await reach();
+  if (!process.env.E2E_SKIP_ONBOARD) await onboard();
   if (!process.env.E2E_SKIP_TOUCH) await touchCheck();
 } catch (e) {
   check('no exceptions', false, String(e && e.stack || e));
@@ -427,7 +432,7 @@ async function reach() {
       r.onerror = () => rej(r.error);
     });
   }, save);
-  await page.goto(`${BASE}?fast=1`);
+  await page.goto(`${BASE}?fast=1&showall=1`);
   await page.waitForFunction(() => !!window.__citadel?.game?.ready, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await skipOnboarding(page);
@@ -516,6 +521,119 @@ async function reach() {
   }, again) : -1;
   check('reach: tapping a designated enemy clears it', !!again && before.des?.live >= 1 && r5.des?.live <= before.des.live - 1 && leftOnTapped === 0, { before: before.des, after: r5.des, leftOnTapped });
   check('reach: zero console errors', errors.length === 0, errors);
+  await ctx.close();
+}
+
+// ================================================================ phone: progressive reveal (fresh save → first boss → Elements → Build)
+async function onboard() {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
+  await ctx.route('**/favicon.ico', (r) => r.fulfill({ status: 204, body: '' }));
+  const page = await ctx.newPage();
+  const errors = [];
+  attachLogs(page, errors);
+  const ready = () => page.waitForFunction(() => !!window.__citadel?.game?.ready, null, { timeout: 60000 });
+  const view = () => page.evaluate(() => {
+    const vis = (el) => !!el && !el.closest('[hidden]') && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().height > 0;
+    return {
+      tabbar: vis(document.querySelector('.tabbar')),
+      tabs: [...document.querySelectorAll('.tabbar .tab-btn')].filter(vis).map((b) => b.dataset.tab),
+      badges: Object.fromEntries([...document.querySelectorAll('.tabbar .tab-btn')].filter(vis).map((b) => [b.dataset.tab, vis(b.querySelector('.tab-badge')) ? b.querySelector('.tab-badge').textContent : null])),
+      starter: vis(document.querySelector('.starter .st-btn')),
+      why: document.querySelector('.starter .st-why')?.textContent ?? '',
+      coach: vis(document.querySelector('.coach-banner')) ? document.querySelector('.coach-banner .coach-text').textContent : null,
+      abilities: vis(document.querySelector('.ability-row')),
+      body: document.body.className,
+    };
+  });
+  /** Store the current save with `mut` applied (a function body over `s`) and reload into it. */
+  const withSave = async (mut) => {
+    const save = await page.evaluate(async (src) => { const s = await window.__citadel.game.client.requestSave(); new Function('s', src)(s); s.savedAtMs = Date.now(); return s; }, mut);
+    await page.goto(`${BASE}icons/icon-192.png`);
+    await page.evaluate(async (save) => {
+      await new Promise((res, rej) => {
+        const r = indexedDB.open('citadel', 1);
+        r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('saves')) r.result.createObjectStore('saves'); };
+        r.onsuccess = () => { const t = r.result.transaction('saves', 'readwrite'); t.objectStore('saves').put(save, 'main'); t.oncomplete = () => { r.result.close(); res(); }; t.onerror = () => rej(t.error); };
+        r.onerror = () => rej(r.error);
+      });
+    }, save);
+    await page.goto(`${BASE}?fast=1`);
+    await ready();
+    await page.waitForTimeout(900);
+  };
+  const tapTab = async (id) => {
+    for (let k = 0; k < 4; k++) { await page.locator(`.tabbar .tab-btn[data-tab="${id}"]`).tap(); await page.waitForTimeout(400); if ((await page.evaluate(() => document.body.className)).includes(`tab-${id}`)) return true; }
+    return false;
+  };
+
+  // 1. a fresh save: no tab bar, the Upgrade button, a one-line coach banner; the button buys
+  await page.goto(`${BASE}?fast=8`);
+  await ready();
+  await page.waitForTimeout(800);
+  const v0 = await view();
+  await page.screenshot({ path: `${OUT}/phone-onboard-stage0.png` });
+  check('onboard: a fresh save shows no tab bar, the Upgrade button and one coach line (no ability bar)', !v0.tabbar && v0.tabs.length === 0 && v0.starter && !!v0.coach && !v0.abilities && v0.body.includes('no-tabbar'), v0);
+  const sum = async () => page.evaluate(() => Object.values(window.__citadel.game.latestUi().build.ranks).reduce((a, b) => a + b, 0));
+  const before = await sum();
+  await page.waitForFunction(() => { const b = document.querySelector('.starter .st-btn'); return b && !b.disabled; }, null, { timeout: 180000 });
+  await page.evaluate(() => window.__citadel.game.setFast(1));
+  await page.locator('.starter .st-btn').tap();
+  await page.waitForTimeout(700);
+  const after = await sum();
+  check('onboard: the Upgrade button buys one of the three stats and says why', after > before && /^(Damage|Fire Rate|Hull|Next)\b/.test(v0.why), { before, after, why: v0.why });
+  await page.locator('.coach-banner .coach-ok').tap();
+  await page.waitForTimeout(200);
+  check('onboard: "Got it" dismisses the coach banner', (await view()).coach === null);
+
+  // 2. the first boss cleared: the tab bar appears with Battle + Upgrades; Upgrades reads "New"; no bulk tools yet
+  await withSave('s.run.deepestCleared = 5; s.meta.deepestEver = 5; s.run.checkpoint = 5; s.run.wave = 6; s.run.scrap = 400;');
+  const v1 = await view();
+  await page.screenshot({ path: `${OUT}/phone-onboard-stage1.png` });
+  check('onboard: after the first boss the tab bar shows Battle + Upgrades, Upgrades marked New', v1.tabbar && v1.tabs.join() === 'battle,upgrades' && v1.badges.upgrades === 'New' && !v1.abilities, v1);
+  if (v1.coach) { await page.locator('.coach-banner .coach-ok').tap(); await page.waitForTimeout(200); }   // the boon explainer (a start-of-attempt offer is up)
+  const opened = await tapTab('upgrades');
+  const shop1 = await page.evaluate(() => ({
+    cats: [...document.querySelectorAll('.screen.s-upgrades .cat-tabs .tab')].filter((b) => !b.hidden).map((b) => b.textContent.replace(/\d+/g, '').trim()),
+    catRow: !document.querySelector('.screen.s-upgrades .cat-tabs').hidden,
+    suggested: !document.querySelector('.screen.s-upgrades .quick').hidden,
+    qty: !document.querySelector('.screen.s-upgrades .shop-tools').hidden,
+    trees: [...document.querySelectorAll('.screen.s-upgrades .tree-chip')].map((b) => b.textContent.replace(/\d+/g, '').trim()),
+  }));
+  await page.screenshot({ path: `${OUT}/phone-onboard-stage1-upgrades.png` });
+  check('onboard: stage 1 Upgrades is the whole Chassis, no Suggested / Buy all / quantity yet', opened && shop1.cats.join() === 'Chassis' && !shop1.catRow && !shop1.suggested && !shop1.qty && shop1.trees.join() === 'Ballistics,Bastion,Reactor', shop1);
+  const v1b = await view();
+  check('onboard: opening Upgrades retires its "New" badge', v1b.badges.upgrades !== 'New', v1b.badges);
+  await page.keyboard.press('q');
+  check('onboard: Q does nothing before the quantity selector exists', await page.evaluate(() => JSON.parse(localStorage.getItem('citadel.prefs.v1') || '{}').buyQty ?? 1) === 1);
+
+  // 3. wave 6: Elements appears (the first real choice); 4. wave 10: Build and More appear
+  await withSave('s.run.deepestCleared = 6; s.meta.deepestEver = 6; s.run.wave = 7;');
+  const v2 = await view();   // coach lines show on Battle (phones)
+  await tapTab('upgrades');
+  const cats2 = await page.evaluate(() => [...document.querySelectorAll('.screen.s-upgrades .cat-tabs .tab')].filter((b) => !b.hidden).map((b) => b.textContent.replace(/\d+/g, '').trim()));
+  check('onboard: wave 6 reveals Elements (with its coach line); still no Build tab', cats2.join() === 'Chassis,Elements' && v2.tabs.join() === 'battle,upgrades' && /element/.test(v2.coach ?? ''), { cats2, tabs: v2.tabs, coach: v2.coach });
+  await withSave('s.run.deepestCleared = 10; s.meta.deepestEver = 10; s.run.checkpoint = 10; s.run.wave = 11;');
+  const v3 = await view();
+  await page.screenshot({ path: `${OUT}/phone-onboard-stage3.png` });
+  check('onboard: wave 10 reveals Build and More (New), still no Prestige tab or ability bar', v3.tabs.join() === 'battle,upgrades,build,more' && v3.badges.build !== null && v3.badges.more === 'New' && !v3.abilities, v3);
+
+  // 5. Settings → Unlock everything: every tab at once; switching it off hides them again (More / Settings stay)
+  const unlockSwitch = async () => {
+    await tapTab('more');
+    if (!(await page.locator('.more-sub .sub-title', { hasText: 'Settings' }).isVisible())) await page.locator('.menu-item', { hasText: 'Settings' }).tap();
+    await page.waitForTimeout(300);
+    await page.locator('.set-row', { hasText: 'Unlock everything' }).locator('input[type="checkbox"]').evaluate((el) => el.click());
+    await page.waitForTimeout(500);
+  };
+  await unlockSwitch();
+  const v4 = await view();
+  const onPrestige = await tapTab('prestige');
+  check('onboard: Unlock everything shows every tab (Prestige opens)', v4.tabs.join() === 'battle,upgrades,build,prestige,more' && onPrestige, v4.tabs);
+  await unlockSwitch();
+  const v5 = await view();
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('citadel.prefs.v1') || '{}').unlockAll);
+  check('onboard: switching it off hides what is not earned again, Settings stays open', v5.tabs.join() === 'battle,upgrades,build,more' && v5.body.includes('tab-more') && stored === false, { tabs: v5.tabs, stored });
+  check('onboard: zero console errors', errors.length === 0, errors);
   await ctx.close();
 }
 

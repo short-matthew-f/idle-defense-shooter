@@ -9,7 +9,7 @@ import type { UiState } from '@sim/core/types';
 import { button, h } from './dom';
 import { icon } from './icons';
 import { confirmDialog } from './modal';
-import { resetCoach, unlockedCoach } from './coach';
+import { unlockedCoach } from './coach';
 import { prefs, setPref } from './prefs';
 import { graphicsSettings } from './graphics-settings';
 import { soundSettings } from '../audio/ui';
@@ -122,7 +122,6 @@ export function helpPanel(ctx: UiCtx): HTMLElement {
   return h('div', { class: 'settings help' },
     h('h3', { class: 'sec-title', text: 'Tips' }),
     h('ul', { class: 'tips' }, ...tips.map((m) => h('li', { text: m.text }))),
-    h('div', { class: 'row gap wrap' }, button('Show tips again', () => { resetCoach(); ctx.toast('Tips will show again, one at a time', 'info'); }, { class: 'btn' })),
     h('h3', { class: 'sec-title', text: 'Touch' }),
     h('dl', { class: 'keys' }, ...GESTURES.flatMap(([k, d]) => [h('dt', { text: k }), h('dd', { text: d })])),
     h('h3', { class: 'sec-title', text: 'Keyboard' }),

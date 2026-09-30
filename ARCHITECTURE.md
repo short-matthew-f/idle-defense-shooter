@@ -83,7 +83,7 @@ importing systems, and warns on files over 700 lines. A line opts out with `lint
  7  SYSTEM_ORDER plugins (systems/index.ts), in this order:
       bosses → ballistics → ordnance → drones → blade → laser → gravitics → elements → fusions →
       linkages → infusions → anomalies → progression (run/prestige.ts) → bastion → reactor →
-      abilities → directives
+      active (tap assist, salvage, Overcharge) → abilities → directives
  8  projectiles move / collide / expire                                          [core/projectiles.ts]
  9  hazards (4 Hz pulses)                                                         [core/hazards.ts]
 10  tower upkeep (core TowerSystem): invulnerability, regen, shield recharge, TowerDeath event
@@ -122,6 +122,21 @@ else `1 − min(slowCap, slowPerStack × chill)` (half on Immovable). It then cl
 AI's auras multiply it afterwards (commanding ×1.2, boss haste ×1.5, boss accelerate ×1.6). To slow
 enemies, apply chill / freeze / stagger or raise `fieldSlow`; `bossSlowUntil` and `freezeLockUntil` are
 timers, not slows.
+
+## Active edge (tap-to-assist, salvage, Overcharge)
+
+`systems/active.ts` (numbers: `data/active.ts`, the one `ACTIVE` table; mechanics and measurements: `docs/ACTIVE.md`).
+Three player-only Commands, never an error (a tap that finds nothing is ignored, so the UI never toasts):
+`tap_assist {x, y}`, `collect_salvage {x, y}`, `overcharge {action}`. `onCommand` records them; `update()` resolves them
+after the spatial hash is rebuilt. The system owns a private `Prng` (reseeded per attempt from the Prestige seed and the
+attempt count), so salvage rolls and assist crits never perturb the combat stream. Salvage values read
+`WorldImpl.killScrap[i]` (the Scrap `finishKill` just paid for enemy i, set before the onKill hooks, so nested kills
+cannot overwrite it) and pay through `World.addScrap`. Events: `Ev.Assist` / `Ev.Overcharge` are the causes of their
+Hits (srcTag `assist` / `overcharge`, source `ability`); `Kill → Ev.SalvageDrop → Ev.SalvageCollect` (src `salvage.tap` /
+`salvage.passive`). `UiState.active` carries the cooldown, chain and meter. Crates are drawn as layer-7 Diamonds with
+`aux1 = SALVAGE_MARK`; `app/pick.ts nearestCrate` and `app/overlay.ts` find them by that mark (like the reticle).
+The app routes taps (`app/active-tap.ts`): crate → collect; enemy → assist + `designate_at` (rapid re-taps skip the
+designation toggle); a hold claimed on the tower (`Input.onHoldStart`) charges Overcharge. UI: `src/ui/active.ts`.
 
 ## Economy constants (design §17) — implement in `economy/curves.ts`
 
