@@ -129,9 +129,9 @@ describe('Quartermaster: gates', () => {
     const w = sim.world;
     w.run.scrap = 1e9;
     w.run.tick = 1;                                         // not a pass tick
-    tick(sim, QM_INTERVAL_TICKS - 2);
+    tick(sim, QM_INTERVAL_TICKS - 1);                       // systems see ticks 1..59
     expect(qmBuys(sim).length).toBe(0);
-    tick(sim);                                              // run.tick hits a multiple of 60
+    tick(sim);                                              // they see tick 60: a pass
     const n = qmBuys(sim).length;
     expect(n).toBeGreaterThan(0);
     expect(n).toBeLessThanOrEqual(QM_MAX_RANKS_PER_PASS);
@@ -163,7 +163,7 @@ describe('Quartermaster: gates', () => {
     w.run.scrap += 1e5;                                     // (whatever offline credited plus a lump that is not income)
     expect(runQuartermaster(w)).toBe(0);
     const s0 = w.run.scrap;
-    w.gainScrap(2000);                                      // kill income
+    w.addScrap(2000);                                      // kill income
     runQuartermaster(w);
     expect(s0 + 2000 - w.run.scrap).toBeLessThanOrEqual(1000 + 1e-9);
     expect(s0 + 2000 - w.run.scrap).toBeGreaterThan(0);

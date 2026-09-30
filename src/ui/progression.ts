@@ -241,9 +241,14 @@ const WHY: Record<StarterReason, (label: string) => string> = {
  */
 export function starterPick(s: StarterState, rate = 0): StarterPick | null {
   const byId = new Map(s.shop.map((e) => [e.node, e]));
-  const cands = STARTER_NODES.map((x) => ({ ...x, e: byId.get(x.node) })).filter((x): x is { node: typeof x.node; label: typeof x.label; e: ShopEntry } => !!x.e && !x.e.locked && x.e.rank < x.e.maxRank);
+  interface Cand { node: string; label: string; e: ShopEntry }
+  const cands: Cand[] = [];
+  for (const x of STARTER_NODES) {
+    const e = byId.get(x.node);
+    if (e && !e.locked && e.rank < e.maxRank) cands.push({ node: x.node, label: x.label, e });
+  }
   if (!cands.length) return null;
-  const find = (node: string): (typeof cands)[number] | undefined => cands.find((c) => c.node === node);
+  const find = (node: string): Cand | undefined => cands.find((c) => c.node === node);
   const hpFrac = s.tower.maxHp > 0 ? s.tower.hp / s.tower.maxHp : 1;
   let taken = 0;
   for (const v of Object.values(s.run.attemptDamageTaken ?? {})) if (v > 0) taken += v;
@@ -251,9 +256,9 @@ export function starterPick(s: StarterState, rate = 0): StarterPick | null {
   const order: { node: string; reason: StarterReason }[] = [];
   if (hurt) order.push({ node: 'bastion.max_hp', reason: 'hull' });
   if (s.wave.enemiesAlive >= PRESSURE_ALIVE) order.push({ node: 'ballistics.attack_speed', reason: 'pressure' });
-  const dmg = find('ballistics.damage'), rate = find('ballistics.attack_speed');
+  const dmg = find('ballistics.damage'), fr = find('ballistics.attack_speed');
   const calm: { node: string; reason: StarterReason }[] = [{ node: 'ballistics.damage', reason: 'damage' }, { node: 'ballistics.attack_speed', reason: 'rate' }];
-  if (dmg && rate && rate.e.cost < dmg.e.cost) calm.reverse();
+  if (dmg && fr && fr.e.cost < dmg.e.cost) calm.reverse();
   order.push(...calm, { node: 'bastion.max_hp', reason: 'hull' });
   const seen = new Set<string>();
   const ranked = order.filter((o) => (seen.has(o.node) ? false : (seen.add(o.node), true)));

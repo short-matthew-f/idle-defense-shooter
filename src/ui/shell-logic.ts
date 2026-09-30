@@ -5,6 +5,7 @@
  * Battle).
  */
 import type { UiState } from '@sim/core/types';
+import type { Features } from './progression';
 
 export type TabId = 'battle' | 'upgrades' | 'build' | 'prestige' | 'more';
 export type ShellLayout = 'phone' | 'rail' | 'desktop';
@@ -51,7 +52,7 @@ export function battleInsets(layout: ShellLayout, m: { top: number; tabBar: numb
 
 // ---------------------------------------------------------------- badges
 
-export interface Badge { text: string; kind: 'count' | 'alert' | 'new'; label: string }
+export interface Badge { text: string; kind: 'count' | 'alert' | 'new'; label: string; /** a newly revealed tab (pulses until visited) */ fresh?: boolean }
 export type BadgeState = Pick<UiState, 'shop' | 'forecast'> & {
   /** `boonOffer`: Boons (optional so older call sites and tests need not set it). */
   run: Pick<UiState['run'], 'pendingDraft' | 'hardpointSlotsOpen' | 'attunementSlotsOpen' | 'deepestCleared'> & Partial<Pick<UiState['run'], 'boonOffer'>>;
@@ -89,8 +90,11 @@ export function openForkCount(s: BadgeState): number {
   return seen.size;
 }
 
-/** Badge per tab (null = none). Badges are the only UI text allowed under 14 px. */
-export function tabBadges(s: BadgeState): Record<TabId, Badge | null> {
+/**
+ * Badge per tab (null = none). Badges are the only UI text allowed under 14 px. `fresh` names tabs revealed by the
+ * unlock ladder but never opened: they read "New" (an alert still wins).
+ */
+export function tabBadges(s: BadgeState, fresh: ReadonlySet<TabId> = new Set()): Record<TabId, Badge | null> {
   const n = affordableCount(s.shop);
   const slots = emptySlots(s);
   const forks = openForkCount(s);
@@ -104,13 +108,30 @@ export function tabBadges(s: BadgeState): Record<TabId, Badge | null> {
   const ascend = s.run.deepestCleared >= 100 && s.meta.ascension < 99;
   const prestige: Badge | null = s.forecast?.recommended ? { text: '!', kind: 'alert', label: 'Prestige recommended' }
     : ascend ? { text: '!', kind: 'alert', label: 'Ascension open' } : null;
-  return {
+  const out: Record<TabId, Badge | null> = {
     battle: null,
     upgrades: n > 0 ? { text: n > 99 ? '99+' : String(n), kind: 'count', label: `${n} affordable` } : null,
     build,
     prestige,
     more: null,
   };
+  for (const t of fresh) if (t !== 'battle' && out[t]?.kind !== 'alert') out[t] = { text: 'New', kind: 'new', label: 'New: not opened yet', fresh: true };
+  return out;
+}
+
+// ---------------------------------------------------------------- progressive reveal
+
+/**
+ * Tabs in the bar for these features (progression.ts). Battle is always there; the bar itself shows only when
+ * some other tab is (stage 0 has no tab bar at all).
+ */
+export function tabsShown(f: Pick<Features, 'upgradesTab' | 'buildTab' | 'prestigeTab' | 'moreTab'>): Record<TabId, boolean> {
+  return { battle: true, upgrades: f.upgradesTab, build: f.buildTab, prestige: f.prestigeTab, more: f.moreTab };
+}
+
+/** Tabs that can be navigated to: the ones in the bar, plus More (Settings and Help stay reachable from a Battle chip). */
+export function tabReachable(f: Pick<Features, 'upgradesTab' | 'buildTab' | 'prestigeTab' | 'moreTab'>, tab: TabId): boolean {
+  return tab === 'more' || tabsShown(f)[tab];
 }
 
 // ---------------------------------------------------------------- checkpoint cycle bar

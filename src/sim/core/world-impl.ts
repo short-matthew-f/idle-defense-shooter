@@ -77,6 +77,11 @@ export class WorldImpl implements World {
   lastTowerDamageTick = -1_000_000;
   /** Scrap earned (all sources) this Prestige; the run machine measures rates from it. */
   scrapEarned = 0;
+  /**
+   * Scrap each kill paid, by enemy pool index (set in finishKill before the onKill hooks; valid for the rest of that
+   * tick, until compaction). systems/active.ts values salvage crates from it (nested kills cannot overwrite it).
+   */
+  readonly killScrap = new Float64Array(MAX_ENEMIES);
   /** Scrap earned during the current wave. */
   waveScrap = 0;
   /** Kills during the current wave. */
@@ -300,6 +305,7 @@ export class WorldImpl implements World {
     const bossMul = (e.flags[i] & (EnemyFlag.Boss | EnemyFlag.Elite)) ? this.stats.get('economy.boss_scrap_mul') : 1;   // WP2: Boss Scavenging
     const scrap = scrapPerKill(w, e.scrapMul[i], run.threatDial) * first * this.stats.get('economy.scrap_mul') * bossMul * Math.max(1, e.clumpCount[i]);
     this.addScrap(scrap);
+    this.killScrap[i] = scrap;   // Active edge: a salvage crate from this kill is worth a multiple of it (onKill hooks read it)
     // Command Energy
     const f = e.flags[i];
     this.gainCE((f & EnemyFlag.Elite) ? 12 : 1);   // balance pass: ordinary kills 2 → 1 CE (docs/BALANCE.md)
