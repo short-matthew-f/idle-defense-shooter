@@ -12,27 +12,27 @@ active policy's use of them).
 | Piece | Available | What the player does | What happens | If the player does nothing |
 | --- | --- | --- | --- | --- |
 | **Tap-to-assist** | from the first second, in combat | tap an enemy | the tower fires a free bonus shot at it (tracer, muzzle flash, hit sparks, a crack); the same tap still designates it | the gun fires as always |
-| **Salvage crates** | from wave 2 | tap a glowing crate drifting to the tower | Scrap burst worth 4–8× the kill's Scrap; quick collects chain ×1 → ×1.5 → … → ×3; a "+Scrap ×chain" floater and a pluck whose pitch climbs along the chain | the passive collector takes the crate at the tower for 40% of its value |
-| **Overcharge** | unlocks at wave 12 (progression feature `overcharge`) | when the ring glows: press and hold the button (or the tower), release as the arc crosses the bright band | a beam along the designated enemy's line (else the nearest enemy): 4 primary shots of damage to every enemy on it and a 1 s stagger; outside the window 2 shots and a 0.4 s stagger (never a fail state) | the meter waits, full, forever |
+| **Salvage crates** | from wave 2 | tap a glowing crate drifting to the tower | Scrap burst worth 4–8× the kill's Scrap; quick collects chain ×1 → ×1.5 → … → ×3; a "+Scrap ×chain" floater and a pluck whose pitch climbs along the chain | the passive collector takes the crate at the tower for 50% of its value |
+| **Overcharge** | unlocks at wave 12 (progression feature `overcharge`) | when the ring glows: press and hold the button (or the tower), release as the arc crosses the bright band | a beam along the designated enemy's line (else the nearest enemy): 3 primary shots of damage to every enemy on it and a 1 s stagger; outside the window 1.5 shots and a 0.4 s stagger (never a fail state) | the meter waits, full, forever |
 
 Details the sim enforces (`systems/active.ts`):
 
 - **Commands** are player-only and never an error: `tap_assist {x, y}`, `collect_salvage {x, y}`,
   `overcharge {action: 'charge' | 'release' | 'cancel'}`. A tap that finds nothing, lands inside the cooldown or comes
   outside combat does nothing, so spamming never toasts and never gains anything.
-- **Assist**: one shot per max(0.6 s, 1 / (0.15 × the primary's shots/s)) of sim time: the assist never adds more than
-  15% of the gun's own shots (3.3 s at the base 2 shots/s, the 0.6 s floor from ~11 shots/s; see *Measured active edge*
+- **Assist**: one shot per max(0.6 s, 1 / (0.06 × the primary's shots/s)) of sim time: the assist never adds more than
+  6% of the gun's own shots (about 8.3 s at the base 2 shots/s, the 0.6 s floor from ~28 shots/s; see *Measured active edge*
   for why). Damage = 1.0 × `ballistics.damage` (the primary's current shot), crit at `ballistics.crit_chance` + 10%
   (like manual aim) × `ballistics.crit_damage`. The enemy nearest the tap within max(32, radius + 12) world units. Not in the Blackout Trial (it disables
   active input).
-- **Salvage**: drop chance per kill 1.2% (ordinary), 8% (elite), 40% (boss), rolled on the system's own PRNG stream
+- **Salvage**: drop chance per kill 0.6% (ordinary), 4% (elite), 20% (boss), rolled on the system's own PRNG stream
   (reseeded per attempt from the Prestige seed and the attempt number), so the combat stream is untouched and runs stay
   reproducible. At most 6 live crates (further drops are skipped). Every crate lives exactly 5 s, drifting in a
   straight line from the kill to the tower. A tap takes the crate nearest the point within 56 world units (the app
   snaps taps to the drawn crate with a ≥ 44 CSS px reach). Chain: a collect within 1.5 s (real time) of the previous
   one adds a link; multiplier 1 + 0.5 × (links − 1), max ×3; the chain lapses after the window. A crate reaching the
-  tower pays 40% (no chain; it does not break one). Crates keep drifting and paying between waves; on death the
-  crates in flight pay at 40%.
+  tower pays 50% (no chain; it does not break one). Crates keep drifting and paying between waves; on death the
+  crates in flight pay at 50%.
 - **Scrap path**: a crate's value is a multiple of `World.killScrap[i]`, the Scrap the kill itself paid, so it already
   carries the first-clear ×3 (Strip Mine ×4/×5), `economy.scrap_mul` (Reclamation, Prestige, Constellation), Boss
   Scavenging and clump merges; no multiplier is applied twice. The payout goes through `World.addScrap`, the kill
@@ -55,27 +55,27 @@ Details the sim enforces (`systems/active.ts`):
 | Constant | Value | Notes |
 | --- | --- | --- |
 | `assist.cooldown` | 0.6 s | sim time; the floor |
-| `assist.maxPrimaryShare` | 15% | cooldown ≥ 1 / (share × primary shots/s): 3.3 s at 2 shots/s |
+| `assist.maxPrimaryShare` | 6% | cooldown ≥ 1 / (share × primary shots/s): ~8.3 s at 2 shots/s, the 0.6 s floor from ~28 shots/s (was 15%: tunable follow-up) |
 | `assist.damageMul` | 1.0 | × `ballistics.damage` (spec range 1.0–1.5; tuned to the low end, see below) |
 | `assist.critBonus` | +10% | like manual aim |
 | `assist.reach`, `pad` | 32, +12 | world units (sim-side) |
 | `assist.meterPerTap` | 2 | Overcharge meter per assist hit |
 | `salvage.fromWave` | 2 | |
-| `salvage.chance` / `eliteChance` / `bossChance` | 1.2% / 8% / 40% | own PRNG stream |
+| `salvage.chance` / `eliteChance` / `bossChance` | 0.6% / 4% / 20% | own PRNG stream (was 1.2% / 8% / 40%) |
 | `salvage.valueMin`–`valueMax` | 4–8× | the kill's Scrap |
 | `salvage.lifeSeconds` | 5 s | kill → tower |
 | `salvage.maxLive` | 6 | |
 | `salvage.tapReach` | 56 | world units; the UI reach is ≥ 44 CSS px |
 | `salvage.chainWindow` | 1.5 s | real time |
 | `salvage.chainStep`, `chainMax` | +0.5, ×3 | |
-| `salvage.passiveValue` | 40% | the passive collector |
+| `salvage.passiveValue` | 50% | the passive collector (was 40%: tunable follow-up) |
 | `overcharge.unlockWave` | 12 | max(deepest ever, deepest this run) |
 | `overcharge.meterMax` | 100 | |
 | `overcharge.meterPerHit`, `shotCapPerSecond` | 1, 2/s | ~50 s to fill from shots alone |
 | `overcharge.perfectFrom`–`perfectTo` | 0.75–1.2 s | hold time |
 | `overcharge.releaseLatency` | 0.3 s | a release reports the hold the player saw (the UI arc); accepted when at most this much below the sim's hold, never above it |
 | `overcharge.maxHoldSeconds` | 2.2 s | auto-release (weak) |
-| `overcharge.perfectMul` / `weakMul` | 4 / 2 | primary shots per enemy on the line |
+| `overcharge.perfectMul` / `weakMul` | 3 / 1.5 | primary shots per enemy on the line (was 4 / 2) |
 | `overcharge.beamHalfWidth`, `beamLength` | 26, 560 | |
 | `overcharge.staggerSeconds` / `weakStaggerSeconds` | 1.0 / 0.4 s | bosses: interrupt only |
 
@@ -100,7 +100,7 @@ four ability slots make the row wide. It shows when the sim has unlocked Overcha
 `ACTIVE.overcharge.unlockWave`); "Unlock everything" reveals the feature early, but the button stays hidden until the sim
 would accept a charge. The tower hold needs the same feature. The ladder also gates the taps (`app/active-tap.ts`
 `TapGates`): `tapAssist` (wave 0) for assist shots, `salvage` (the first boss, wave 5) for tap-collecting; on waves 2–4
-crates already drift in and pay the passive 40%, and a tap near one is an ordinary field / enemy tap. Its ring shows the meter; while charging, a white arc sweeps once per
+crates already drift in and pay the passive 50%, and a tap near one is an ordinary field / enemy tap. Its ring shows the meter; while charging, a white arc sweeps once per
 2.2 s and the timing window is the bright band; the label reads …, NOW, LATE. The arc follows the sim's hold (UiState,
 extrapolated at most 0.15 s between updates), so on a slow device where the sim lags the wall clock, the button, the
 in-world ring and the sim's timing agree. The `Ev.Overcharge` event carries `data.hold` (s) for the Inspector and tests. Coach lines (src/ui/coach.ts, live
@@ -133,7 +133,7 @@ instead of 3); attempts summed over the checkpoints both runs reached. `active:o
 three pieces (`RunConfig.activeExtras = false`); a per-piece run uses only that piece (`activeExtras: ['assist']` …).
 The active policy plays like a human: ≤ 2 taps/s in total, collects 70% of crates 0.35 s or more after they drop, taps
 the boss / the designated enemy / the enemy nearest the tower, releases Overcharge at the window centre ± 0.3 s. The
-idle policy never taps (it still gets the 40% passive collector).
+idle policy never taps (it still gets the passive collector, 50% since the final tuning).
 
 The balance data changed several times while this was built (other passes retuned the early curve, bosses and
 Prestige), and the edge of the *existing* active play (abilities, Counters, designation) moved with it: 24.0% at the
@@ -146,46 +146,62 @@ the total stays inside 15–40%: 1 − 0.76 × (1 − m) ≤ 40% needs m ≤ ~21
 | 1 (6 seeds) | 1.25×, 0.6 s | 5% / 35% / 100% | 4/s, ×5 | 26–37% |
 | 2 (6 seeds) | 1.0×, 0.6 s | 4% / 25% / 100% | 3/s, ×5 | 14–36% (per piece: assist 5–19%, salvage 0–19%, Overcharge 2–10%) |
 | 3 (6 seeds) | 1.0×, ≤ 35% of primary shots | 2.5% / 15% / 100% | 2/s, ×4 | 34% |
-| **final (12 seeds)** | **1.0×, ≤ 15% of primary shots** | **1.2% / 8% / 40%** | **2/s, ×4** | **19.4%** (assist 12.6%, salvage 5.4%) |
+| 4 (12 seeds; re-measured on the onboarding balance) | 1.0×, ≤ 15% of primary shots | 1.2% / 8% / 40% | 2/s, ×4 | 19.4% (assist 12.6%, salvage 5.4%): total 49.8%, above the band |
+| **final (24 seeds), see below** | **1.0×, ≤ 6% of primary shots** | **0.6% / 4% / 20%, passive 50%** | **2/s, ×3 (weak ×1.5)** | **5.1%: total 36.4%** |
 
-Final measurement, 12 seeds (1–12), re-run on 2026-09-30 on the finished onboarding balance (Frontier at wave 28,
-first Prestige ~28; the tap-routing fixes below are app-side and do not touch the sim). The numbers reproduce the tuning
-run exactly (the sim is deterministic and nothing sim-side changed since):
+### Band tuning (2026-09-30, on the onboarding balance)
 
-| Run | Attempts over common checkpoints (≤ 30) | vs idle | Pre-Frontier only (checkpoints ≤ 25) | vs idle |
+Re-measured on the finished onboarding balance (Frontier at wave 28, first Prestige ~28), the round-4 constants gave
+49.8% fewer attempts than idle (12 seeds: idle 249, active without the pieces 163, active 125), above the 15–40% band.
+Only `data/active.ts` was tuned (the Broodheart and ability balance were left alone). Trials (fewer attempts than idle,
+common checkpoints; pieces = active vs active without them):
+
+| Trial | assist share | salvage ordinary / elite / boss, value | passive | Overcharge perfect / weak | seeds | total | before the Frontier | pieces |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| round 4 | 15% | 1.2 / 8 / 40%, 4–8× | 40% | 4 / 2 | 12 | 49.8% | 52.3% | 19.4% |
+| t1 | 10% | 0.8 / 5 / 25%, 4–8× | 40% | 4 / 2 | 12 | 41.7% | 45.3% | 13.6% |
+| t2 | 8% | 0.6 / 4 / 20%, 4–8× | 40% | 4 / 2 | 12 / 24 | 39.3% / 39.7% | 39.4% / 44.2% | 11.5% / 11.9% |
+| t3 | 7% | 0.5 / 3 / 20%, 4–8× | 40% | 4 / 2 | 12 | 40.2% | 37.1% | 15.6% |
+| t4 | 7% | 0.5 / 3 / 15%, 3–6× | 40% | 3 / 1.5 | 24 | 39.6% | 41.5% | 9.3% |
+| **t5 (shipped)** | **6%** | **0.6 / 4 / 20%, 4–8×** | **50%** | **3 / 1.5** | **24** | **36.4%** | **37.7%** | **5.1%** |
+
+Lessons: 12 seeds move the total by ~3 points (the Frontier boss grind dominates the sums), and trimming salvage chances
+barely narrows the gap because idle's passive collector loses almost as much as the active player; what closed it was
+the assist share and a larger passive payout (idle keeps half of every crate).
+
+Final measurement (t5 constants, 24 seeds 1–24, Generalist, 4 sim-hours, stop at wave 100):
+
+| Run | Attempts over common checkpoints (≤ 30) | vs idle | Before the Frontier (checkpoints ≤ 25) | vs idle |
 | --- | --- | --- | --- | --- |
-| idle | 249 | — | 149 | — |
-| active, no new pieces (`activeExtras: false`) | 163 | 34.5% fewer | 97 | 34.9% fewer |
-| **active, all three pieces** | **125** | **49.8% fewer** | **71** | **52.3% fewer** |
-| active vs active without the pieces | 150 vs 186 | 19.4% fewer | 71 vs 97 | 26.8% fewer |
-| per piece vs `active:off` | assist 153 vs 175 (12.6%), salvage 176 vs 186 (5.4%), Overcharge 175 vs 176 (0.6%) | | assist 77, salvage 94, Overcharge 100 (vs 97) | |
+| idle | 533 | — | 297 | — |
+| active, no new pieces (`activeExtras: false`) | 357 | 33.0% fewer | 195 | 34.3% fewer |
+| **active, all three pieces** | **339** | **36.4% fewer** | **185** | **37.7% fewer** |
+| active vs active without the pieces | 351 vs 370 | 5.1% fewer | | |
 
-Attempts per checkpoint, summed over the 12 seeds (runs that reached it):
+Attempts per checkpoint, summed over the 24 seeds (runs that reached it):
 
 | Checkpoint (boss) | 5 | 10 (Broodheart) | 15 | 20 (Siege Engine) | 25 (Iron Maw) | 30 (past the Frontier) |
 | --- | --- | --- | --- | --- | --- | --- |
-| idle | 12 | 61 | 13 | 39 | 24 | 115 (9 of 12 seeds clear it) |
-| active, no new pieces | 12 | 23 | 17 | 30 | 15 | 89 (10 of 12) |
-| active, all three | 12 | 12 | 13 | 21 | 13 | 79 (10 of 12) |
+| idle | 26 | 115 | 25 | 86 | 45 | 265 (19 of 24 seeds clear it) |
+| active, no new pieces | 24 | 50 | 35 | 53 | 33 | 201 (20 of 24) |
+| active, all three | 24 | 40 | 36 | 53 | 32 | 166 (18 of 24) |
 
 Reading it:
 
-- **Idle clears every boss.** Every idle run clears every boss up to the Frontier (waves 5–25) in all 12 seeds; the
-  wave-30 boss sits past the Frontier (×3.5 HP per wave) and is the intended first wall: idle clears it in 9 of 12 seeds,
-  active in 10 of 12. Idle is at most one boss behind active in every seed (s3 / s8: idle 25, active 30), which is the
-  acceptance row's rule. Nothing here gates progress; the passive collector gives idle 40% of every crate it lets drift in.
-- **The total edge is outside the 15–40% band: 49.8% fewer attempts (52.3% before the Frontier).** The *existing*
-  active play (abilities, Counters, designation) is already 34.5% on its own, and the three pieces add 19.4% on top.
-  Most of the gap is one boss: the wave-10 Broodheart costs idle 61 attempts over 12 seeds against 23 for the existing
-  active play and 12 with the pieces (idle 3–9 attempts per seed, active 1). Inside the band would need either the
-  existing edge back near its pre-rebalance 24% (1 − 0.76 × 0.806 ≈ 39% with the same pieces), which is a job for the
-  ability / CE / Broodheart balance, or pieces worth m ≤ ~8% (1 − 0.655 × (1 − m) ≤ 40%), which would mean cutting the
-  assist's `maxPrimaryShare` to roughly a third and halving the salvage chances. Neither was done here: the balance
-  pass owns those files and had just landed. Open issue.
-- The assist's measured value is not its DPS share (15% of primary shots early is a small share of total damage) but what it
-  hits: the enemy nearest the tower, i.e. kamikazes and leakers. That is the kind of edge the pillar wants (attention
-  pays), but it is why it needed the primary-share cap: at a flat 0.6 s it roughly doubled early primary fire.
-- Overcharge moves attempts by < 1%: it unlocks at wave 12, after the boss where the edge is made.
+- **Inside the band: 36.4% fewer attempts in total, 37.7% before the Frontier.** Most of it is the existing active play
+  (abilities, Counters, designation: 33.0%); the three pieces add 5.1% on top. The Broodheart (wave 10) is still where
+  most of the edge is made (idle 115 attempts over 24 seeds, active 40).
+- **Idle clears every boss up to the Frontier** (waves 5–25) in all 24 seeds; the wave-30 boss past the Frontier
+  (×3.5 HP per wave) is the intended first wall: idle clears it in 19 of 24 seeds, active in 18. Idle is at most one
+  boss behind active in every seed (s8: idle 25, active 30), the acceptance row's rule.
+- **Tunable follow-ups.** (1) The assist now fires about every 8 s at the base 2 shots/s (it was 3.3 s) and reaches its
+  0.6 s floor only at ~28 shots/s, so early on it is an occasional bonus shot; if it feels too slow to be worth tapping,
+  raise `assist.maxPrimaryShare` and pay for it elsewhere (salvage chances, or the Broodheart / ability balance, where
+  the existing edge lives). (2) `salvage.passiveValue` is 50% (was 40%): a pro-idle change that narrows the gap; it can
+  go back to 40% if the existing edge comes down.
+- The assist's value is not its DPS share but what it hits: the enemy nearest the tower (kamikazes, leakers). That is
+  the kind of edge the pillar wants (attention pays), and why it is capped by the primary's fire rate.
+- Overcharge moves attempts by < 1% in every trial: it unlocks at wave 12, after the boss where the edge is made.
 
 Reproduce: a `tsx` script that runs `sim-cli/pool.ts` jobs `{ kind: 'attempt', cfg: { agent: 'generalist', policy,
 activeExtras, seed, maxSimSeconds: 14400, stopAtWave: 100 } }` and sums `attemptsUpTo` (sim-cli/metrics.ts) over the

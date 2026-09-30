@@ -106,7 +106,8 @@ describe('salvage', () => {
   it('drops come from the system\'s own seeded stream: same seed same drops, the combat PRNG untouched', () => {
     const run = (seed: number): Sim => {
       const sim = arena(seed); sim.world.run.wave = 4;
-      for (let r = 0; r < 40; r++) { killMany(sim, 20); tick(sim, S.lifeSeconds * TICK_RATE + 1); }
+      // enough kills for several drops at the tuned ordinary chance (~0.6%: 2,000 kills ≈ 12 expected)
+      for (let r = 0; r < 100; r++) { killMany(sim, 20); tick(sim, S.lifeSeconds * TICK_RATE + 1); }
       return sim;
     };
     const a = run(5), b = run(5), c = run(6);
@@ -323,7 +324,9 @@ describe('active edge determinism', () => {
     const s = act(sim), w = sim.world;
     w.run.wave = 4;
     let drop = events(sim, Ev.SalvageDrop)[0];
-    for (let r = 0; r < 200 && !drop; r++) { const i = dummy(sim, 200, 0, 'grunt', 1); w.killEnemy(i, -1, 'ballistics'); drop = events(sim, Ev.SalvageDrop)[0]; }
+    // kill until the first drop (at the tuned ~0.6% chance, 2,000 tries all but guarantee one)
+    for (let r = 0; r < 2000 && !drop; r++) { const i = dummy(sim, 200, 0, 'grunt', 1); w.killEnemy(i, -1, 'ballistics'); drop = events(sim, Ev.SalvageDrop)[0]; }
+    expect(drop).toBeDefined();
     const k = s.crateLive.indexOf(1);
     cmd(sim, { type: 'collect_salvage', x: s.crateX[k], y: s.crateY[k] }); tick(sim);
     const c = events(sim, Ev.SalvageCollect)[0];

@@ -13,7 +13,7 @@
  *  - Hold (the Input hold timer) on the tower while Overcharge is ready charges it; release fires. Elsewhere a hold still
  *    steers manual aim.
  *  - Gated by the unlock ladder (src/ui/progression.ts): `tapAssist` (assist shots), `salvage` (tap-collect; before it,
- *    crates still drift in and pay the passive 40%).
+ *    crates still drift in and pay the passive share, ACTIVE.salvage.passiveValue).
  */
 export const REPEAT_MS = 900;
 export const REPEAT_PX = 48;
