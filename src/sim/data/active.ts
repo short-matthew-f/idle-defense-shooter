@@ -14,7 +14,7 @@ export const ACTIVE = {
      * The assist never out-fires the gun early: its cooldown is at least 1 / (maxPrimaryShare × the primary's shots/s), so
      * it adds at most this share of the primary's shots (0.15 → 3.3 s at the base 2 shots/s; the 0.6 s floor from ~11/s).
      */
-    maxPrimaryShare: 0.15,
+    maxPrimaryShare: 0.06,
     /** Damage per assist shot as a multiple of the primary's current shot damage (ballistics.damage). */
     damageMul: 1.0,
     /** Crit chance bonus on top of ballistics.crit_chance (like manual aim). */
@@ -30,7 +30,7 @@ export const ACTIVE = {
     /** First wave that drops crates. */
     fromWave: 2,
     /** Drop chance per kill: ordinary, elite, boss (a clump rolls as ordinary but carries its merged Scrap). */
-    chance: 0.012, eliteChance: 0.08, bossChance: 0.4,
+    chance: 0.006, eliteChance: 0.04, bossChance: 0.2,
     /** A crate is worth this many times its kill's Scrap (uniform, own PRNG stream). */
     valueMin: 4, valueMax: 8,
     /** Seconds a crate drifts from the kill to the tower (every crate lives exactly this long). */
@@ -44,7 +44,7 @@ export const ACTIVE = {
     /** Chain multiplier: 1 + chainStep × (links − 1), at most chainMax. */
     chainStep: 0.5, chainMax: 3,
     /** Fraction of a crate's value the passive collector pays when the crate reaches the tower. */
-    passiveValue: 0.4,
+    passiveValue: 0.5,
   },
   overcharge: {
     /** Unlock: deepest wave ever (or this run) ≥ this (progression feature `overcharge`). */
@@ -64,7 +64,7 @@ export const ACTIVE = {
     /** Holding this long releases automatically (weak). */
     maxHoldSeconds: 2.2,
     /** Volley damage per enemy on the line, in primary shots. */
-    perfectMul: 4, weakMul: 2,
+    perfectMul: 3, weakMul: 1.5,
     /** Beam half-width (world units, added to the enemy radius) and reach. */
     beamHalfWidth: 26, beamLength: 560,
     /** Stagger on every enemy the beam hits (s; bosses: interrupt only, like EMP). Perfect only gets the full value. */
