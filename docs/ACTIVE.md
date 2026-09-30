@@ -104,7 +104,8 @@ crates already drift in and pay the passive 40%, and a tap near one is an ordina
 2.2 s and the timing window is the bright band; the label reads …, NOW, LATE. The arc follows the sim's hold (UiState,
 extrapolated at most 0.15 s between updates), so on a slow device where the sim lags the wall clock, the button, the
 in-world ring and the sim's timing agree. The `Ev.Overcharge` event carries `data.hold` (s) for the Inspector and tests. Coach lines (src/ui/coach.ts, live
-explainers: shown only while their subject is on screen, after any unread stage message, and kept up until "Got it"):
+explainers: shown only while their subject is on screen, after any unread stage message, and kept up until "Got it"
+or until the player does it: a tap collect retires `salvage`, an Overcharge release retires `overcharge`):
 `salvage` "Glowing crates: tap them for bonus Scrap. Quick taps chain." while a crate is on the field (from the wave-5
 reveal), `overcharge` "Overcharge is full: hold the glowing button, let go in the bright band." when the meter is first
 ready. The assist needs none: the stage-0 line already has the player tapping.

@@ -15,6 +15,7 @@ import { ACTIVE } from '@sim/data/active';
 import { Ev, type SimEvent, type UiState } from '@sim/core/types';
 import { h, show, styleVar, attr, text } from './dom';
 import { fmtNum } from './format';
+import { markCoachSeen } from './coach';
 import type { UiCtx } from './ctx';
 
 const O = ACTIVE.overcharge;
@@ -74,6 +75,7 @@ export class ActiveWidget {
   private raf = 0;
   private ready = false;
   private unlocked = false;
+  private collected = false;
   /** The sim's hold (s) at the last UiState while charging, and when it arrived: the arc follows the sim, not the wall clock. */
   private simHold = -1;
   private simHoldAt = 0;
@@ -110,6 +112,8 @@ export class ActiveWidget {
 
   update(ui: UiState): void {
     const a = ui.active;
+    // a tap collect happened (only those build a chain): retire the salvage coach line even if the event batch dropped it
+    if (a && a.chain > 0 && !this.collected) { this.collected = true; markCoachSeen(['salvage']); }
     this.unlocked = overchargeShown(a, this.ctx.features().overcharge);
     show(this.el, this.unlocked);
     if (!a || !this.unlocked) { if (this.charging) this.stopAnim(); return; }
@@ -134,7 +138,7 @@ export class ActiveWidget {
   }
 
   /** The tower hold started (true) or ended (false) a charge (app/game.ts sends the commands). */
-  hold(on: boolean): void { if (on) this.begin(); else this.stopAnim(); }
+  hold(on: boolean): void { if (on) this.begin(); else { if (this.charging) markCoachSeen(['overcharge']); this.stopAnim(); } }
 
   private start(): void {
     if (!this.unlocked || !this.ready || this.charging) return;
@@ -145,6 +149,7 @@ export class ActiveWidget {
   private end(cancelled: boolean): void {
     if (!this.charging) return;
     this.ctx.host.send(cancelled ? { type: 'overcharge', action: 'cancel' } : { type: 'overcharge', action: 'release', hold: this.heldSeconds() });
+    if (!cancelled) markCoachSeen(['overcharge']);   // the player found it (also on Ev.Overcharge below)
     this.stopAnim();
   }
 
@@ -181,8 +186,11 @@ export class ActiveWidget {
   /** Salvage floaters for collected crates (tap: bright, with the chain; passive: small and dim). */
   onEvents(events: readonly SimEvent[]): void {
     for (const e of events) {
+      // doing the thing retires its coach line (coach.ts 'salvage' / 'overcharge')
+      if (e.type === Ev.Overcharge) { markCoachSeen(['overcharge']); continue; }
       if (e.type !== Ev.SalvageCollect || !(e.a > 0)) continue;
       const tap = e.src === 'salvage.tap';
+      if (tap) markCoachSeen(['salvage']);
       this.floater(e.x, e.y, `+${fmtNum(e.a)}${tap && e.b >= 2 ? ` ×${(Math.min(ACTIVE.salvage.chainMax, 1 + ACTIVE.salvage.chainStep * (e.b - 1))).toFixed(1).replace(/\.0$/, '')}` : ''}`, tap);
     }
   }

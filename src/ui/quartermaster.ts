@@ -59,7 +59,7 @@ export class QuartermasterPanel {
     this.el = h('section', { class: 'qm-card', attrs: { 'aria-label': 'Quartermaster' } },
       h('div', { class: 'qm-head' },
         h('span', { class: 'qm-title' }, icon('blueprint', 'ico'), 'Quartermaster'),
-        h('label', { class: 'switch qm-master' }, this.master, h('span', { class: 'slider' }))),
+        h('label', { class: 'switch qm-master', data: { hint: 'quartermaster-toggle' } }, this.master, h('span', { class: 'slider' }))),
       this.teaser, this.body);
     show(this.body, false);
   }

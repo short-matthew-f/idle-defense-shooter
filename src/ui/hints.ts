@@ -5,8 +5,10 @@
  * at most a few words attached ("Tap here"). One ring at a time, chosen here by priority:
  *
  *   - a hint shows only while its condition holds (`when`), then retires (prefs.hintsDone, via the driver in pointer.ts);
- *   - a hint tied to a coach banner waits for that banner to show (or to have been read): while a banner is up, only its
- *     own hint may point, so the sentence and the ring always agree;
+ *   - a hint tied to a coach banner waits for that banner to show (or to have been read); while a banner is ON SCREEN
+ *     (for its first BANNER_HOLD_MS) and some hint belongs to it, only that hint may point, so the sentence and the ring
+ *     agree. A hidden banner (a phone tab covers Battle), an old one, or an info-only one (no hint of its own) holds
+ *     nothing back. "Got it" snoozes the banner's own ring; it returns until the hint really completes;
  *   - when the control sits on another screen the hint CHAINS: tab button → category chip → the control, one step per
  *     navigation (`final` marks the last step: tapping it retires the hint);
  *   - nothing points while a modal, draft or death card is open, or while an ability is armed (except the one-time
@@ -40,8 +42,13 @@ export interface HintCtx {
   done: ReadonlySet<string>;
   /** prefs.tabsVisited. */
   visited: ReadonlySet<string>;
-  /** The coach banner that is current (shown, or waiting on Battle while a phone tab covers it) and the ones read. */
-  coach: { current: string | null; seen: ReadonlySet<string> };
+  /**
+   * The coach banner that is current (shown, or waiting on Battle while a phone tab covers it), the ones read, whether
+   * the current one is on screen now (default true) and for how long it has been on screen (ms, default 0).
+   */
+  coach: { current: string | null; seen: ReadonlySet<string>; visible?: boolean; visibleMs?: number };
+  /** Hints snoozed by "Got it" on their banner (they come back once the banner is gone; see the driver). */
+  snoozed?: ReadonlySet<string>;
   /** The screen on show (null: none) and whether the Battle arena is visible (always on desktop). */
   nav: { screen: HintScreen | null; battle: boolean };
   /** The Upgrades screen's category and tree chip (slot chips are `slot:<i>`). */
@@ -209,14 +216,26 @@ export function allHints(): HintDef[] {
   return [...HINTS, ...registered].map((d, i) => ({ d, i })).sort((a, b) => a.d.prio - b.d.prio || a.i - b.i).map((x) => x.d);
 }
 
+/** How long a banner on screen keeps other hints back (after that, one the player ignores no longer starves them). */
+export const BANNER_HOLD_MS = 12_000;
+
+/**
+ * Does the current banner hold other hints back? Only while it is on screen, for its first BANNER_HOLD_MS, and only
+ * if some hint belongs to it (an info-only line never does).
+ */
+export function bannerHolds(c: Pick<HintCtx, 'coach'>): boolean {
+  const cur = c.coach.current;
+  if (cur === null || c.coach.visible === false || (c.coach.visibleMs ?? 0) > BANNER_HOLD_MS) return false;
+  return allHints().some((d) => d.coach === cur);
+}
+
 /** May `d` point now (global rules: switch, Unlock everything, armed, banners)? Ignores prefs.hintsDone. */
 function gateOpen(d: HintDef, c: HintCtx): boolean {
   if (c.armed) return !!d.whileArmed;
   if (d.whileArmed) return false;
   if (c.unlockAll && d.kind === 'reveal') return false;
-  const cur = c.coach.current;
-  if (cur !== null) return d.coach === cur;                       // a banner is up: only its own hint points
-  if (d.coach && !c.unlockAll && !c.coach.seen.has(d.coach)) return false;   // wait for the banner to show
+  if (bannerHolds(c)) return d.coach === c.coach.current;                       // its sentence is on screen: its ring only
+  if (d.coach && !c.unlockAll && d.coach !== c.coach.current && !c.coach.seen.has(d.coach)) return false;   // wait for the banner to show
   return true;
 }
 
@@ -228,7 +247,7 @@ function gateOpen(d: HintDef, c: HintCtx): boolean {
 export function nextHint(ui: HintUi, c: HintCtx, visible: (target: string) => boolean = () => true): Hint | null {
   if (!c.enabled || c.blocked) return null;
   for (const d of allHints()) {
-    if (c.done.has(d.id) || !gateOpen(d, c) || !d.when(ui, c)) continue;
+    if (c.done.has(d.id) || c.snoozed?.has(d.id) || !gateOpen(d, c) || !d.when(ui, c)) continue;
     const s = d.step(ui, c);
     if (s && visible(s.target)) return { id: d.id, ...s };
   }

@@ -8,10 +8,12 @@
  *                a few frames), and the ring hides while the target is not displayed or is covered. A short label may
  *                ride on the ring and fades after a few seconds. Reduced motion (the OS or Settings → Graphics): a static,
  *                thicker ring, no pulse.
- *   ringBox      pure: target rect → ring box (≥ 44 px, inside the safe area); labelBox places the label (tested).
+ *   ringBox      pure: target rect → ring box (≥ 44 px, inside the safe area); labelSpots lists where the label may go
+ *                (never over the ring, inside the safe area, the roomier side first); the Pointer takes the first spot that
+ *                covers no text or control, else shows no label (the banner has the sentence). Tested.
  *   HintDriver   glue: gathers the hint context from the live UI each tick, asks hints.ts `nextHint`, points, and
- *                retires hints (prefs.hintsDone) when their condition ends, their final target is tapped, or "Got it"
- *                is tapped on their banner.
+ *                retires hints (prefs.hintsDone) when their condition ends or their final target is tapped. "Got it" on
+ *                a banner only snoozes the ring pointing for it (SNOOZE_MS): it comes back until the hint completes.
  */
 import '../styles/pointer.css';
 import type { UiState } from '@sim/core/types';
@@ -28,7 +30,7 @@ import { allHints, finishedHints, initialHintsDone, nextHint, registerHint, type
 export interface Rect { left: number; top: number; width: number; height: number }
 export interface Insets { top: number; right: number; bottom: number; left: number }
 export interface RingBox { left: number; top: number; width: number; height: number; radius: number }
-export interface LabelBox { left: number; top: number; side: 'above' | 'below' | 'inside' }
+export interface LabelBox { left: number; top: number; side: 'above' | 'below' | 'left' | 'right' }
 
 /** Smallest ring (a touch target's size), and the gap between a control and its ring (the ring never covers it). */
 export const RING_MIN = 44;
@@ -61,15 +63,39 @@ export function ringBox(r: Rect, vw: number, vh: number, safe: Insets, o: { pad?
   return { left: r1(L), top: r1(T), width: r1(w), height: r1(hh), radius: r1(radius) };
 }
 
-/** Where a lw × lh label sits: above the ring if it fits in the safe area, else below, else inside its top edge. */
-export function labelBox(ring: RingBox, lw: number, lh: number, vw: number, vh: number, safe: Insets, gap = 6): LabelBox {
-  const aL = safe.left + 4, aR = vw - safe.right - 4, aT = safe.top, aB = vh - safe.bottom;
-  const left = Math.max(aL, Math.min(aR - lw, ring.left + ring.width / 2 - lw / 2));
-  const above = ring.top - gap - lh;
-  if (above >= aT) return { left: r1(left), top: r1(above), side: 'above' };
-  const below = ring.top + ring.height + gap;
-  if (below + lh <= aB) return { left: r1(left), top: r1(below), side: 'below' };
-  return { left: r1(left), top: r1(ring.top + gap), side: 'inside' };
+/**
+ * Where a lw × lh label may sit, best first: above and below the ring (the side with more room first; centred, then
+ * aligned to the ring's left and right edges), then beside it (left / right, the roomier first). Every spot lies inside
+ * the safe area and clear of the ring (so never over the target). Empty when nothing fits.
+ */
+export function labelSpots(ring: RingBox, lw: number, lh: number, vw: number, vh: number, safe: Insets, gap = 6): LabelBox[] {
+  const aL = safe.left + 4, aR = vw - safe.right - 4, aT = safe.top + 2, aB = vh - safe.bottom - 2;
+  const rR = ring.left + ring.width, rB = ring.top + ring.height;
+  const out: LabelBox[] = [];
+  const seen = new Set<string>();
+  const add = (left: number, top: number, side: LabelBox['side']): void => {
+    if (left < aL - 0.01 || left + lw > aR + 0.01 || top < aT - 0.01 || top + lh > aB + 0.01) return;
+    // clear of the ring (it encloses the target)
+    if (left < rR && left + lw > ring.left && top < rB && top + lh > ring.top) return;
+    const k = `${r1(left)},${r1(top)}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push({ left: r1(left), top: r1(top), side });
+  };
+  const clampX = (x: number): number => Math.max(aL, Math.min(aR - lw, x));
+  const xs = [clampX(ring.left + ring.width / 2 - lw / 2), clampX(ring.left), clampX(rR - lw)];
+  const above = ring.top - gap - lh, below = rB + gap;
+  const vert: [number, LabelBox['side']][] = ring.top - aT >= aB - rB ? [[above, 'above'], [below, 'below']] : [[below, 'below'], [above, 'above']];
+  for (const [y, side] of vert) for (const x of xs) add(x, y, side);
+  const cy = Math.max(aT, Math.min(aB - lh, ring.top + ring.height / 2 - lh / 2));
+  const beside: [number, LabelBox['side']][] = ring.left - aL >= aR - rR ? [[ring.left - gap - lw, 'left'], [rR + gap, 'right']] : [[rR + gap, 'right'], [ring.left - gap - lw, 'left']];
+  for (const [x, side] of beside) add(x, cy, side);
+  return out;
+}
+
+/** The best label spot, or null (labelSpots' first). */
+export function labelBox(ring: RingBox, lw: number, lh: number, vw: number, vh: number, safe: Insets, gap = 6): LabelBox | null {
+  return labelSpots(ring, lw, lh, vw, vh, safe, gap)[0] ?? null;
 }
 
 // ---------------------------------------------------------------- targets
@@ -84,7 +110,6 @@ const TARGETS = new Map<string, Resolver>([
   ['boon-chip', '.boon-chip'],
   ['build-boon', '.screen.s-build .boon-waiting'],
   ['overcharge', '.oc-btn'],
-  ['quartermaster-toggle', '.qm-card .qm-master'],
   ['field', fieldSpot],
 ]);
 
@@ -116,6 +141,33 @@ function onScreen(el: Element): DOMRect | null {
   return null;
 }
 
+/** Is (x, y) on a line of `el`'s text (its glyph boxes, not the element's box)? */
+function onText(el: Element, x: number, y: number): boolean {
+  if (!el.textContent?.trim()) return false;
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  for (const q of range.getClientRects()) if (x >= q.left - 3 && x <= q.right + 3 && y >= q.top - 2 && y <= q.bottom + 2) return true;
+  return false;
+}
+
+/**
+ * Would a label at `b` cover content? Samples a grid of points: a hit on a control (button, chip, tab, switch), on a
+ * line of text, or on a small text-less element (an icon, a bar) is content; the canvas, the page and the empty parts
+ * of containers are free.
+ */
+function covers(b: { left: number; top: number; width: number; height: number }): boolean {
+  const area = b.width * b.height;
+  for (const fy of [0.15, 0.5, 0.85]) for (const fx of [0.05, 0.3, 0.5, 0.7, 0.95]) {
+    const x = b.left + b.width * fx, y = b.top + b.height * fy;
+    const hit = document.elementFromPoint(x, y);
+    if (!hit || hit instanceof HTMLCanvasElement || hit === document.body || hit === document.documentElement || hit.id === 'ui' || hit.id === 'app') continue;
+    if (hit.closest('button, a, input, select, textarea, label, [role="button"], [role="tab"], [role="radio"]') || onText(hit, x, y)) return true;
+    const r = hit.getBoundingClientRect();
+    if (!hit.textContent?.trim() && r.width * r.height <= area * 4) return true;   // an icon, a swatch, a bar
+  }
+  return false;
+}
+
 /** The visible element (or rect) for a hint key, or null. */
 export function resolveTarget(key: string): { el: Element | null; rect: Rect } | null {
   const cands: Element[] = [...document.querySelectorAll(`[data-hint="${CSS.escape(key)}"]`)];
@@ -135,7 +187,7 @@ export function resolveTarget(key: string): { el: Element | null; rect: Rect } |
 export interface PointOpts { text?: string; id?: string }
 
 /** How long the attached label stays before it fades (the banner keeps the full sentence). */
-export const LABEL_MS = 4500;
+export const LABEL_MS = 3000;
 
 export class Pointer {
   readonly el: HTMLElement;
@@ -237,12 +289,16 @@ export class Pointer {
     rs.height = `${box.height}px`;
     rs.borderRadius = `${box.radius}px`;
     this.ring.hidden = false;
-    if (this.opts.text) {
-      this.label.hidden = false;
-      const lb = labelBox(box, this.label.offsetWidth, this.label.offsetHeight, vw, vh, safe);
-      this.label.style.transform = `translate(${lb.left}px, ${lb.top}px)`;
-      this.label.dataset.side = lb.side;
-    } else this.label.hidden = true;
+    if (!this.opts.text) this.label.hidden = true;
+    else if (!this.label.classList.contains('faded')) {   // once faded it stays put (opacity 0) until the next hint
+      // placed when the ring moves: the roomier side first, never over the target or any text / control near it
+      if (moved || this.label.hidden) {
+        this.label.hidden = false;
+        const lw = this.label.offsetWidth, lh = this.label.offsetHeight;
+        const spot = labelSpots(box, lw, lh, vw, vh, safe).find((p) => !covers({ left: p.left, top: p.top, width: lw, height: lh }));
+        if (spot) { this.label.style.transform = `translate(${spot.left}px, ${spot.top}px)`; this.label.dataset.side = spot.side; } else this.label.hidden = true;
+      }
+    }
     if (!this.visible) { this.visible = true; if (this.opts.id) this.onShown?.(this.opts.id); }
     // follow a moving control (a sliding screen, a list settling) for a few frames
     if (moved && this.follow < 30) { this.follow++; this.schedule(); } else if (!moved) this.follow = 0;
@@ -256,13 +312,14 @@ export const QM_COACH = 'qm-on';
 registerHintTarget('qm-turn-on', `.coach-banner[data-coach="${QM_COACH}"] .coach-act`);
 /**
  * After the first Prestige, while the Quartermaster is off: its banner's "Turn on" on Battle, else the switch on its
- * card (top of Upgrades). The phase-2 card may carry `data-hint="quartermaster-toggle"`; `.qm-card .qm-master` otherwise.
+ * card (top of Upgrades → Chassis or Hardpoints; quartermaster.ts tags its switch `data-hint="quartermaster-toggle"`). On the banner the ring
+ * carries no label: the button already reads "Turn on" and the banner has the sentence.
  */
 registerHint({
   id: 'quartermaster', prio: 80, coach: QM_COACH, feature: 'quartermaster', kind: 'event',
   when: (ui) => (ui.meta.prestigeCount | 0) >= 1 && !!ui.quartermaster?.unlocked && !ui.quartermaster.on,
-  step: (_ui, c) => (c.nav.battle && c.coach.current === QM_COACH ? { target: 'qm-turn-on', text: 'Tap to turn it on', final: true }
-    : c.nav.screen === 'upgrades' ? { target: 'quartermaster-toggle', text: 'Turn on the Quartermaster', final: true }
+  step: (_ui, c) => (c.nav.battle && c.coach.current === QM_COACH ? { target: 'qm-turn-on', final: true }
+    : c.nav.screen === 'upgrades' ? (c.shop.cat === 'chassis' || c.shop.cat === 'hardpoints' ? { target: 'quartermaster-toggle', text: 'Turn on the Quartermaster', final: true } : { target: 'cat-chassis', text: 'Tap here', final: false })
     : { target: 'tab-upgrades', text: 'Open Upgrades', final: false }),
 });
 /** Overcharge full (its banner is up, or read): the button. Salvage crates are drawn on the canvas: no DOM target (see report). */
@@ -300,6 +357,9 @@ function markDone(ids: readonly string[]): void {
 
 let liveDriver: HintDriver | null = null;
 
+/** "Got it" on a banner hides its ring this long; then it points again (until the hint really completes). */
+export const SNOOZE_MS = 2500;
+
 /** Help → "Replay hints": every hint may point again (where its condition still holds). */
 export function replayHints(): void {
   try { setPref('hintsDone', []); setPref('hintsInit', true); } catch { /* ignore */ }
@@ -313,6 +373,12 @@ export class HintDriver {
   private ui: UiState | null = null;
   private f: Features | null = null;
   private raf = 0;
+  /** Hints snoozed by "Got it", until (performance.now() ms). */
+  private readonly snooze = new Map<string, number>();
+  /** How long each banner id has been on screen (ms), and the last sample. */
+  private readonly bannerMs = new Map<string, number>();
+  private bannerAt = 0;
+  private bannerLast = '';
 
   constructor(root: HTMLElement, private readonly src: HintSources) {
     root.appendChild(this.pointer.el);
@@ -346,10 +412,21 @@ export class HintDriver {
     const ab = ui.build.abilities[0];
     const cost = ab ? (ui.abilities.find((a) => a.id === ab)?.cost ?? ABILITY_BY_ID.get(ab)?.cost ?? 0) : MIN_ABILITY_COST;
     const p = prefs();
+    const now = performance.now();
+    for (const [id, until] of this.snooze) if (until <= now) this.snooze.delete(id);
+    // the banner: on screen (phones hide it while a tab covers Battle), and for how long
+    const current = this.src.coach();
+    const el = document.querySelector<HTMLElement>('.coach-banner');
+    const visible = !!current && !!el && !el.hidden && el.getClientRects().length > 0 && el.getBoundingClientRect().height > 0;
+    const vKey = visible ? current! : '';
+    if (vKey && vKey === this.bannerLast) this.bannerMs.set(vKey, (this.bannerMs.get(vKey) ?? 0) + Math.min(1000, now - this.bannerAt));
+    this.bannerLast = vKey;
+    this.bannerAt = now;
     return {
       f, enabled: p.pointerHints !== false, unlockAll: f.unlockAll,
       done: new Set(p.hintsDone), visited: new Set(p.tabsVisited),
-      coach: { current: this.src.coach(), seen: new Set(p.coachSeen) },
+      coach: { current, seen: new Set(p.coachSeen), visible, visibleMs: current ? this.bannerMs.get(current) ?? 0 : 0 },
+      snoozed: new Set(this.snooze.keys()),
       nav: this.src.nav(), shop: this.src.shop(),
       blocked: this.src.blocked() || document.body.classList.contains('touch-testing'),
       armed: this.src.armed(),
@@ -392,9 +469,14 @@ export class HintDriver {
     if (!t) return;
     const ok = t.closest('.coach-banner .coach-ok');
     if (ok && cur) {
-      // "Got it" on a banner clears its ring (the hint pointing for it retires)
+      // "Got it" on a banner clears ITS ring only, for a moment: the hint comes back until it really completes
       const coach = (ok.closest('.coach-banner') as HTMLElement | null)?.dataset.coach;
-      if (coach && allHints().find((d) => d.id === cur.id)?.coach === coach) { markDone([cur.id]); this.pointer.clear(); this.cur = null; }
+      if (coach && allHints().find((d) => d.id === cur.id)?.coach === coach) {
+        this.snooze.set(cur.id, performance.now() + SNOOZE_MS);
+        this.pointer.clear();
+        this.cur = null;
+        window.setTimeout(() => this.refresh(), SNOOZE_MS + 50);
+      }
     } else if (cur && this.pointer.targetEl && this.pointer.targetEl.contains(t)) {
       // tapping the target clears the ring at once; the last step of a chain retires the hint
       if (cur.final) markDone([cur.id]);

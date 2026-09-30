@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { features, type Features } from '../../src/ui/progression';
-import { HINTS, HINT_LABEL_MAX_WORDS, allHints, finishedHints, initialHintsDone, nextHint, registerHint, type HintCtx, type HintUi } from '../../src/ui/hints';
+import { BANNER_HOLD_MS, HINTS, HINT_LABEL_MAX_WORDS, allHints, bannerHolds, finishedHints, initialHintsDone, nextHint, registerHint, type HintCtx, type HintUi } from '../../src/ui/hints';
 import { QM_COACH } from '../../src/ui/pointer';
 
 const feats = (best: number, prestige = 0, unlockAll = false): Features =>
@@ -141,6 +141,7 @@ describe('pointer hints: abilities, offers, bulk, Prestige', () => {
     const q = ui({ prestige: 1, qm: { unlocked: true, on: false } });
     expect(nextHint(q, ctx(f7, { coach: { current: QM_COACH, seen: new Set() } }))).toMatchObject({ id: 'quartermaster', target: 'qm-turn-on', final: true });
     expect(nextHint(q, ctx(f7, { nav: { screen: 'upgrades', battle: false }, done: new Set(['bulk']) }))).toMatchObject({ target: 'quartermaster-toggle' });
+    expect(nextHint(q, ctx(f7, { nav: { screen: 'upgrades', battle: false }, shop: { cat: 'elements', tree: 'fire' }, done: new Set(['bulk']) }))).toMatchObject({ target: 'cat-chassis', final: false });
     expect(nextHint(ui({ prestige: 1, qm: { unlocked: true, on: true } }), ctx(f7))).toBeNull();
   });
 });
@@ -171,3 +172,48 @@ describe('pointer hints: bookkeeping and the extension point', () => {
     expect(nextHint(ui(), ctx(feats(0)))).toBeNull();
   });
 });
+
+describe('pointer hints: banners never starve other hints', () => {
+  const f0 = feats(0);
+  const live = { starterReady: true, starterOwned: 0 };
+  const seen = new Set(['start']);
+  it('a banner on screen with a hint of its own holds the others back (its sentence and ring agree)', () => {
+    const c = ctx(f0, { coach: { current: 'boons', seen, visible: true, visibleMs: 1000 }, live });
+    expect(bannerHolds(c)).toBe(true);
+    expect(nextHint(ui(), c)).toBeNull();
+  });
+  it('a hidden banner (a phone tab covers Battle) holds nothing back', () => {
+    const c = ctx(f0, { coach: { current: 'boons', seen, visible: false, visibleMs: 1000 }, live });
+    expect(bannerHolds(c)).toBe(false);
+    expect(nextHint(ui(), c)?.id).toBe('start');
+  });
+  it(`a banner on screen for more than ${BANNER_HOLD_MS / 1000} s no longer holds the others`, () => {
+    expect(nextHint(ui(), ctx(f0, { coach: { current: 'boons', seen, visible: true, visibleMs: BANNER_HOLD_MS - 100 }, live }))).toBeNull();
+    expect(nextHint(ui(), ctx(f0, { coach: { current: 'boons', seen, visible: true, visibleMs: BANNER_HOLD_MS + 100 }, live }))?.id).toBe('start');
+  });
+  it('an info-only banner (no hint of its own) never holds', () => {
+    for (const id of ['salvage', 'machine', 'some-extra-line']) {
+      expect(allHints().some((d) => d.coach === id)).toBe(false);
+      expect(nextHint(ui(), ctx(f0, { coach: { current: id, seen, visible: true, visibleMs: 0 }, live }))?.id).toBe('start');
+    }
+  });
+  it('the current banner\'s own hint points while its banner is hidden (following the chain on another tab)', () => {
+    const u = ui({ attOpen: 1, att: [] });
+    const c = ctx(feats(6), { coach: { current: 'elements', seen: new Set(), visible: false }, nav: { screen: 'upgrades', battle: false } });
+    expect(nextHint(u, c)).toMatchObject({ id: 'elements', target: 'cat-elements' });
+  });
+});
+
+describe('pointer hints: "Got it" snoozes, never retires', () => {
+  const u = ui({ attOpen: 1, att: [] });
+  it('a snoozed hint gives way (the next one may point) and comes back when the snooze ends', () => {
+    const f2 = feats(6);
+    expect(nextHint(u, ctx(f2, { snoozed: new Set(['elements']) }))).toBeNull();
+    expect(nextHint(u, ctx(f2, { snoozed: new Set(['elements']), visited: new Set() }))?.id).toBe('tab-upgrades');
+    expect(nextHint(u, ctx(f2, { snoozed: new Set() }))?.id).toBe('elements');
+  });
+  it('snoozing is not completion: the hint is not retired while its condition holds', () => {
+    expect(finishedHints(['elements'], u, ctx(feats(6), { snoozed: new Set(['elements']) }))).toEqual([]);
+  });
+});
+

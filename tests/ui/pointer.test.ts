@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { labelBox, ringBox, RING_MIN, RING_PAD } from '../../src/ui/pointer';
+import { labelBox, labelSpots, ringBox, RING_MIN, RING_PAD } from '../../src/ui/pointer';
 
 describe('pointer ring geometry', () => {
   const safe = { top: 47, right: 0, bottom: 34, left: 0 };
@@ -34,14 +34,39 @@ describe('pointer ring geometry', () => {
     expect(ringBox({ left: 100, top: 100, width: 40, height: 40 }, 390, 844, safe, { radius: 999 })!.radius).toBe(26);
     expect(ringBox({ left: 100, top: 100, width: 200, height: 60 }, 390, 844, safe, { radius: 16 })!.radius).toBe(16 + RING_PAD);
   });
-  it('the label sits above the ring, below it near the top, inside when neither fits, and inside the safe area', () => {
+  const overlaps = (a: { left: number; top: number; width: number; height: number }, b: { left: number; top: number; width: number; height: number }): boolean =>
+    a.left < b.left + b.width && a.left + a.width > b.left && a.top < b.top + b.height && a.top + a.height > b.top;
+  it('the label goes on the side with more room (above a low control, below a high one)', () => {
     const ring = ringBox({ left: 20, top: 700, width: 350, height: 60 }, 390, 844, safe)!;
     expect(labelBox(ring, 120, 26, 390, 844, safe)).toMatchObject({ side: 'above', top: ring.top - 6 - 26 });
-    const top = ringBox({ left: 20, top: 50, width: 100, height: 40 }, 390, 844, safe)!;
-    expect(labelBox(top, 120, 26, 390, 844, safe).side).toBe('below');
+    const top = ringBox({ left: 20, top: 90, width: 100, height: 40 }, 390, 844, safe)!;
+    expect(labelBox(top, 120, 26, 390, 844, safe)?.side).toBe('below');
+    // the other side and edge-aligned variants follow, for the Pointer to try when the first covers text
+    const spots = labelSpots(ring, 120, 26, 390, 844, safe);
+    expect(spots.map((p) => p.side)).toEqual(['above', 'above', 'above', 'below', 'below', 'below'].slice(0, spots.length));
+    expect(spots.length).toBeGreaterThanOrEqual(4);
+  });
+  it('never over the ring (so never over the target), always inside the safe area; none when nothing fits', () => {
+    const cases = [
+      { left: 20, top: 700, width: 350, height: 60 }, { left: 360, top: 400, width: 30, height: 30 }, { left: 0, top: 47, width: 60, height: 40 },
+      { left: 150, top: 790, width: 90, height: 20 }, { left: 10, top: 300, width: 370, height: 200 },
+    ];
+    for (const r of cases) {
+      const ring = ringBox(r, 390, 844, safe)!;
+      for (const p of labelSpots(ring, 150, 26, 390, 844, safe)) {
+        expect(overlaps({ ...p, width: 150, height: 26 }, ring)).toBe(false);
+        expect(p.left).toBeGreaterThanOrEqual(4);
+        expect(p.left + 150).toBeLessThanOrEqual(390 - 4);
+        expect(p.top).toBeGreaterThanOrEqual(47);
+        expect(p.top + 26).toBeLessThanOrEqual(844 - 34);
+      }
+    }
     const tall = ringBox({ left: 0, top: 50, width: 390, height: 760 }, 390, 844, safe)!;
-    expect(labelBox(tall, 120, 26, 390, 844, safe).side).toBe('inside');
-    const edge = labelBox(ringBox({ left: 360, top: 400, width: 30, height: 30 }, 390, 844, safe)!, 150, 26, 390, 844, safe);
-    expect(edge.left + 150).toBeLessThanOrEqual(390 - 4);
+    expect(labelSpots(tall, 120, 26, 390, 844, safe)).toEqual([]);
+    expect(labelBox(tall, 120, 26, 390, 844, safe)).toBeNull();
+  });
+  it('a small control near a side edge gets the label beside it when above and below are full', () => {
+    const ring = ringBox({ left: 20, top: 60, width: 40, height: 740 }, 390, 844, safe)!;
+    expect(labelBox(ring, 120, 26, 390, 844, safe)?.side).toBe('right');
   });
 });
