@@ -13,7 +13,8 @@
 //                     is assigned from its picker and cast, and two enemies are designated (HUD "2/2"), one cleared by a re-tap
 //   phone onboard     (progressive reveal, src/ui/progression.ts) a fresh save: no tab bar, one Upgrade button that buys,
 //                     a coach banner; saves at waves 5 / 6 / 10: the tab bar appears with Battle + Upgrades ("New"), Elements
-//                     appears, Build + More appear; Settings → Unlock everything shows every tab, switching it off hides them
+//                     appears, Build + More appear; Settings → Unlock everything shows every tab, switching it off hides them;
+//                     a pointer ring (src/ui/pointer.ts) surrounds the stage-0 Upgrade button and clears after the purchase
 //   phone touch       (docs/TOUCH.md) More → Help → Touch test: the canvas marker lands on the tap; calibration with honest
 //                     taps says "accurate" and stores nothing; a synthetic 40 px pointer offset (taps read 40 px below the
 //                     finger) is measured, calibrated away (prefs touchCal), survives a reload, and Reset restores identity
@@ -619,9 +620,22 @@ async function onboard() {
   const before = await sum();
   await page.waitForFunction(() => { const b = document.querySelector('.starter .st-btn'); return b && !b.disabled; }, null, { timeout: 180000 });
   await page.evaluate(() => window.__citadel.game.setFast(1));
+  // pointer hints (src/ui/pointer.ts, hints.ts): a ring around the Upgrade button while it can buy, gone after the purchase
+  const ringOn = () => page.evaluate(() => {
+    const r = document.querySelector('.hint-ring'), b = document.querySelector('.starter .st-btn');
+    if (!r || r.hidden || !b) return null;
+    const a = r.getBoundingClientRect(), t = b.getBoundingClientRect();
+    return { id: r.dataset.hintId, around: a.left <= t.left && a.top <= t.top && a.right >= t.right && a.bottom >= t.bottom, ring: [a.left, a.top, a.width, a.height].map(Math.round) };
+  });
+  await page.waitForFunction(() => { const r = document.querySelector('.hint-ring'); return r && !r.hidden && r.dataset.hintId === 'start'; }, null, { timeout: 5000 }).catch(() => {});
+  const ring0 = await ringOn();
+  await page.screenshot({ path: `${OUT}/phone-onboard-stage0-ring.png` });
+  check('onboard: a pointer ring surrounds the Upgrade button at stage 0', ring0?.id === 'start' && ring0.around, ring0);
   await page.locator('.starter .st-btn').tap();
   await page.waitForTimeout(700);
   const after = await sum();
+  const ring1 = await ringOn();
+  check('onboard: the Upgrade ring clears after the purchase', ring1?.id !== 'start', ring1);
   check('onboard: the Upgrade button buys one of the three stats and says why', after > before && /^(Damage|Fire Rate|Hull|Next)\b/.test(v0.why), { before, after, why: v0.why });
   await page.locator('.coach-banner .coach-ok').tap();
   await page.waitForTimeout(200);

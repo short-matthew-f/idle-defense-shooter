@@ -127,14 +127,15 @@ const tabReveal = (tab: HintScreen, prio: number): HintDef => ({
 
 /** The built-in hints, in priority order. */
 export const HINTS: readonly HintDef[] = [
+  // stage 0 only (the Upgrades tab takes over from the first boss on)
   {
     id: 'start', prio: 10, coach: 'start', feature: 'tapAssist', kind: 'reveal',
-    when: (_ui, c) => !c.f.abilities && c.live.starterOwned === 0 && c.live.starterReady,
+    when: (_ui, c) => !c.f.upgradesTab && c.live.starterOwned === 0 && c.live.starterReady,
     step: (_ui, c) => viaBattle(c, { target: 'upgrade', text: 'Tap to upgrade', final: true }),
   },
   {
     id: 'start-again', prio: 11, coach: 'start', feature: 'tapAssist', kind: 'reveal',
-    when: (_ui, c) => !c.f.abilities && c.live.starterOwned === 1 && c.live.starterReady,
+    when: (_ui, c) => !c.f.upgradesTab && c.live.starterOwned === 1 && c.live.starterReady,
     step: (_ui, c) => viaBattle(c, { target: 'upgrade', text: 'Buy again', final: true }),
   },
   {

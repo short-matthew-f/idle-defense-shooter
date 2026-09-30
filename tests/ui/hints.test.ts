@@ -51,9 +51,11 @@ describe('pointer hints: the stage-0 Upgrade button', () => {
     expect(nextHint(ui(), ctx(f0, { done: new Set(['start']), live }))).toBeNull();
     expect(nextHint(ui(), ctx(f0, { armed: true, live }))?.id).toBe('abilities-field');   // only the "tap the field" nudge
   });
-  it('from another tab it points back to Battle first', () => {
-    const c = ctx(feats(5), { nav: { screen: 'upgrades', battle: false }, live: { starterReady: true, starterOwned: 0 } });
-    expect(nextHint(ui(), c)).toMatchObject({ id: 'start', target: 'tab-battle', final: false });
+  it('stage 0 only: from the first boss on the Upgrades tab takes over', () => {
+    expect(nextHint(ui(), ctx(feats(5), { live: { starterReady: true, starterOwned: 1 } }))).toBeNull();
+    // a desktop side panel over the arena: still pointed at (battle stays visible); a phone tab: back to Battle first
+    expect(nextHint(ui(), ctx(feats(0), { nav: { screen: 'more', battle: true }, live: { starterReady: true, starterOwned: 0 } }))).toMatchObject({ target: 'upgrade' });
+    expect(nextHint(ui(), ctx(feats(0), { nav: { screen: 'more', battle: false }, live: { starterReady: true, starterOwned: 0 } }))).toMatchObject({ target: 'tab-battle', final: false });
   });
 });
 

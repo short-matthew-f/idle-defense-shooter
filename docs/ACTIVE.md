@@ -147,28 +147,44 @@ the total stays inside 15–40%: 1 − 0.76 × (1 − m) ≤ 40% needs m ≤ ~21
 | 3 (6 seeds) | 1.0×, ≤ 35% of primary shots | 2.5% / 15% / 100% | 2/s, ×4 | 34% |
 | **final (12 seeds)** | **1.0×, ≤ 15% of primary shots** | **1.2% / 8% / 40%** | **2/s, ×4** | **19.4%** (assist 12.6%, salvage 5.4%) |
 
-Final measurement, 12 seeds, same code state:
+Final measurement, 12 seeds (1–12), re-run on 2026-09-30 on the finished onboarding balance (Frontier at wave 28,
+first Prestige ~28; the tap-routing fixes below are app-side and do not touch the sim). The numbers reproduce the tuning
+run exactly (the sim is deterministic and nothing sim-side changed since):
 
-| Run | Attempts over common checkpoints | vs idle |
-| --- | --- | --- |
-| idle | 249 | — |
-| active, no new pieces | 163 | 34.5% fewer |
-| **active, all three pieces** | **125** | **49.8% fewer** |
-| active vs active without the pieces | 150 vs 186 | 19.4% fewer |
+| Run | Attempts over common checkpoints (≤ 30) | vs idle | Pre-Frontier only (checkpoints ≤ 25) | vs idle |
+| --- | --- | --- | --- | --- |
+| idle | 249 | — | 149 | — |
+| active, no new pieces (`activeExtras: false`) | 163 | 34.5% fewer | 97 | 34.9% fewer |
+| **active, all three pieces** | **125** | **49.8% fewer** | **71** | **52.3% fewer** |
+| active vs active without the pieces | 150 vs 186 | 19.4% fewer | 71 vs 97 | 26.8% fewer |
+| per piece vs `active:off` | assist 153 vs 175 (12.6%), salvage 176 vs 186 (5.4%), Overcharge 175 vs 176 (0.6%) | | assist 77, salvage 94, Overcharge 100 (vs 97) | |
+
+Attempts per checkpoint, summed over the 12 seeds (runs that reached it):
+
+| Checkpoint (boss) | 5 | 10 (Broodheart) | 15 | 20 (Siege Engine) | 25 (Iron Maw) | 30 (past the Frontier) |
+| --- | --- | --- | --- | --- | --- | --- |
+| idle | 12 | 61 | 13 | 39 | 24 | 115 (9 of 12 seeds clear it) |
+| active, no new pieces | 12 | 23 | 17 | 30 | 15 | 89 (10 of 12) |
+| active, all three | 12 | 12 | 13 | 21 | 13 | 79 (10 of 12) |
 
 Reading it:
 
-- In the current data the *existing* active edge is already 34.5%, so the total is 49.8%, above the band. With the
-  existing edge at its pre-rebalance 24%, the same 19.4% gives 1 − 0.76 × 0.806 ≈ 39%: inside 15–40%. Bringing the
-  existing edge back to ~24% is a job for the ability / CE balance, not these pieces; if it stays at ~34%, the knobs
-  are `assist.maxPrimaryShare` (the biggest: the assist's value is mostly survival, killing leakers near the tower) and
-  the salvage chances.
+- **Idle clears every boss.** Every idle run clears every boss up to the Frontier (waves 5–25) in all 12 seeds; the
+  wave-30 boss sits past the Frontier (×3.5 HP per wave) and is the intended first wall: idle clears it in 9 of 12 seeds,
+  active in 10 of 12. Idle is at most one boss behind active in every seed (s3 / s8: idle 25, active 30), which is the
+  acceptance row's rule. Nothing here gates progress; the passive collector gives idle 40% of every crate it lets drift in.
+- **The total edge is outside the 15–40% band: 49.8% fewer attempts (52.3% before the Frontier).** The *existing*
+  active play (abilities, Counters, designation) is already 34.5% on its own, and the three pieces add 19.4% on top.
+  Most of the gap is one boss: the wave-10 Broodheart costs idle 61 attempts over 12 seeds against 23 for the existing
+  active play and 12 with the pieces (idle 3–9 attempts per seed, active 1). Inside the band would need either the
+  existing edge back near its pre-rebalance 24% (1 − 0.76 × 0.806 ≈ 39% with the same pieces), which is a job for the
+  ability / CE / Broodheart balance, or pieces worth m ≤ ~8% (1 − 0.655 × (1 − m) ≤ 40%), which would mean cutting the
+  assist's `maxPrimaryShare` to roughly a third and halving the salvage chances. Neither was done here: the balance
+  pass owns those files and had just landed. Open issue.
 - The assist's measured value is not its DPS share (15% of primary shots early is a small share of total damage) but what it
   hits: the enemy nearest the tower, i.e. kamikazes and leakers. That is the kind of edge the pillar wants (attention
   pays), but it is why it needed the primary-share cap: at a flat 0.6 s it roughly doubled early primary fire.
-- Idle vs active: all runs wall at checkpoint 25–30 in 4 h in the current data; idle is at most one boss behind active in
-  all 12 seeds (s3 / s8: idle 25, active 30). Nothing here gates progress; the passive
-  collector gives idle 40% of every crate it lets drift in.
+- Overcharge moves attempts by < 1%: it unlocks at wave 12, after the boss where the edge is made.
 
 Reproduce: a `tsx` script that runs `sim-cli/pool.ts` jobs `{ kind: 'attempt', cfg: { agent: 'generalist', policy,
 activeExtras, seed, maxSimSeconds: 14400, stopAtWave: 100 } }` and sums `attemptsUpTo` (sim-cli/metrics.ts) over the
