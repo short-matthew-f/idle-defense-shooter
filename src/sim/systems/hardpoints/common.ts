@@ -197,7 +197,7 @@ export function launchRackMissile(w: World, target: number, damage: number, srcT
   const a = atan2(ty, tx) + angleOffset;
   return spawnSeeker(w, {
     kind: ProjKind.Missile, source: SRC_ORDNANCE, srcTag, x: cos(a) * TOWER_RADIUS, y: sin(a) * TOWER_RADIUS, angle: a, speed,
-    damage, radius: 4, blast: s.get('ordnance.blast_radius'), life: Math.ceil((range * 2.2 / speed) * 60),
+    damage, radius: 4, blast: s.get('ordnance.blast_radius') * (s.get('combat.blast_radius_mul') || 1), life: Math.ceil((range * 2.2 / speed) * 60),
     target, element: infusedElement(s, 'ordnance'), cause, bits: 0,
   });
 }

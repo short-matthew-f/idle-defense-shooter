@@ -58,7 +58,7 @@ export class TrialsPanel {
       this.el.appendChild(h('div', { class: `trial${isAct ? ' active' : ''}${done >= 3 ? ' complete' : ''}` },
         h('div', { class: 'trial-main' }, h('div', { class: 'trial-name', text: t.name }),
           h('p', { class: 'trial-c' }, h('b', { text: 'Constraint: ' }), t.constraint),
-          h('p', { class: 'trial-r' }, h('b', { text: 'Reward: ' }), t.reward), pips),
+          h('p', { class: 'trial-r' }, h('b', { text: `Reward (first tier, wave ${t.tiers[0]}): ` }), t.reward, done > 0 ? h('span', { class: 'trial-got', text: ' · earned' }) : null), pips),
         btn));
     }
   }

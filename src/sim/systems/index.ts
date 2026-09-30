@@ -16,6 +16,7 @@ import { BossSystem } from '../enemies/bosses';   // WP5
 import { ElementsSystem } from './elements';     // WP2
 import { FusionsSystem } from './fusions';       // WP2
 import { AnomaliesSystem } from './anomalies';   // WP8
+import { ConstellationSystem } from './constellation';   // Constellation Singularity bridges (EFFECT-AUDIT)
 import { BoonsSystem } from './boons';           // Boons (attempt-scoped rewards)
 import { ProgressionSystem } from '../run/prestige';   // WP8
 import { BastionSystem } from './bastion';       // WP2
@@ -36,6 +37,7 @@ export const SYSTEM_ORDER: (() => System)[] = [
   () => new LinkagesSystem(),                   // WP3: weapon + chassis Linkages (after elements/fusions)
   () => new InfusionsSystem(),                  // WP3: Infusion twists
   () => new AnomaliesSystem(),                  // WP8: Anomalies, Prestige IV combat nodes, Pacifist Core
+  () => new ConstellationSystem(),              // Constellation Singularity bridges (Focal Reactor, Deployment Charge, Prism Battery)
   () => new BoonsSystem(),                      // Boons: mechanical boons (data/boons.ts; stat boons resolve in core/stats.ts)
   () => new ProgressionSystem(),                // WP8: Codex, Forecast, Trials, blueprints, checkpoint bookkeeping
   () => new BastionSystem(),                    // WP2: Bastion doctrines

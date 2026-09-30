@@ -156,6 +156,7 @@ export class GraviticsSystem implements System {
     const bx = w.enemies.x[best], by = w.enemies.y[best], br = Math.sqrt(bx * bx + by * by);
     const kIn = br > 1e-6 ? Math.max(0, br - this.R * 0.25) / br : 0;
     this.open(k, bx * kIn, by * kIn, this.R, Math.max(1, Math.round(this.duration * (w.signals?.wellLifeMul ?? 1))), 1, false);   // Boons: Anchor Well
+    if (w.signals) w.signals.wellLifeMul = 1;   // consumed: only the first well of the wave (not a second one opening this tick) lasts longer
     w.emit(Ev.Fx, 'gravitics.well', k, bestScore, this.wx[k], this.wy[k], -1);
   }
 

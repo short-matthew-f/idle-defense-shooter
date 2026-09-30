@@ -28,7 +28,7 @@ export const BALLISTICS: TreeDef = {
     stat('ballistics.crit_damage', 'Hollow Points', '+10% critical damage per rank (base ×1.5).', 'add', 0.1, 25, 1.19, 35, 0, { tags: ['damage'] }),
     stat('ballistics.target_acquisition', 'Target Acquisition', 'The turret swings to its next target 5% faster per rank and leads moving enemies more accurately.', 'add', 0.05, 12, 1.17, 20, 0, { tags: ['speed'] }),
     mech('ballistics.execution', 'Execution',
-      '+15% primary damage per rank against enemies below 30% HP. Primary kills on injured enemies refund 1 Command Energy per rank.',
+      '+15% primary damage per rank against enemies below 30% HP. Every primary kill refunds 1 Command Energy per rank.',
       1, flat(1, 3), [fx('ballistics.execution', 'add', 0.15), fx('ballistics.execution.ce_refund', 'add', 1)],
       { requires: ['ballistics.damage'], tags: ['damage', 'active'] }),
   ],
@@ -36,9 +36,9 @@ export const BALLISTICS: TreeDef = {
     doctrine('ballistics', 'multishot', 'Multishot', 'Two to five projectiles per shot; the damage penalty shrinks with ranks.', [
       mech('ballistics.multishot.count', 'Extra Barrels',
         'Multishot fires 2 projectiles per shot; +1 per rank (up to 5). Projectiles fan out in a 20° spread.',
-        2, flat(2, 3), [fx('ballistics.multishot.count', 'add', 1)]),
+        2, flat(2, 4), [fx('ballistics.multishot.count', 'add', 1)]),
       stat('ballistics.multishot.penalty', 'Barrel Harmonics',
-        'Extra projectiles dilute damage: each deals damage ÷ (1 + 0.35 × extra projectiles). Each rank lowers the 0.35 penalty by 0.015 (to 0.05).',
+        'With 2 or more projectiles, each deals 35% less damage. Each rank lowers the penalty by 1.5 points (to 20% at max rank).',
         'add', -0.015, DOC_BASE, DOC_G, 20, 2),
       mech('ballistics.multishot.split_sight', 'Split Sight',
         'Extra projectiles stop fanning out: each one picks its own target in range, nearest first.',
@@ -46,7 +46,7 @@ export const BALLISTICS: TreeDef = {
     ]),
     doctrine('ballistics', 'piercing', 'Piercing', 'More penetration, less damage lost per target, and speed gained per pierce.', [
       mech('ballistics.piercing.count', 'Penetrator Core',
-        'Piercing shots pass through 1 enemy; +1 per rank (up to 5).',
+        'Piercing shots pass through 1 enemy; +1 per rank (up to 4).',
         2, flat(2, 4), [fx('ballistics.piercing.count', 'add', 1)]),
       stat('ballistics.piercing.retention', 'Sabot Jacket',
         'Shots keep 50% of their damage after each enemy pierced; +2 points per rank.',
@@ -60,7 +60,7 @@ export const BALLISTICS: TreeDef = {
     ]),
     doctrine('ballistics', 'ricochet', 'Ricochet', 'Shots bounce between enemies; bounce count and range scale.', [
       mech('ballistics.ricochet.bounces', 'Rebound Rounds',
-        'Ricochet shots bounce once to a new enemy after impact; +1 bounce per rank (up to 5). Each bounce keeps 80% damage.',
+        'Ricochet shots bounce once to a new enemy after impact; +1 bounce per rank (up to 4). Each bounce keeps 80% damage.',
         2, flat(2, 4), [fx('ballistics.ricochet.bounces', 'add', 1)]),
       stat('ballistics.ricochet.range', 'Deflector Geometry',
         'Bounces seek a new enemy up to 120 units away; +8 units per rank.',
@@ -125,7 +125,7 @@ export const BASTION: TreeDef = {
     ]),
     doctrine('bastion', 'thorns', 'Thorns', 'Retaliation punishes every hit; Reactive Armor hardens under fire.', [
       stat('bastion.thorns.retaliation', 'Retaliation',
-        'Enemies that damage the tower take 15% per rank of the damage they dealt (before armor), plus 1 per point of armor.',
+        'Enemies that damage the tower take 15% per rank of the damage it took (after armor), plus 1 per point of armor.',
         'add', 0.15, DOC_BASE, DOC_G, 30, 2, { tags: ['defense', 'damage'] }),
       mech('bastion.thorns.reactive_armor', 'Reactive Armor',
         'Each hit taken grants +10% armor per rank for 3 s, stacking up to 5 times.',
@@ -156,8 +156,8 @@ export const BASTION: TreeDef = {
 export const REACTOR: TreeDef = {
   id: 'reactor', name: 'Reactor', category: 'chassis', forkRequirement: 3,
   shared: [
-    stat('reactor.global_attack_speed', 'Clock Multiplier', '+3% attack speed for every weapon system per rank.', 'mul', 0.03, 30, 1.19, 30, 0, { tags: ['speed'] }),
-    stat('reactor.cooldown_reduction', 'Heat Sinks', 'Hardpoint cooldowns (reloads, well cooldowns, pulses) −1% per rank.', 'add', 0.01, 25, 1.18, 30, 0, { tags: ['speed'] }),
+    stat('reactor.global_attack_speed', 'Clock Multiplier', '+3% attack speed per rank for the primary, the missile rack and drones (the blade and laser Pulse gain it through Flywheel and Pulse Clock).', 'mul', 0.03, 30, 1.19, 30, 0, { tags: ['speed'] }),
+    stat('reactor.cooldown_reduction', 'Heat Sinks', 'Hardpoint cooldowns (reloads, well cooldowns, pulses) and tactical ability cooldowns −1% per rank.', 'add', 0.01, 25, 1.18, 30, 0, { tags: ['speed'] }),
     stat('reactor.energy_recycling', 'Energy Recycling', '+5% Command Energy gained from every source per rank.', 'add', 0.05, 20, 1.18, 25, 0, { tags: ['active'] }),
     mech('reactor.targeting_logic', 'Targeting Logic',
       'Rank 1: weapons skip enemies already doomed by damage in flight. Rank 2: every system leads moving targets. Rank 3: hardpoints spread across distinct targets instead of stacking on one.',
@@ -166,7 +166,7 @@ export const REACTOR: TreeDef = {
   ],
   doctrines: [
     doctrine('reactor', 'overclock', 'Overclock', 'Global speed and cooldowns.', [
-      stat('reactor.overclock.speed', 'Overclock', '+3% speed for every weapon system per rank (stacks with Clock Multiplier).', 'mul', 0.03, DOC_BASE, DOC_G, 30, 2, { tags: ['speed'], effects: [fx('reactor.global_attack_speed', 'mul', 0.03)] }),
+      stat('reactor.overclock.speed', 'Overclock', '+3% attack speed per rank for the primary, the missile rack and drones (stacks with Clock Multiplier).', 'mul', 0.03, DOC_BASE, DOC_G, 30, 2, { tags: ['speed'], effects: [fx('reactor.global_attack_speed', 'mul', 0.03)] }),
       stat('reactor.overclock.cooldowns', 'Coolant Loop', 'Hardpoint and ability cooldowns −1.5% per rank.', 'add', 0.015, DOC_BASE, DOC_G, 25, 2, { tags: ['speed'], effects: [fx('reactor.cooldown_reduction', 'add', 0.015)] }),
       mech('reactor.overclock.overdrive_core', 'Overdrive Core',
         'Every 30 s, the reactor overdrives for 5 s: +50% speed for every weapon system.',

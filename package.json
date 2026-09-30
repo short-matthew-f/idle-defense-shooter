@@ -19,6 +19,7 @@
     "sim:accept": "tsx sim-cli/accept.ts",
     "e2e": "npm run build && node tests/e2e/e2e.mjs",
     "audio:check": "node tests/audio/render.mjs",
+    "audit:nodes": "tsx scripts/audit-dead-nodes.mjs",
     "check": "npm run typecheck && npm run lint && npm run test"
   },
   "devDependencies": {

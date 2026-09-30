@@ -115,7 +115,7 @@ export class ConstellationPanel {
     this.detail.append(h('div', { class: 'node-head' }, this.dName, this.dRank), this.dDesc, this.dBuy);
     this.ascendBtn = button([icon('ascension'), 'Ascend…'], async () => {
       const ui = ctx.state(); if (!ui) return;
-      const ok = await confirmDialog('Ascend?', `Ascension resets waves, Scrap, Cores, upgrades and Anomalies, and pays ${fmtNum(starsFor(ui.run.deepestCleared, ui.meta.ascension))} Stars. Echoes, Prestige upgrades, the Codex, Trial rewards, Frames and Stars stay. Enemies grow stronger and new rules unlock.`, 'Ascend', { danger: true });
+      const ok = await confirmDialog('Ascend?', `Ascension resets waves, Scrap, Cores, upgrades and Anomalies, and pays ${fmtNum(starsFor(ui.run.deepestCleared, ui.meta.ascension))} Stars. Echoes, Prestige upgrades, the Codex, Trial rewards, Frames and Stars stay; every Star spent in the Constellation is refunded (a free respec). Enemies grow stronger and new rules unlock.`, 'Ascend', { danger: true });
       if (ok) { ctx.host.send({ type: 'ascend' }); ctx.host.saveNow(); }
     }, { class: 'btn primary wide' });
     this.ascendWrap.append(this.ascendText, this.ascendBtn);
@@ -160,17 +160,23 @@ export class ConstellationPanel {
       const cost = nextRankCost(s.cost, rank);
       const maxed = rank >= s.maxRank;
       const reqOk = (s.requires ?? []).every((r) => (m.constellation[r] | 0) > 0);
+      const region = regionLock(s, m.ascension);   // Reachability: the sim sells a region from Ascension region+1
       text(this.dName, s.name);
       text(this.dRank, `${rank}/${s.maxRank}`);
-      text(this.dDesc, s.desc + (reqOk ? '' : ` Requires: ${(s.requires ?? []).map((r) => STAR_NODES.find((x) => x.id === r)?.name ?? r).join(' and ')}.`));
-      text(this.dBuy, maxed ? 'Maxed' : `Buy · ${fmtNum(cost)} Stars`);
-      disable(this.dBuy, maxed || !reqOk || m.stars < cost);
+      text(this.dDesc, s.desc + (reqOk ? '' : ` Requires: ${(s.requires ?? []).map((r) => STAR_NODES.find((x) => x.id === r)?.name ?? r).join(' and ')}.`) + (region ? ` ${region}.` : ''));
+      text(this.dBuy, maxed ? 'Maxed' : region ? 'Locked' : `Buy · ${fmtNum(cost)} Stars`);
+      disable(this.dBuy, maxed || !reqOk || !!region || m.stars < cost);
     }
     const can = ui.run.deepestCleared >= 100;
     show(this.lockCard, !can && m.ascension === 0);
     text(this.ascendText, can ? `The Crown has fallen. Ascension ${m.ascension + 1} is open.` : `Ascension opens after beating The Crown at wave 100 (deepest this Prestige: ${ui.run.deepestCleared}). Ascensions so far: ${m.ascension}.`);
     show(this.ascendBtn, can);
   }
+}
+
+/** Why a Constellation node cannot be bought yet because of its region (revealed at Ascension region + 1), or null. */
+export function regionLock(n: Pick<StarNodeDef, 'region'>, ascension: number): string | null {
+  return n.region >= ascension ? `Region revealed at Ascension ${n.region + 1}` : null;
 }
 
 function starsFor(D: number, A: number): number { return Math.floor(4 * (1 + A) * Math.pow(1.1, D - 100)); }

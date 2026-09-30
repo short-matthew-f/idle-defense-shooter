@@ -25,7 +25,7 @@ export const SHORTCUTS: [string, string][] = [
 ];
 
 export const GESTURES: [string, string][] = [
-  ['Tap an enemy', 'Designate it: every weapon prefers it'],
+  ['Tap an enemy', 'Designate it: every weapon prefers it. Tap it again to clear. With two designators, a third tap replaces the older'],
   ['Hold on the field', 'Steer the main gun toward your finger'],
   ['Tap an ability', 'Arm it, then tap the field (or an enemy) to cast'],
   ['Hold an ability', 'Change what is in that slot'],

@@ -53,6 +53,8 @@ describe('misc', () => {
     expect(offlineEstimate(10, 3600, false)).toBe(Math.floor(10 * 3600 * 0.4));
     expect(offlineEstimate(10, 30 * 3600, false)).toBe(Math.floor(10 * 8 * 3600 * 0.4));
     expect(offlineEstimate(10, 30 * 3600, true)).toBe(Math.floor(10 * 24 * 3600 * 0.7));
+    expect(offlineEstimate(10, 30 * 3600, 2)).toBe(Math.floor(10 * 16 * 3600 * 0.55));   // rank 2: 16 h and 55%
+    expect(offlineEstimate(10, 3600, 1)).toBe(Math.floor(10 * 3600 * 0.475));
     expect(nextRankCost({ base: 10, growth: 1.5 }, 2)).toBe(23);
     expect(nextRankCost({ flat: [2, 4, 8] }, 5)).toBe(8);
     expect(nextRankCost({ cores: 2 }, 0)).toBe(2);

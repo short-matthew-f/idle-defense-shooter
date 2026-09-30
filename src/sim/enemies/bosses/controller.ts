@@ -9,9 +9,10 @@
  * (a = boss, b = attack code), window = tell.windowSeconds; uncountered → the attack fires and, in
  * phases with a weakPoint, the boss is exposed for half its exposedSeconds while it recovers.
  * Stagger (Heavy Rounds Staggerhead sets enemies.staggerT on bosses): interrupts the current tell or
- * dash, at most once per 4 s.
+ * dash, at most once per 4 s. Absolute Zero: at max Chill the tell timer and attack cadence run at half speed.
  */
 import type { World } from '../../core/world';
+import type { WorldImpl } from '../../core/world-impl';
 import type { BossCtrl, BossState } from './state';
 import { MOVE_DASH, MOVE_HOLD, MOVE_NONE, MOVE_RETREAT, MAX_PHASE_ATTACKS, bossSrc } from './state';
 import { EnemyFlag, Ev, NO_ENTITY, ProjFlag, ProjKind, TICK_DT, TOWER_RADIUS } from '../../core/types';
@@ -150,14 +151,16 @@ export function updateCtrl(w: World, c: BossCtrl): boolean {
   }
   continuous(w, b, c);
   if (c.stunT > 0) { c.stunT--; return true; }
+  // Absolute Zero (Frost Exotic): at max Chill the boss's ability cooldowns (tell timer, attack cadence) run at half speed
+  const frozenClock = e.chill[b] > 0 && w.stats.has('frost.absolute_zero') && e.chill[b] >= (w as WorldImpl).statusCap('chill');
   // tell loop
   if (c.tellActive) {
     refocus(w, b, c);
     if (--c.tellTicks <= 0) fireTell(w, b, c);
-  } else if (--c.tellT <= 0) startTell(w, b, c);
+  } else if ((!frozenClock || (w.tick & 1) === 0) && --c.tellT <= 0) startTell(w, b, c);
   // attacks on cadence
   const atk = phases[c.phase].attacks;
-  const rate = c.accelT > 0 ? 1.5 : 1;
+  const rate = (c.accelT > 0 ? 1.5 : 1) * (frozenClock ? 0.5 : 1);
   for (let k = 0; k < atk.length && k < MAX_PHASE_ATTACKS; k++) {
     const id = atk[k];
     if (isTell(id)) continue;

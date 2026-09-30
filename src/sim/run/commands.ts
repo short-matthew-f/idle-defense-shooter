@@ -6,7 +6,8 @@ import type { Command } from '../core/types';
 import { EnemyFlag, Ev, NO_ENTITY } from '../core/types';
 import type { WorldImpl } from '../core/world-impl';
 import type { RunMachine } from './machine';
-import { purchaseCheapest, purchaseMany, spendKey } from '../economy/shop';
+import type { DoctrineId, TreeId } from '../core/ids';
+import { doctrineChoice, purchaseCheapest, purchaseMany, spendKey } from '../economy/shop';
 import { validateCommand } from './validate';
 import { allNodes } from '../core/content';
 import { CORE_COSTS, REFIT_REFUND, offlineScrap } from '../economy/curves';
@@ -37,11 +38,16 @@ function dispatch(m: RunMachine, cmd: Command): string | null {
   switch (cmd.type) {
     case 'buy': return purchaseMany(w, cmd.node, cmd.count);          // count 0 = Max (bulk buying)
     case 'buy_cheapest': return purchaseCheapest(w, cmd.tree, cmd.count);
-    case 'choose_doctrine': return chooseDoctrineCmd(w, cmd.tree, cmd.doctrine, cmd.second);   // WP8: explicit second doctrine
+    case 'choose_doctrine':
+      // Reachability: `second: true` with a second Doctrine already chosen changes it (same rule as changing the first)
+      if (cmd.second && b.doctrines[cmd.tree] && b.secondDoctrines[cmd.tree]) return changeSecondDoctrine(m, cmd.tree, cmd.doctrine);
+      return chooseDoctrineCmd(w, cmd.tree, cmd.doctrine, cmd.second);   // WP8: explicit second doctrine
+    case 'clear_second_doctrine': return clearSecondDoctrine(m, cmd.tree);   // Reachability: frees Dual Doctrine for another tree
     case 'mount_hardpoint': {
       if (cmd.slot < 0 || cmd.slot >= run.hardpointSlotsOpen) return 'Slot not open';
       if (b.hardpoints[cmd.slot]) return 'Slot occupied (Refit instead)';
-      if (w.stats.mounted(cmd.system)) return 'Already mounted';
+      // Reachability: a Borrowed Blade (tier 1, no slot) may be mounted properly; it then runs with its full tree
+      if (w.stats.mounted(cmd.system) && !w.stats.borrowed(cmd.system)) return 'Already mounted';
       b.hardpoints[cmd.slot] = cmd.system;
       w.emit(Ev.Mounted, cmd.system, cmd.slot, 0, 0, 0, -1);
       w.rebuildStats();
@@ -50,7 +56,7 @@ function dispatch(m: RunMachine, cmd: Command): string | null {
     case 'refit_hardpoint': {
       const old = b.hardpoints[cmd.slot];
       if (cmd.slot < 0 || cmd.slot >= run.hardpointSlotsOpen || !old) return 'Nothing to refit';
-      if (old === cmd.system || w.stats.mounted(cmd.system)) return 'Already mounted';
+      if (old === cmd.system || (w.stats.mounted(cmd.system) && !w.stats.borrowed(cmd.system))) return 'Already mounted';
       if (run.cores < CORE_COSTS.refit) return 'Not enough Cores';
       run.cores -= CORE_COSTS.refit;
       const refund = Math.floor((run.spentByTree[old] ?? 0) * REFIT_REFUND);
@@ -100,6 +106,7 @@ function dispatch(m: RunMachine, cmd: Command): string | null {
       if (i !== NO_ENTITY && !w.alive(i)) return 'No such enemy';
       const gen = i >= 0 ? w.enemies.gen[i] : 0;
       if (slot === 1) { t.designated2 = i; t.designated2Gen = gen; } else { t.designated = i; t.designatedGen = gen; }
+      if (i !== NO_ENTITY) t.designateNext = slot === 1 ? 0 : 1;   // Reachability: the other slot is now the older one
       for (const s of w.systems) s.onCommand?.(w, cmd);   // WP5: observers (boss Counters) see designations
       return null;
     }
@@ -107,7 +114,9 @@ function dispatch(m: RunMachine, cmd: Command): string | null {
       const i = enemyAt(w, cmd.x, cmd.y);
       if (i === NO_ENTITY) return 'No enemy there';
       // Same path as 'designate' (Blackout / second-designator rules, onCommand observers such as boss Counters).
-      return dispatch(m, cmd.slot !== undefined ? { type: 'designate', enemy: i, slot: cmd.slot } : { type: 'designate', enemy: i });
+      if (cmd.slot !== undefined) return dispatch(m, { type: 'designate', enemy: i, slot: cmd.slot });
+      const pick = autoDesignateSlot(w, i);   // Reachability: tap toggles / fills the free slot / replaces the older
+      return dispatch(m, pick.clear ? { type: 'designate', enemy: null, slot: pick.slot } : pick.slot === 1 ? { type: 'designate', enemy: i, slot: 1 } : { type: 'designate', enemy: i });
     }
     case 'manual_aim': if (cmd.active && trialActive(w, 'blackout')) return 'Manual aim disabled (Blackout)'; t.manualAim = cmd.active; t.manualAngle = cmd.angle; return null;
     case 'set_ability_slot': {
@@ -122,7 +131,7 @@ function dispatch(m: RunMachine, cmd: Command): string | null {
     case 'set_targeting': b.targeting[cmd.system] = cmd.profile; return null;
     case 'set_threat_dial': return setThreatDial(w, cmd.level);   // WP8: lower only; Echoes pay at the lowest level used
     case 'offline_return': {
-      const long = (w.meta.prestigeRanks['prestige.long_patrol'] | 0) > 0;
+      const long = { capHours: w.stats.get('offline.cap_hours'), efficiency: w.stats.get('offline.efficiency') };   // EFFECT-AUDIT: every Long Patrol rank counts
       const s = offlineScrap(run.patrolScrapPerSecond, cmd.elapsedSeconds, long);
       if (s > 0) { run.scrap += s; w.emit(Ev.ScrapGain, 'offline', Math.floor(cmd.elapsedSeconds), s, 0, 0, -1); }
       return null;
@@ -130,6 +139,11 @@ function dispatch(m: RunMachine, cmd: Command): string | null {
     case 'set_setting': (w.meta.settings as Record<string, number | boolean>)[cmd.key] = cmd.value; return null;
     // --- WP8: progression (run/prestige.ts, run/trials.ts, economy/ascension.ts) ---
     case 'save_blueprint': return saveBlueprint(w, cmd.blueprint);
+    case 'delete_blueprint': {   // Reachability: free a Blueprint slot
+      if (cmd.index < 0 || cmd.index >= w.meta.blueprints.length) return 'No such blueprint';
+      w.meta.blueprints.splice(cmd.index, 1);
+      return null;
+    }
     case 'prestige': return doPrestige(m, cmd);
     case 'ascend': return ascend(m);
     case 'buy_prestige': return buyPrestigeNode(w, cmd.node);
@@ -147,6 +161,57 @@ function dispatch(m: RunMachine, cmd: Command): string | null {
       return `Unknown command ${(never as { type: string }).type}`;
     }
   }
+}
+
+/** Is designator `slot` holding a live enemy? */
+function designationLive(w: WorldImpl, slot: 0 | 1): number {
+  const t = w.tower, i = slot === 1 ? t.designated2 : t.designated, g = slot === 1 ? t.designated2Gen : t.designatedGen;
+  return i >= 0 && w.alive(i) && w.enemies.gen[i] === g ? i : NO_ENTITY;
+}
+
+/**
+ * Reachability: which designator slot a tap on enemy `i` uses (designate_at without a slot). Tapping a designated
+ * enemy clears it, unless a boss tell asks for a designation (re-designating scores the Counter). Otherwise slot 0
+ * when free, then slot 1 when a second designator is available, else the older of the two.
+ */
+export function autoDesignateSlot(w: WorldImpl, i: number): { slot: 0 | 1; clear: boolean } {
+  const two = secondDesignatorAllowed(w);
+  const d0 = designationLive(w, 0), d1 = two ? designationLive(w, 1) : NO_ENTITY;
+  const tell = w.bossTell.ability === 'designate';
+  if (i === d0) return { slot: 0, clear: !tell };
+  if (i === d1) return { slot: 1, clear: !tell };
+  if (!two || d0 === NO_ENTITY) return { slot: 0, clear: false };
+  if (d1 === NO_ENTITY) return { slot: 1, clear: false };
+  return { slot: w.tower.designateNext ?? 0, clear: false };
+}
+
+/** Between waves at the start of a checkpoint (the Doctrine-change rule of economy/shop.doctrineChoice). */
+function atCheckpoint(w: WorldImpl): boolean { return w.run.phase === 'between' && w.run.wave - 1 === w.run.checkpoint; }
+
+/** Reachability: change a chosen second Doctrine (1 Core, at a checkpoint, like changing the first). */
+function changeSecondDoctrine(m: RunMachine, tree: TreeId, doctrine: DoctrineId): string | null {
+  const w = m.w, b = w.build;
+  if (!w.stats.secondDoctrineAllowed(tree)) return 'This tree cannot run a second Doctrine';
+  const c = doctrineChoice(w, tree, doctrine);   // unknown / fork closed / already chosen / checkpoint rule, and the price
+  if (c.locked) return c.locked;
+  if (w.run.cores < c.cost) return 'Not enough Cores';
+  w.run.cores -= c.cost;
+  b.secondDoctrines[tree] = doctrine;
+  w.emit(Ev.DoctrineChosen, `${tree}.${doctrine}`, c.cost, 2, 0, 0, -1);
+  w.rebuildStats();
+  return null;
+}
+
+/** Reachability: drop the second Doctrine of `tree` (1 Core, at a checkpoint), e.g. to move Dual Doctrine to another tree. */
+function clearSecondDoctrine(m: RunMachine, tree: TreeId): string | null {
+  const w = m.w, b = w.build;
+  if (!b.secondDoctrines[tree]) return 'No second Doctrine to clear';
+  if (!atCheckpoint(w)) return 'Change only at a checkpoint';
+  if (w.run.cores < CORE_COSTS.doctrine) return 'Not enough Cores';
+  w.run.cores -= CORE_COSTS.doctrine;
+  delete b.secondDoctrines[tree];
+  w.rebuildStats();
+  return null;
 }
 
 /**

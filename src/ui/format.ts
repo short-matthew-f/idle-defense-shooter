@@ -75,9 +75,11 @@ export function echoesFor(deepest: number, dial = 0): number {
 }
 
 /** Offline Scrap estimate (mirrors economy/curves offlineScrap). */
-export function offlineEstimate(patrolScrapPerSecond: number, elapsedSeconds: number, longPatrol: boolean): number {
-  const cap = longPatrol ? 24 * 3600 : 8 * 3600;
-  const eff = longPatrol ? 0.7 : 0.4;
+export function offlineEstimate(patrolScrapPerSecond: number, elapsedSeconds: number, longPatrol: boolean | number): number {
+  // Long Patrol ranks each add 4 h to the cap and 7.5 points of efficiency (8 h and 40% at rank 0, 24 h and 70% at rank 4); `true` means max rank
+  const rank = Math.max(0, Math.min(4, longPatrol === true ? 4 : longPatrol === false ? 0 : Math.floor(longPatrol)));
+  const cap = (8 + 4 * rank) * 3600;
+  const eff = 0.4 + 0.075 * rank;
   return Math.floor(Math.max(0, patrolScrapPerSecond) * Math.min(Math.max(0, elapsedSeconds), cap) * eff);
 }
 

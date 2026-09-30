@@ -72,7 +72,7 @@ export class OrdnanceSystem implements System {
     this.rate = Math.max(0.01, s.get('ordnance.reload'));
     this.tracking = Math.max(0, s.get('ordnance.tracking'));
     this.range = s.get('ordnance.range');
-    this.blast = Math.max(4, s.get('ordnance.blast_radius'));
+    this.blast = Math.max(4, s.get('ordnance.blast_radius')) * (s.get('combat.blast_radius_mul') || 1);   // Unstable Isotope ×1.5
     this.speed = Math.max(60, s.get('ordnance.missile_speed'));
     this.retargets = Math.max(0, Math.min(3, Math.floor(s.get('ordnance.overkill_guidance') + 1e-9)));
     this.retargetBonus = s.get('ordnance.overkill_guidance.bonus');

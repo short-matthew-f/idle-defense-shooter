@@ -39,3 +39,7 @@
 .chev { color: var(--text-faint); flex: none; }
 .bs-doc { color: var(--accent); font-weight: 600; }
 .btn.bs-draft .bs-name { flex: 1; }
+/* Reachability: slot numbers on ability rows, the Autocast switch, stacked actions on narrow rows */
+.bs-num-inline { color: var(--text-dim); font-weight: 700; }
+.bs-act:has(> .btn + .btn) { flex-direction: column; align-items: stretch; }
+.bs-name .doc-tag { vertical-align: 1px; }

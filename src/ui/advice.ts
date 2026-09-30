@@ -22,7 +22,7 @@ export type Suggestion =
 /** The part of UiState advice reads (keeps tests small). */
 export type AdviceState = Pick<UiState, 'shop'> & {
   run: Pick<UiState['run'], 'scrap' | 'hardpointSlotsOpen' | 'attunementSlotsOpen'>;
-  build: Pick<UiState['build'], 'hardpoints' | 'attunements' | 'doctrines'>;
+  build: Pick<UiState['build'], 'hardpoints' | 'attunements' | 'doctrines'> & Partial<Pick<UiState['build'], 'secondDoctrines'>>;
 };
 
 const CORE_STAT = /\.(damage|attack_speed|max_hp|armor|global_attack_speed|regeneration)$/;
@@ -65,14 +65,18 @@ export function openSlots(s: AdviceState): { cat: 'elements' | 'hardpoints'; slo
   return out;
 }
 
-/** Doctrine forks the player can choose now (a tree with no Doctrine whose fork is open). */
+/**
+ * Doctrine forks the player can choose now for free: a tree with no Doctrine whose fork is open, or (Reachability) a
+ * tree with an empty second-Doctrine slot. A change (Cores) is never suggested.
+ */
 export function openForks(s: AdviceState): { entry: ShopEntry; tree: string }[] {
   const seen = new Set<string>();
   const out: { entry: ShopEntry; tree: string }[] = [];
   for (const e of s.shop) {
-    if (e.kind !== 'doctrine' || e.locked || !e.affordable) continue;
+    if (e.kind !== 'doctrine' || e.locked || !e.affordable || e.cost > 0) continue;
     const tree = e.tree as string;
-    if (seen.has(tree) || s.build.doctrines[tree as keyof typeof s.build.doctrines]) continue;
+    const t = tree as keyof typeof s.build.doctrines;
+    if (seen.has(tree) || (s.build.doctrines[t] && (s.build.secondDoctrines ?? {})[t])) continue;
     seen.add(tree);
     out.push({ entry: e, tree });
   }

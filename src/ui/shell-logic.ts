@@ -55,7 +55,7 @@ export interface Badge { text: string; kind: 'count' | 'alert' | 'new'; label: s
 export type BadgeState = Pick<UiState, 'shop' | 'forecast'> & {
   /** `boonOffer`: Boons (optional so older call sites and tests need not set it). */
   run: Pick<UiState['run'], 'pendingDraft' | 'hardpointSlotsOpen' | 'attunementSlotsOpen' | 'deepestCleared'> & Partial<Pick<UiState['run'], 'boonOffer'>>;
-  build: Pick<UiState['build'], 'hardpoints' | 'attunements' | 'doctrines'>;
+  build: Pick<UiState['build'], 'hardpoints' | 'attunements' | 'doctrines'> & Partial<Pick<UiState['build'], 'secondDoctrines'>>;
   meta: Pick<UiState['meta'], 'ascension'>;
 };
 
@@ -74,12 +74,16 @@ export function emptySlots(s: BadgeState): number {
   return n;
 }
 
-/** Trees whose Doctrine fork is open and unchosen. */
+/**
+ * Trees where a Doctrine can be chosen for free: an open fork with no Doctrine yet, or (Reachability) an empty
+ * second-Doctrine slot (Spare Barrel, Dual Doctrine, Monolith, Bulwark, Singularity Core). Changes cost Cores: not counted.
+ */
 export function openForkCount(s: BadgeState): number {
   const seen = new Set<string>();
   for (const e of s.shop) {
-    if (e.kind !== 'doctrine' || e.locked || !e.affordable) continue;
-    if (s.build.doctrines[e.tree as keyof typeof s.build.doctrines]) continue;
+    if (e.kind !== 'doctrine' || e.locked || !e.affordable || e.cost > 0) continue;
+    const t = e.tree as keyof typeof s.build.doctrines;
+    if (s.build.doctrines[t] && (s.build.secondDoctrines ?? {})[t]) continue;
     seen.add(e.tree);
   }
   return seen.size;

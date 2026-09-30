@@ -15,10 +15,9 @@
  *                   fire element, srcTag anomaly.seventh_shot; its hits apply 2 Burn stacks)
  *  pinball          projectiles with bounces left reflect off the arena edge for free; when their life
  *                   runs out they spend one bounce to fly one more arena diameter
- *  stormglass       lightning hits on frozen / max-Chill enemies arc to one more enemy within
- *                   2 × lightning.arc_range for 50% (source 'element', ≤ 8 arcs per tick)
- *  clockwork_blade  every 6 s (blade mounted): signals.bladeDir flips and a shockwave knocks enemies
- *                   within blade.length + 120 outward
+ *  stormglass       (elements-shared.ts ArcEngine) arc links from or to a frozen / max-Chill enemy reach 2 × range
+ *  clockwork_blade  every 6 s (blade mounted): signals.bladeDir flips and a 120-unit shockwave centred on each
+ *                   blade's tip (world.shared, last published) knocks enemies away from it
  *  ghost_protocol   drone kills rise as ghosts (3 s) that chase the nearest enemy, 10% of the victim's
  *                   max HP per second on contact (anomaly-owned entities, rendered here)
  *  rogue_moon       a mass orbiting at 380 u: contact damage 40% of a weight-1 enemy's HP per second,
@@ -28,7 +27,7 @@
  *  martyr_plating   without Thorns, tower hits retaliate damage × thorns.retaliation × retaliation_mul
  *  afterimage_round each new primary Bullet fires again from the tower 0.4 s later at 30%
  *  echo_chamber     every explosion repeats 0.5 s later at 40% damage and 70% radius
- *  feedback_loop    1 s after a cast, every enemy the cast damaged in that second takes 50% of it again
+ *  feedback_loop    (systems/abilities.ts) every cast recasts itself 1 s later at 50% power
  *  rot_bloom        poisoned enemies that die leave a 3 s cloud: 1 Poison stack per second within 50 u
  * Prestige IV: Duplication (primary Bullets duplicate at prestige.duplication chance), Double Launch
  * (every 5th new ordnance Missile/Rocket launches twice), Conscription (elite kills fight as allies
@@ -53,9 +52,8 @@ const FIRE_EL = ELEMENT_ORDER.indexOf('fire') + 1;
 const SKIP_FLAGS = ProjFlag.Dead | ProjFlag.Hostile | ProjFlag.Echo | ProjFlag.Duplicate;
 const Q = 256;               // delayed primary echoes
 const XQ = 64;               // delayed explosions
-const MAX_ALLIES = 48, MAX_CLOUDS = 32, MAX_FEEDBACK = 4, FB_TARGETS = 64;
+const MAX_ALLIES = 48, MAX_CLOUDS = 32;
 const SCRATCH = new Int32Array(1024);
-const EXCL = new Int32Array(1);
 const INIT = {
   kind: 0, source: 0, x: 0, y: 0, vx: 0, vy: 0, damage: 0, radius: 3, life: 60, pierce: 0, bounces: 0, target: NO_ENTITY,
   flags: 0, element: null as ElementId | null, critChance: 0, blast: 0, cause: -1, srcTag: '', critMul: 1.5, retention: 1,
@@ -80,10 +78,10 @@ export class AnomaliesSystem implements System {
   private primaryShots = 0; private missiles = 0; private droneShots = 0;
   // cached per rebuild
   private seventh = 0; private dup = 0; private afterimage = false; private pinball = false; private doubleLaunch = false;
-  private relayFire = false; private echoEngine = false; private stormglass = false; private ghost = false; private conscription = false;
-  private rotBloom = false; private martyr = false; private isotope = false; private echoChamber = false; private feedback = false;
+  private relayFire = false; private echoEngine = false; private ghost = false; private conscription = false;
+  private rotBloom = false; private martyr = false; private isotope = false; private echoChamber = false;
   private moon = false; private clockwork = false; private reversal = false; private ghostEdges = 0; private heldOpen = 0;
-  private hungry = false; private blastMul = 1; private arcRange = 110; private moonR = 380;
+  private hungry = false; private blastMul = 1; private moonR = 380;
   // delayed primary echoes (Afterimage Round), SoA ring
   private qDue = new Int32Array(Q); private qF = new Float64Array(Q * 12); private qHead = 0; private qTail = 0;
   // delayed explosions (Echo Chamber)
@@ -93,13 +91,9 @@ export class AnomaliesSystem implements System {
   private adps = new Float32Array(MAX_ALLIES); private acause = new Int32Array(MAX_ALLIES); private akind = new Uint8Array(MAX_ALLIES); private allies = 0;
   // rot clouds
   private rx = new Float32Array(MAX_CLOUDS); private ry = new Float32Array(MAX_CLOUDS); private rttl = new Int32Array(MAX_CLOUDS); private rcause = new Int32Array(MAX_CLOUDS); private clouds = 0;
-  // feedback loop
-  private fbDue = new Int32Array(MAX_FEEDBACK); private fbTag: string[] = ['', '', '', '']; private fbCause = new Int32Array(MAX_FEEDBACK);
-  private fbIdx = new Int32Array(MAX_FEEDBACK * FB_TARGETS); private fbGen = new Uint32Array(MAX_FEEDBACK * FB_TARGETS);
-  private fbDmg = new Float32Array(MAX_FEEDBACK * FB_TARGETS); private fbN = new Int32Array(MAX_FEEDBACK); private fbCount = 0;
   // held open (boss gen, remaining ticks, forced)
   private hoGen = new Uint32Array(8); private hoRemain = new Int32Array(8); private hoForced = new Uint8Array(8);
-  private moonX = 0; private moonY = 0; private arcsThisTick = 0;
+  private moonX = 0; private moonY = 0;
   private throttle = new Map<string, number>();
 
   init(w: World): void {
@@ -109,7 +103,7 @@ export class AnomaliesSystem implements System {
     this.lastGen = this.cloneGen = g;
     this.lastEvent = w.events.nextId;
     this.qHead = this.qTail = this.xHead = this.xTail = 0;
-    this.allies = this.clouds = this.fbCount = 0;
+    this.allies = this.clouds = 0;
     this.primaryShots = this.missiles = this.droneShots = 0;
     this.throttle.clear();
     w.signals.bladeDir = 1; w.signals.ghostEdges = 0;
@@ -124,14 +118,13 @@ export class AnomaliesSystem implements System {
     this.afterimage = has('afterimage_round'); this.pinball = has('pinball');
     this.doubleLaunch = s.rank('prestige.double_launch') > 0; this.relayFire = s.rank('prestige.relay_fire') > 0;
     this.echoEngine = s.frameFlag('every_8th_repeats');
-    this.stormglass = has('stormglass'); this.ghost = has('ghost_protocol'); this.conscription = s.rank('prestige.conscription') > 0;
+    this.ghost = has('ghost_protocol'); this.conscription = s.rank('prestige.conscription') > 0;
     this.rotBloom = has('rot_bloom'); this.martyr = has('martyr_plating'); this.isotope = has('unstable_isotope');
-    this.echoChamber = has('echo_chamber'); this.feedback = has('feedback_loop'); this.moon = has('rogue_moon');
+    this.echoChamber = has('echo_chamber'); this.moon = has('rogue_moon');
     this.clockwork = has('clockwork_blade'); this.reversal = s.rank('prestige.reversal') > 0;
     this.ghostEdges = s.rank('prestige.ghost_edges'); this.heldOpen = Math.round(Math.max(0, s.get('prestige.held_open')) * TICK_RATE);
     this.hungry = has('hungry_core');
     this.blastMul = s.get('combat.blast_radius_mul') || 1;
-    this.arcRange = s.get('lightning.arc_range') || 110;
     this.moonR = s.get('anomaly.rogue_moon.orbit') || 380;
     w.signals.laserNodeMul = has('mirror_node') ? Math.max(1, s.get('anomaly.mirror_node.count_mul')) : 1;
     // projectiles already in flight when the set of effects changes are not "new"
@@ -151,13 +144,11 @@ export class AnomaliesSystem implements System {
 
   update(world: World): void {
     const w = world as WorldImpl;
-    this.arcsThisTick = 0;
     this.scanProjectiles(w);
     if (this.pinball) this.pinballTick(w);
     this.releaseEchoes(w);
     this.scanEvents(w);
     this.releaseExplosions(w);
-    if (this.fbCount) this.releaseFeedback(w);
     this.bladeTick(w);
     if (this.allies) this.alliesTick(w);
     if (this.moon) this.moonTick(w);
@@ -290,11 +281,11 @@ export class AnomaliesSystem implements System {
   }
 
   // ---------------------------------------------------------------------------
-  // Event-driven (Unstable Isotope, Echo Chamber, Feedback Loop, Tithe)
+  // Event-driven (Unstable Isotope, Echo Chamber, Tithe)
   // ---------------------------------------------------------------------------
   private scanEvents(w: WorldImpl): void {
     const end = w.events.nextId;
-    if (!(this.isotope || this.echoChamber || this.feedback || w.stats.hasAnomaly('tithe'))) { this.lastEvent = end; return; }
+    if (!(this.isotope || this.echoChamber || w.stats.hasAnomaly('tithe'))) { this.lastEvent = end; return; }
     this.scanW = w;
     w.events.forEachRange(this.lastEvent, end, this.onScanEvent);
     this.lastEvent = end;
@@ -310,12 +301,6 @@ export class AnomaliesSystem implements System {
           w.damageTower(Math.min(e.b * w.stats.get('anomaly.unstable_isotope.self_damage'), w.tower.maxHp * w.stats.get('anomaly.unstable_isotope.self_cap')), -1, ev, 'self');
         }
         if (this.echoChamber && e.src !== 'anomaly.echo_chamber') this.queueExplosion(w, e);
-      } else if (e.type === Ev.Cast && this.feedback && e.src.startsWith('ability.')) {
-        if (this.fbCount < MAX_FEEDBACK) {
-          const k = this.fbCount++;
-          this.fbDue[k] = w.tick + Math.round(w.stats.get('anomaly.feedback_loop.delay') * TICK_RATE);
-          this.fbTag[k] = e.src; this.fbCause[k] = e.id; this.fbN[k] = 0;
-        }
       } else if (e.type === Ev.CoreDrop && e.src === 'boss' && e.a >= 2 && w.stats.hasAnomaly('tithe')) {
         this.fire(w, 'anomaly.tithe', e.id, e.x, e.y);
       }
@@ -340,28 +325,6 @@ export class AnomaliesSystem implements System {
     }
   }
 
-  private releaseFeedback(w: WorldImpl): void {
-    let k = 0;
-    while (k < this.fbCount) {
-      if (this.fbDue[k] > w.tick) { k++; continue; }
-      const ev = this.fire(w, 'anomaly.feedback_loop', this.fbCause[k]);
-      const pw = w.stats.get('anomaly.feedback_loop.power');
-      for (let j = 0; j < this.fbN[k]; j++) {
-        const o = k * FB_TARGETS + j;
-        const i = w.resolveEnemy(this.fbIdx[o], this.fbGen[o]);
-        if (i >= 0) w.damage(i, this.fbDmg[o] * pw, { source: 'ability', srcTag: 'anomaly.feedback_loop', cause: ev });
-      }
-      // remove entry k (move the last one into it)
-      const l = --this.fbCount;
-      if (l !== k) {
-        this.fbDue[k] = this.fbDue[l]; this.fbTag[k] = this.fbTag[l]; this.fbCause[k] = this.fbCause[l]; this.fbN[k] = this.fbN[l];
-        this.fbIdx.copyWithin(k * FB_TARGETS, l * FB_TARGETS, (l + 1) * FB_TARGETS);
-        this.fbGen.copyWithin(k * FB_TARGETS, l * FB_TARGETS, (l + 1) * FB_TARGETS);
-        this.fbDmg.copyWithin(k * FB_TARGETS, l * FB_TARGETS, (l + 1) * FB_TARGETS);
-      }
-    }
-  }
-
   // ---------------------------------------------------------------------------
   // Blade clock (Clockwork Blade, Reversal), laser signals (Ghost Edges)
   // ---------------------------------------------------------------------------
@@ -376,10 +339,14 @@ export class AnomaliesSystem implements System {
     if (this.clockwork && at % cp === 0) {
       sg.bladeDir = -sg.bladeDir;
       const ev = this.fire(w, 'anomaly.clockwork_blade', -1);
-      const r = w.stats.get('blade.length') + w.stats.get('anomaly.clockwork_blade.shockwave_radius');
-      const n = w.queryRadius(0, 0, r, SCRATCH);
-      for (let k = 0; k < n; k++) { const i = SCRATCH[k]; if (w.alive(i)) w.knockback(i, w.enemies.x[i], w.enemies.y[i], 40); }
-      w.emit(Ev.Fx, 'anomaly.clockwork_blade', 0, r, 0, 0, ev);
+      // the shockwave bursts from each blade's tip (geometry the blade published last tick), pushing enemies away from it
+      const r = w.stats.get('anomaly.clockwork_blade.shockwave_radius'), sh = w.shared;
+      for (let b = 0; b < sh.bladeCount; b++) {
+        const a = sh.bladeAngles[b], tip = sh.bladeInner[b] + sh.bladeLens[b], bx = cos(a) * tip, by = sin(a) * tip;
+        const n = w.queryRadius(bx, by, r, SCRATCH);
+        for (let k = 0; k < n; k++) { const i = SCRATCH[k]; if (w.alive(i)) w.knockback(i, w.enemies.x[i] - bx, w.enemies.y[i] - by, 40); }
+        w.emit(Ev.Fx, 'anomaly.clockwork_blade', b, r, bx, by, ev);
+      }
     } else if (this.reversal && at % (8 * TICK_RATE) === 0) {
       sg.bladeDir = -sg.bladeDir;
       this.fire(w, 'prestige.reversal', -1);
@@ -473,32 +440,8 @@ export class AnomaliesSystem implements System {
   // Hooks
   // ---------------------------------------------------------------------------
   onHit(world: World, hit: HitInfo): void {
-    const w = world as WorldImpl, e = w.enemies;
+    const w = world as WorldImpl;
     if (hit.srcTag === 'anomaly.seventh_shot' && !hit.killed) w.applyStatus(hit.enemy, 'burn', 2, 3 * TICK_RATE, 'anomaly.seventh_shot', hit.eventId);
-    if (this.stormglass && this.arcsThisTick < 8 && hit.srcTag !== 'anomaly.stormglass' && hit.damage > 0
-      && (hit.element === 'lightning' || hit.srcTag === 'lightning' || hit.srcTag === 'static')
-      && (e.frozenT[hit.enemy] > 0 || e.chill[hit.enemy] >= w.statusCap('chill'))) {
-      EXCL[0] = hit.enemy;
-      const j = w.nearestExcluding(hit.x, hit.y, 2 * this.arcRange, EXCL, 1);
-      if (j >= 0) {
-        this.arcsThisTick++;
-        const ev = this.fire(w, 'anomaly.stormglass', hit.eventId, hit.x, hit.y);
-        w.damage(j, hit.damage * 0.5, { source: 'element', srcTag: 'anomaly.stormglass', element: 'lightning', cause: ev });
-      }
-    }
-    if (this.fbCount && hit.srcTag.startsWith('ability.')) this.recordFeedback(w, hit);
-  }
-
-  private recordFeedback(w: WorldImpl, hit: HitInfo): void {
-    for (let k = 0; k < this.fbCount; k++) {
-      if (this.fbTag[k] !== hit.srcTag) continue;
-      const base = k * FB_TARGETS, g = w.enemies.gen[hit.enemy];
-      let j = 0;
-      for (; j < this.fbN[k]; j++) if (this.fbGen[base + j] === g) break;
-      if (j === this.fbN[k]) { if (j >= FB_TARGETS) return; this.fbN[k]++; this.fbGen[base + j] = g; this.fbDmg[base + j] = 0; }
-      this.fbIdx[base + j] = hit.enemy; this.fbDmg[base + j] += hit.damage;
-      return;
-    }
   }
 
   onKill(world: World, hit: HitInfo): void {

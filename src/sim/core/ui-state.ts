@@ -5,12 +5,13 @@ import type { WorldImpl } from './world-impl';
 import type { RunMachine } from '../run/machine';
 import { buildShop } from '../economy/shop';
 import { shopTreeTotals } from '../economy/bulk';
-import { abilityUi } from '../systems/abilities';
-import { bossDef, bossDefByIndex } from './content';
-import { SECTORS, SYSTEM_ORDER_IDS } from '../data/index';
+import { abilitySlotCount, abilityUi, secondDesignatorAllowed, trialActive } from '../systems/abilities';
+import { bossDef, bossDefByIndex, frameDef } from './content';
+import { SECTORS, SYSTEM_ORDER_IDS, TREES } from '../data/index';
 import { computeForecast } from '../economy/forecast';   // WP8
 import { codexHints } from '../economy/codex';           // WP8
-import { nextSlotWaves } from '../run/slots';
+import { attunementCap, hardpointCap, nextSlotWaves } from '../run/slots';
+import { trialForbidsMount } from '../run/prestige';
 import { allowedSpeed } from '../economy/prestige';
 import { BOON_CAP, boonRerollCost } from '../run/boons';
 
@@ -47,6 +48,12 @@ export function buildUiState(w: WorldImpl, m: RunMachine): UiState {
     },
     activeTrial: w.meta.activeTrial ?? null,
     extraSystems: extraSystems(w),
+    // Reachability additions (docs/reviews/REACHABILITY.md)
+    secondDoctrine: secondDoctrines(w),
+    abilitySlots: abilitySlotCount(w),
+    designators: designators(w),
+    slotCaps: { hardpoint: hardpointCap(w), attunement: attunementCap(w) },
+    mountBlocked: mountBlocked(w),
     nextHardpointWave: slots.hardpoint,
     nextAttunementWave: slots.attunement,
     speedAllowed: allowedSpeed(run, w.meta),
@@ -80,6 +87,39 @@ function extraSystems(w: WorldImpl): NonNullable<UiState['extraSystems']> {
   for (const s of SYSTEM_ORDER_IDS) {
     if (s === 'primary' || w.build.hardpoints.includes(s) || !w.stats.mounted(s)) continue;
     out.push({ system: s, via: w.stats.borrowed(s) ? 'borrowed' : 'frame' });
+  }
+  return out;
+}
+
+/** Reachability: trees that can run (or run) a second Doctrine, with its strength and source. */
+function secondDoctrines(w: WorldImpl): NonNullable<UiState['secondDoctrine']> {
+  const out: NonNullable<UiState['secondDoctrine']> = {};
+  const s = w.stats, b = w.build;
+  for (const t of TREES) {
+    if (!s.treeActive(t.id) || s.borrowed(t.id)) continue;
+    const allowed = s.secondDoctrineAllowed(t.id);
+    if (!allowed && !b.secondDoctrines[t.id]) continue;
+    out[t.id] = { allowed, ...s.secondDoctrineInfo(t.id) };
+  }
+  return out;
+}
+
+/** Reachability: Target Designators available (0 under Blackout) and how many hold a live enemy. */
+function designators(w: WorldImpl): NonNullable<UiState['designators']> {
+  if (trialActive(w, 'blackout')) return { slots: 0, live: 0 };
+  const t = w.tower, two = secondDesignatorAllowed(w);
+  const live = (i: number, g: number): number => (i >= 0 && w.alive(i) && w.enemies.gen[i] === g ? 1 : 0);
+  return { slots: two ? 2 : 1, live: live(t.designated, t.designatedGen) + (two ? live(t.designated2, t.designated2Gen) : 0) };
+}
+
+/** Reachability: hardpoints a slot picker must not offer (the Frame's free mount, Trial rules), with the reason. */
+function mountBlocked(w: WorldImpl): NonNullable<UiState['mountBlocked']> {
+  const out: NonNullable<UiState['mountBlocked']> = {};
+  const free = frameDef(w.build.frame).freeMount;
+  for (const s of SYSTEM_ORDER_IDS) {
+    if (s === 'primary') continue;
+    if (trialForbidsMount(w, s)) out[s] = 'Not allowed in this Trial';
+    else if (free === s) out[s] = 'Mounted free by your Frame';
   }
   return out;
 }

@@ -13,7 +13,7 @@ export const TRIALS: TrialDef[] = [
   { id: 'hive_mind', name: 'Hive Mind', constraint: 'Primary disabled; Drones is the only hardpoint.', reward: 'Hive frame', tiers: TIERS },
   { id: 'siege_mentality', name: 'Siege Mentality', constraint: 'Primary disabled; only the Orbital Blade and Bastion.', reward: 'Bulwark frame', tiers: TIERS },
   { id: 'monochrome', name: 'Monochrome', constraint: 'One attunement; no Fusions.', reward: '+1 stack cap for every element', tiers: TIERS },
-  { id: 'blackout', name: 'Blackout', constraint: 'No abilities, designator, or manual aim.', reward: 'Autocast and Directive efficiency +10%', tiers: TIERS },
+  { id: 'blackout', name: 'Blackout', constraint: 'No abilities, designator, or manual aim.', reward: 'Directive and Autocast Counter efficiency +10%', tiers: TIERS },
   { id: 'commander', name: 'Commander', constraint: 'No automatic primary fire; abilities cost 50% less.', reward: 'A permanent second designator', tiers: TIERS },
   { id: 'scatter', name: 'Scatter', constraint: 'Every wave uses spread formations.', reward: 'Gravitics Exotic costs no Cores', tiers: TIERS },
   { id: 'swarmstorm', name: 'Swarmstorm', constraint: 'Enemy count ×5, enemy HP ×0.2.', reward: 'Critical Mass threshold −30%', tiers: TIERS },

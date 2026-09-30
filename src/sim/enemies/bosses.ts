@@ -1,9 +1,9 @@
 /**
  * Boss system (WP5): a System registered first in SYSTEM_ORDER that
  *  - runs a BossController per live boss (bosses/controller.ts): phases, tells, attacks, weak points
- *  - scores Counters (design §10) by observing `cast` and `designate` commands (onCommand returns
- *    false so the abilities system still processes them) and via the exported hooks
- *    `notifyAbilityCast` / `notifyDesignate` for callers that cast outside the command path
+ *  - scores Counters (design §10): `designate` commands through onCommand (returns false so others still see them);
+ *    casts through `notifyAbilityCast`, which systems/abilities.ts calls after a cast goes off (so a rejected cast —
+ *    unslotted, on cooldown, Blackout, too little CE — never scores)
  *  - installs World.damageModifier (weak points, phase invulnerability, Null Engine resistance,
  *    Veteran resistance) and writes World.bossTell for the UI / Directives
  *  - hosts the enemy reaction hooks (splitter/volatile/splitting deaths, vampiric, phasing) and
@@ -14,7 +14,7 @@
  *    - cast of the tell's ability:  self-targeted abilities (Repulsor Pulse, EMP) always reach;
  *      point abilities need their point within ability.radius + focus reach of the tell focus
  *      (the boss, its gate, a lane or a wall segment); Hunter Mark needs `target` = the true boss
- *      (Mirror Hive) or a point on its body. The command path also requires tower.ce >= cost.
+ *      (Mirror Hive) or a point on its body. Only casts that go off count (the abilities system calls in).
  *    - designate of the expected enemy (maw_open: the boss; resistance_rotate: the node whose
  *      element is the weak one; harmony_sync: every generator in the sung order).
  *   Directive-issued commands (`viaDirective: true`) score at directives.counter_efficiency (50%):
@@ -36,7 +36,8 @@ import { bossState, ctrlAt, resetBossState } from './bosses/state';
 import { blockProjectiles, initCtrl, moveBoss, openWeakPoint, releaseCtrl, updateCtrl } from './bosses/controller';
 import { segDist } from './bosses/common';
 import { TELLS } from './bosses/registry';
-import { ROLE_GEN, K } from './behaviors/kinds';
+import { ROLE_GEN, K, AI_DASH, AI_WINDUP } from './behaviors/kinds';
+import { MOVE_DASH, MOVE_NONE } from './bosses/state';
 import { onEnemyKilled, onEnemyStatus, onEnemyTowerHit, renderBehaviors, veteranMul } from './behaviors/support';
 
 export { bossState } from './bosses/state';
@@ -132,6 +133,38 @@ export function counterHint(w: World): { ability: Counter; bossIndex: number; x:
 /** The controller of a live boss (tests, Inspector). */
 export function bossCtrlOf(w: World, enemy: number): BossCtrl | null { return ctrlAt(bossState(w), enemy); }
 
+/**
+ * Repulsor Pulse ("cancels charges in progress") and Time Field ("dashes and charges that enter it stall"), EFFECT-AUDIT:
+ * a Charger winding up or dashing drops it and waits 3 s before the next; a boss mid-dash (charge, ram, lane dash) stops
+ * where it is and deals no dash damage. Returns true if a charge was stalled.
+ */
+export function stallCharge(w: World, i: number): boolean {
+  const e = w.enemies;
+  if (!w.alive(i)) return false;
+  if (e.flags[i] & EnemyFlag.Boss) {
+    const c = ctrlAt(bossState(w), i);
+    if (c === null || c.move !== MOVE_DASH) return false;
+    c.move = MOVE_NONE; c.mDmg = 0; c.mPass = 0;
+    e.vx[i] = 0; e.vy[i] = 0;
+    return true;
+  }
+  if (e.kind[i] !== K.charger) return false;
+  const st = e.aiI[i];
+  if (st < 0 || (st & (AI_WINDUP | AI_DASH)) === 0) return false;
+  e.aiI[i] = st & ~(AI_WINDUP | AI_DASH); e.aiA[i] = -180;
+  e.vx[i] = 0; e.vy[i] = 0;
+  return true;
+}
+
+/**
+ * EMP on a boss (EFFECT-AUDIT: "interrupts enemy abilities, tethers and shield links for 3 s"): cuts its feeding tether
+ * and generator / pulse shield links for `ticks` (the same link cut its own Counters apply).
+ */
+export function empLinkCut(w: World, i: number, ticks: number): void {
+  const c = (w.enemies.flags[i] & EnemyFlag.Boss) ? ctrlAt(bossState(w), i) : null;
+  if (c !== null && c.linkCutT < ticks) { c.linkCutT = ticks; c.tetherT = 0; }
+}
+
 /** aiStep calls this for bosses: true when the controller moved the boss itself. */
 export function bossMovement(w: World, i: number): boolean {
   const c = ctrlAt(bossState(w), i);
@@ -155,7 +188,8 @@ function makeModifier(w: World, s: BossState): NonNullable<World['damageModifier
       const c = ctrlAt(s, enemy);
       if (c !== null) {
         if (c.invulnT > 0) return 0;
-        if (c.weakT > 0) {
+        // exposed: the script's own window, or one held open by Kill Order / Held Open (they keep the flag set; EFFECT-AUDIT)
+        if (c.weakT > 0 || (e.flags[enemy] & EnemyFlag.WeakPointOpen)) {
           const t = w.tower;
           const des = (t.designated === enemy && t.designatedGen === e.gen[enemy]) || (t.designated2 === enemy && t.designated2Gen === e.gen[enemy]);
           m *= des ? 2 : 1.5;
@@ -207,12 +241,9 @@ export class BossSystem implements System {
   }
 
   onCommand(w: World, cmd: Command): boolean {
-    if (cmd.type === 'cast') {
-      const def = abilityDef(cmd.ability);
-      const mul = w.stats.get(`ability.${cmd.ability}.cost_mul`);
-      const cost = (def?.cost ?? 0) * (mul > 0 ? mul : 1);
-      if (w.tower.ce + 1e-9 >= cost) notifyAbilityCast(w, cmd.ability, cmd.x, cmd.y, cmd.target ?? NO_ENTITY, !!cmd.viaDirective);
-    } else if (cmd.type === 'designate' && cmd.enemy !== null) {
+    // casts score from systems/abilities.ts once the cast actually goes off (EFFECT-AUDIT: a cast the abilities system
+    // rejects — not slotted, on cooldown, Blackout — used to score here from the bare command)
+    if (cmd.type === 'designate' && cmd.enemy !== null) {
       notifyDesignate(w, cmd.enemy, !!(cmd as { viaDirective?: boolean }).viaDirective);
     }
     return false;
@@ -271,7 +302,7 @@ export class BossSystem implements System {
         }
       }
       if (c.revealT > 0) out.push(x, y, r * 1.35, 0, Shape.Star, 1, 1, 1, 1, 7);
-      if (c.weakT > 0) {
+      if (c.weakT > 0 || (e.flags[b] & EnemyFlag.WeakPointOpen)) {
         const wp = c.def.phases[c.phase].weakPoint;
         const a = e.angle[b] + (wp?.angle ?? 0), d = wp?.radius ?? 0;
         out.push(x + cos(a) * d, y + sin(a) * d, 10, 0, Shape.Circle, 1, 0.9, 0.2, 0.9, 6);

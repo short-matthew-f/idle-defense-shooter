@@ -14,8 +14,10 @@
  *    Per-link riders: Static Charge (applies 'static'), Forked Current (extra strike from the same
  *    link), Superconductivity / Cold Circuit bonuses (Ev.Fusion / Ev.Triad inserted into the chain),
  *    Electrolysis (instant share of pending poison), Plasma (plasma_line hazard along a burning link).
+ *    Stormglass (Anomaly): a link from or to a frozen or max-Chill enemy reaches 2 × lightning.arc_range.
  */
 import type { World } from '../core/world';
+import type { WorldImpl } from '../core/world-impl';
 import type { HitInfo } from '../core/system';
 import { EnemyFlag, Ev, MAX_ENEMIES } from '../core/types';
 import { targetable } from '../core/spatial';
@@ -59,6 +61,7 @@ export class ArcEngine {
   private fork = 0;
   private anchor = false; private anchorBonus = 0.5;
   private superc = 0; private electro = 0; private plasma = 0; private plasmaDur = 1; private coldCircuit = 0;
+  private stormglass = false;
   private visited: Int32Array[] = [];
   private depth = 0;
 
@@ -76,6 +79,13 @@ export class ArcEngine {
     this.plasma = s.has('fusion.plasma') ? s.get('fusion.plasma') : 0;
     this.plasmaDur = s.get('fusion.plasma.duration');
     this.coldCircuit = s.has('triad.cold_circuit') ? s.get('triad.cold_circuit') : 0;
+    this.stormglass = s.hasAnomaly('stormglass');
+  }
+
+  /** Stormglass: frozen or max-Chill enemies conduct lightning (their arc links reach double range). */
+  private conducts(w: World, i: number): boolean {
+    const e = w.enemies;
+    return i >= 0 && (e.frozenT[i] > 0 || (e.chill[i] > 0 && e.chill[i] >= (w as WorldImpl).statusCap('chill')));
   }
 
   private visitBuf(): Int32Array {
@@ -98,7 +108,7 @@ export class ArcEngine {
     let mult = 1, chilled = origin >= 0 && e.chill[origin] > 0 ? 1 : 0;
     let linkCause = cause, fusionDone = false, triadDone = false, struck = 0;
     for (let k = 0; k < targets && nv < MAX_LINKS - 1; k++) {
-      const next = this.pick(w, px, py, visited, nv);
+      const next = this.pick(w, px, py, visited, nv, this.range, prev);
       if (next < 0) break;
       const cc = this.coldCircuit > 0 && prev >= 0 && e.chill[prev] > 0 && e.poison[prev] > 0 && e.chill[next] > 0 && e.poison[next] > 0;
       let dmg = baseDmg * mult;
@@ -114,7 +124,7 @@ export class ArcEngine {
       const linkId = this.strike(w, prev, px, py, next, dmg, linkCause, srcTag);
       struck++;
       if (this.fork > 0 && nv < MAX_LINKS - 1 && w.prng.chance(this.fork)) {
-        const f = this.pick(w, px, py, visited, nv);
+        const f = this.pick(w, px, py, visited, nv, this.range, prev);
         if (f >= 0) { visited[nv++] = f; this.strike(w, prev, px, py, f, dmg, linkCause, srcTag); struck++; }
       }
       if (e.chill[next] > 0) chilled++;
@@ -151,11 +161,15 @@ export class ArcEngine {
     return id;
   }
 
-  /** Next arc target near (x,y): anchors first (Storm), then chilled (Superconductivity), then nearest. */
-  pick(w: World, x: number, y: number, visited: Int32Array, nv: number, range = this.range): number {
+  /**
+   * Next arc target near (x,y): anchors first (Storm), then chilled (Superconductivity), then nearest. `from` is the
+   * enemy the arc leaves (-1 for a point): with Stormglass a link from or to a conducting enemy reaches 2 × range.
+   */
+  pick(w: World, x: number, y: number, visited: Int32Array, nv: number, range = this.range, from = -1): number {
     const e = w.enemies;
     const buf = this.qs.push();
-    const n = w.queryRadius(x, y, range, buf);
+    const glass = this.stormglass, fromGlass = glass && this.conducts(w, from);
+    const n = w.queryRadius(x, y, glass ? 2 * range : range, buf);
     let best = -1, bestTier = 3, bestD = Infinity;
     for (let k = 0; k < n; k++) {
       const j = buf[k];
@@ -165,6 +179,10 @@ export class ArcEngine {
       if (seen) continue;
       const tier = this.anchor && (e.flags[j] & ANCHOR) ? 0 : this.superc > 0 && e.chill[j] > 0 ? 1 : 2;
       const dx = e.x[j] - x, dy = e.y[j] - y, d = dx * dx + dy * dy;
+      if (glass && !fromGlass) {   // beyond normal reach (the hash's rule: range + target radius) only a conducting target links
+        const rr = range + e.radius[j];
+        if (d > rr * rr && !this.conducts(w, j)) continue;
+      }
       if (tier < bestTier || (tier === bestTier && (d < bestD || (d === bestD && j < best)))) { best = j; bestTier = tier; bestD = d; }
     }
     this.qs.pop();

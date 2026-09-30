@@ -9,8 +9,9 @@
  *
  * Each discovered entry gives +0.25% damage and Scrap: StatResolver multiplies `combat.power_mul`
  * and `economy.scrap_mul` by `codexMultiplier(meta)` (and Prestige Echoes use it too).
- * Milestones at 10 / 25 / 50 entries unlock palettes (`meta.palettes`) and add Anomaly draft
- * weight for Rare / Paradox / Cursed offers (`codexAnomalyWeight`).
+ * Milestones at 10 / 25 / 50 entries add Anomaly draft weight for Rare / Paradox / Cursed offers
+ * (`codexAnomalyWeight`) and record palettes in `meta.palettes`. EFFECT-AUDIT: nothing renders those palettes
+ * yet (design §16 promises them; no in-game text does) — a record for a future cosmetic, not a delivered effect.
  *
  * Pure except `scanCodexEvent` / `registerEntry`, which the ProgressionSystem (run/prestige.ts)
  * calls for every new event once per tick.

@@ -21,10 +21,11 @@ import { SpatialHash } from './spatial';
 import { ScratchStack } from './scratch';
 import { EventLogImpl, StateBit, STATUS_INDEX } from './events';
 import { StatResolver } from './stats';
-import { selectTarget } from './targeting';
+import { selectTarget, TargetingLogic } from './targeting';
 import { bossDef, bossIndex, enemyDef, flagBitsFor, kindIndex, KIND_LIST, ELITE_LIST, BOSS_LIST } from './content';
 import { enemyHp, bossHp, scrapPerKill, THREAT_SPEED_PER_LEVEL } from '../economy/curves';
 import { ELEMENT_ORDER } from '../data/index';
+import { trialHas } from '../economy/prestige';
 
 export const STATUS_CAPS: Record<StatusId, number> = { burn: 10, poison: 20, chill: 5, shock: 5, bleed: 10, brittle: 3, marked: 1, static: 10 };
 export const ELITE_HP_MUL = 2.5;
@@ -71,6 +72,8 @@ export class WorldImpl implements World {
   private shareSecond = -1;
   /** Cached per rebuild. */
   private powerMul = 1;
+  private killHeal = 0; private bossCores = 1; private markBonus = 0.5;
+  huntedGen = 0;   // generation of the enemy under the tactical Hunter Mark (0 = none); systems/abilities.ts writes it
   lastTowerDamageTick = -1_000_000;
   /** Scrap earned (all sources) this Prestige; the run machine measures rates from it. */
   scrapEarned = 0;
@@ -143,6 +146,10 @@ export class WorldImpl implements World {
   private cacheStats(): void {
     const s = this.stats, t = this.tower;
     this.powerMul = s.get('combat.power_mul');
+    this.targeting.setRank(s.get('reactor.targeting_logic'));   // Reactor: Targeting Logic
+    this.killHeal = Math.max(0, s.get('bastion.kill_heal'));                        // Hungry Core (1% per kill)
+    this.bossCores = Math.max(1, Math.round(s.get('economy.boss_cores')));           // Tithe: 2 Cores on a boss's first kill
+    this.markBonus = Math.max(0, s.get('ability.hunter_mark.status_bonus'));         // Hunter Mark: +50% status application (+25%/rank)
     // WP2: attuned element trees set their status caps (fire.burn_stacks, poison.stack_cap, frost.chill_stacks)
     this.elemCap.burn = s.attuned('fire') ? Math.max(1, Math.floor(s.get('fire.burn_stacks'))) : 0;
     this.elemCap.poison = s.attuned('poison') ? Math.max(1, Math.floor(s.get('poison.stack_cap'))) : 0;
@@ -163,9 +170,15 @@ export class WorldImpl implements World {
   // Queries
   // -------------------------------------------------------------------------
   queryRadius(x: number, y: number, r: number, out: Int32Array): number { return this.spatial.queryRadius(x, y, r, out); }
-  nearestEnemy(x: number, y: number, maxR: number, profile: TargetingProfile, _system: WeaponSystemId, prev: number = NO_ENTITY): number {
-    return selectTarget(this.enemies, this.spatial, this.tower, x, y, maxR, profile, prev);
+  nearestEnemy(x: number, y: number, maxR: number, profile: TargetingProfile, system: WeaponSystemId, prev: number = NO_ENTITY): number {
+    const tl = this.targeting;
+    if (tl.rank <= 0) return selectTarget(this.enemies, this.spatial, this.tower, x, y, maxR, profile, prev);
+    const f = tl.filter(this.enemies, this.projectiles, this.run.tick, system !== 'primary');   // Reactor: Targeting Logic
+    const t = selectTarget(this.enemies, this.spatial, this.tower, x, y, maxR, profile, prev, f);
+    tl.claim(f, t);
+    return t;
   }
+  readonly targeting = new TargetingLogic();   // Reactor Targeting Logic state (core/targeting.ts)
   nearestExcluding(x: number, y: number, maxR: number, exclude: Int32Array, excludeCount: number): number {
     return this.spatial.nearest(x, y, maxR, exclude, excludeCount);
   }
@@ -232,7 +245,8 @@ export class WorldImpl implements World {
     if (this.damageModifier !== null) dmg *= this.damageModifier(enemy, h.element, opts.srcTag, opts.source);   // WP5: weak points, resistances
     let toHp = 0, absorbed = 0;
     if (opts.trueDamage) {
-      toHp = dmg;
+      // EFFECT-AUDIT: true damage skips the damageMul hooks, so the Pacifist Core rule is enforced here too
+      toHp = trialHas(this.meta.activeTrial, 'pacifist') && opts.source !== 'status' && opts.source !== 'hazard' && opts.source !== 'retaliation' ? 0 : dmg;
     } else {
       dmg *= this.powerMul * this.dynamicPowerMul;
       for (let k = 0; k < this.hookDmg.length; k++) dmg *= this.hookDmg[k].damageMul!(this, enemy, dmg, h, !!opts.ignoreArmor);   // WP2
@@ -289,13 +303,13 @@ export class WorldImpl implements World {
     // Command Energy
     const f = e.flags[i];
     this.gainCE((f & EnemyFlag.Elite) ? 12 : 1);   // balance pass: ordinary kills 2 → 1 CE (docs/BALANCE.md)
-    if (this.stats.hasAnomaly('hungry_core') && t.hp > 0) t.hp = Math.min(t.maxHp, t.hp + t.maxHp * 0.01);
+    if (this.killHeal > 0 && t.hp > 0) t.hp = Math.min(t.maxHp, t.hp + t.maxHp * this.killHeal);   // Hungry Core (bastion.kill_heal)
     // Cores
     if (f & EnemyFlag.Boss) {
       this.emit(Ev.BossKilled, h.srcTag, i, w, e.x[i], e.y[i], killId);
       if (!run.coresDroppedByBoss[w]) {
         run.coresDroppedByBoss[w] = 1;
-        const n = this.stats.hasAnomaly('tithe') ? 2 : 1;
+        const n = this.bossCores;
         run.cores += n;
         this.emit(Ev.CoreDrop, 'boss', n, w, e.x[i], e.y[i], killId);
       }
@@ -374,6 +388,11 @@ export class WorldImpl implements World {
     if (!this.alive(enemy) || stacks <= 0) return;
     const e = this.enemies;
     if (this.stats.frameFlag('statuses_plus_one') && status !== 'marked') stacks += 1;
+    // Hunter Mark: statuses applied to the marked enemy gain +status_bonus application (the fraction is a chance of one more)
+    if (this.huntedGen !== 0 && status !== 'marked' && e.gen[enemy] === this.huntedGen && e.markedT[enemy] > 0 && this.markBonus > 0) {
+      const x = stacks * this.markBonus, whole = Math.floor(x);
+      stacks += whole + (x > whole && this.prng.chance(x - whole) ? 1 : 0);
+    }
     const cap = this.statusCap(status);
     const dur = Math.min(65535, Math.max(0, durationTicks | 0));
     let n = 0;
@@ -461,6 +480,7 @@ export class WorldImpl implements World {
     p.tag[i] = init.srcTag ? this.tagId(init.srcTag) : Math.min(p.source[i], 5);
     p.critMul[i] = init.critMul ?? 1.5; p.retention[i] = init.retention ?? 1; p.pierceSpeed[i] = init.pierceSpeed ?? 0;
     p.bounceRange[i] = init.bounceRange ?? 0; p.knock[i] = init.knock ?? 0; p.execBonus[i] = init.execBonus ?? 0;
+    this.targeting.launched(this.run.tick, tgt, this.enemies.count, p.flags[i], p.damage[i]);   // Targeting Logic: damage in flight
     return i;
   }
   freeProjectile(i: number): void {
@@ -661,6 +681,7 @@ export class WorldImpl implements World {
     this.pendingEnemyFrees = 0; this.pendingProjFrees = 0;
     this.tower.designated = NO_ENTITY; this.tower.designated2 = NO_ENTITY;
     this.pendingCommands.length = 0;   // WP9: Directive commands never outlive their attempt
+    this.targeting.reset();
     this.spatial.rebuild();
   }
 }

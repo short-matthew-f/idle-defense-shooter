@@ -29,9 +29,9 @@ describe('designate_at', () => {
     expect(w.tower.designated).toBe(b);
     expect(w.tower.designatedGen).toBe(w.enemies.gen[b]);
     expect(seen).toEqual([{ type: 'designate', enemy: b }]);   // same path as 'designate'
-    // a dead slot before it does not shift the pick
+    // a dead slot before it does not shift the pick (explicit slot: without one, re-tapping the designated enemy clears it)
     w.killEnemy(a, -1, 'test');
-    expect(cmd(sim, { type: 'designate_at', x: -150, y: 40 })).toBeNull();
+    expect(cmd(sim, { type: 'designate_at', x: -150, y: 40, slot: 0 })).toBeNull();
     expect(w.tower.designated).toBe(b);
     // nothing within max(24, radius + 8)
     expect(cmd(sim, { type: 'designate_at', x: 300, y: 300 })).toBe('No enemy there');

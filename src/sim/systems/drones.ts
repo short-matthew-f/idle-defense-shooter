@@ -48,7 +48,7 @@ export class DronesSystem implements System {
   private arc = 0; private capacitance = 1; private reach = 4; private faraday = false;
   private launchBay = 0; private launchEvery = 3; private microDmg = 0.4; private microLife = 6; private brood = false;
   private medic = 0; private shieldFrac = 0; private aegis = false; private support = false;
-  private payload = false; private payEvery = 5; private payR = 60; private payDmg = 3;
+  private payload = false; private payEvery = 5; private payR = 60; private payDmg = 3; private perfectLead = false;
   private element: ElementId | null = null;
   private echo = false; private shots = 0;
   private phase = 0;
@@ -109,7 +109,8 @@ export class DronesSystem implements System {
     this.aegis = this.support && s.has('drones.support.aegis_wing');
     this.payload = s.has('drones.payload');
     this.payEvery = Math.max(0.5, s.get('drones.payload.interval'));
-    this.payR = s.get('drones.payload.radius');
+    this.perfectLead = s.get('reactor.targeting_logic') >= 2;
+    this.payR = s.get('drones.payload.radius') * (s.get('combat.blast_radius_mul') || 1);
     this.payDmg = s.get('drones.payload.damage');
     this.element = infusedElement(s, 'drones');
     this.echo = flags.includes('every_8th_repeats');
@@ -224,14 +225,14 @@ export class DronesSystem implements System {
     const e = w.enemies;
     const ddx = e.x[t] - this.x[k], ddy = e.y[t] - this.y[k];
     const dist = Math.sqrt(ddx * ddx + ddy * ddy);
-    const lead = dist / SHOT_SPEED * 0.8;
+    const lead = dist / SHOT_SPEED * (this.perfectLead ? 1 : 0.8);   // Targeting Logic rank 2: exact lead
     const a = atan2(e.y[t] + e.vy[t] * lead - this.y[k], e.x[t] + e.vx[t] * lead - this.x[k]);
     let dmg = this.dmg * (1 + boost);
     if (this.role[k] === ROLE_INTERCEPTOR && e.speed[t] * e.speedMul[t] >= FAST) dmg *= 1 + this.interceptBonus;
     w.spawnProjectile({
       kind: ProjKind.DroneShot, source: SRC_DRONES, srcTag: 'drones', x: this.x[k], y: this.y[k],
       vx: cos(a) * SHOT_SPEED, vy: sin(a) * SHOT_SPEED, damage: dmg, radius: 2.5,
-      life: Math.ceil((this.range * 1.5 / SHOT_SPEED) * 60), flags: ProjFlag.FromDrone, element: this.element, cause: -1,
+      life: Math.ceil((this.range * 1.5 / SHOT_SPEED) * 60), flags: ProjFlag.FromDrone, element: this.element, cause: -1, target: t,
     });
   }
 

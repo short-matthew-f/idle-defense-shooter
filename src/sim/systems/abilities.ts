@@ -10,21 +10,27 @@
  *    reactor.command.cooldowns) (Critical Relay: each crit trims 0.02 s/rank), and emits Ev.Cast
  *    (src `ability.<id>`, a = ability index, b = cost, data {ability, viaDirective, directive}).
  *    Every effect uses that event as its cause and srcTag `ability.<id>`.
- *  - onCommand returns FALSE for `cast` on purpose: later systems (boss Counters) observe every cast;
- *    they can check the Ev.Cast event of this tick (or `lastCastEvent`) to know whether it went off.
+ *  - onCommand returns FALSE for `cast` on purpose (other observers may watch commands); a cast that goes off
+ *    calls enemies/bosses.notifyAbilityCast, which scores any boss Counter it answers.
  *
  * Effects (numbers: data/abilities.ts + base-stats `ability.<id>.*`):
  *  hunter_mark      designates the enemy (tower.designated) and applies 'marked' for `duration` s.
  *                   CONTRACT for the elements system: `enemies.markedT[i] > 0` ⇒ status application on i
  *                   × (1 + ability.hunter_mark.status_bonus). The designation is released when the mark ends.
- *  repulsor_pulse   knockback away from the tower for every enemy within `radius`, `force` units
- *  time_field       'time_field' hazard; enemies inside move at `slow` (20%) speed via enemies.fieldSlow
+ *  repulsor_pulse   knockback away from the tower for every enemy within `radius`, `force` units; charges and boss
+ *                   dashes in progress within the radius are cancelled (enemies/bosses.stallCharge)
+ *  time_field       'time_field' hazard; enemies inside move at `slow` (20%) speed via enemies.fieldSlow; a charge or
+ *                   boss dash that enters it stalls (stallCharge)
  *  bombardment      explode after `fuse` s: `damage` × ballistics.damage in `radius`
  *  emp              strips shields within 220; interrupts (staggerT = `duration` s) bosses, elites and
- *                   ability-bearing enemies (healers, wardens, ranged, jammers, nullifiers, support)
+ *                   ability-bearing enemies (healers, wardens, ranged, jammers, nullifiers, support); a boss's
+ *                   tether and shield links are cut for `duration` s (enemies/bosses.empLinkCut)
  *  overdrive        World.dynamicSpeedMul × `speed` for `duration` s
  *  emergency_repair healTower(`heal` × max HP)
- *  drone_surge      `count` homing Microdrone projectiles (pierce 5, 1.5× primary damage) for 10 s
+ *  drone_surge      `count` homing Microdrone projectiles (pierce 5, 1.5× primary damage) for 10 s; in the last
+ *                   0.75 s each survivor dives at the nearest enemy and explodes (40 u, 3× primary damage)
+ *  feedback_loop    (Anomaly) every successful cast recasts itself 1 s later at 50% power: same point/target, no CE,
+ *                   no cooldown, no Ev.Cast (so no Counter); Ev.Anomaly `anomaly.feedback_loop` is the recast's cause
  *  missile_storm    `missiles` homing Missiles over 4 s at enemies within 200 of the point (3× primary, blast 26)
  *  singularity_bomb pulls enemies within 150 toward the point for `pull_seconds`, then explodes for
  *                   `damage` × ballistics.damage (radius 100)
@@ -43,6 +49,7 @@ import type { Command, UiState } from '../core/types';
 import { ARENA_RADIUS, EnemyFlag, Ev, FxKind, NO_ENTITY, ProjFlag, ProjKind, Shape, TICK_RATE, TOWER_RADIUS } from '../core/types';
 import { abilityDef, allAbilities } from '../core/content';
 import { cos, sin, atan2, TAU } from '../math/lut';
+import { stallCharge, empLinkCut, notifyAbilityCast } from '../enemies/bosses';
 
 /** Projectile `source` index for ability projectiles (hits report source 'ability'). */
 export const ABILITY_SOURCE = 255;
@@ -60,6 +67,10 @@ const MARK_PICK_RADIUS = 80;
 const SINGULARITY_PULL = 260;           // units/s toward the point
 const SINGULARITY_BLAST = 100;
 const DRONE_DAMAGE_MUL = 1.5, DRONE_PIERCE = 5, DRONE_SPEED = 260, DRONE_SECONDS = 10;
+/** Drone Surge's last 0.75 s: every surviving drone dives at the nearest enemy and explodes (DIVE_BLAST u, ×DIVE_MUL damage). */
+const DIVE_TICKS = 45, DIVE_BLAST = 40, DIVE_MUL = 2;
+/** Feedback Loop recasts waiting (fixed ring; a fifth cast inside one second is not repeated). */
+const MAX_RECASTS = 4;
 const MISSILE_DAMAGE_MUL = 3, MISSILE_BLAST = 26, MISSILE_SPEED = 360, MISSILE_LIFE = 3 * TICK_RATE;
 const MAX_ZONES = 8;
 const FX_RING = 16;
@@ -95,7 +106,7 @@ export function abilityCost(w: World, id: string): number {
   return def.cost * mul * (trialActive(w, 'commander') ? 0.5 : 1);
 }
 
-interface Zone { active: boolean; kind: number; x: number; y: number; r: number; start: number; end: number; cause: number; n: number; launched: number }
+interface Zone { active: boolean; kind: number; x: number; y: number; r: number; start: number; end: number; cause: number; n: number; launched: number; p: number }
 const Z_TIME = 0, Z_BOMB = 1, Z_SING = 2, Z_STORM = 3;
 
 export class AbilitiesSystem implements System {
@@ -117,7 +128,12 @@ export class AbilitiesSystem implements System {
   private fxBuf = new Float32Array(FX_RING * 5);
   private fxN = 0;
 
-  constructor() { for (let k = 0; k < MAX_ZONES; k++) this.zones.push({ active: false, kind: 0, x: 0, y: 0, r: 0, start: 0, end: 0, cause: -1, n: 0, launched: 0 }); }
+  // Feedback Loop recasts (ability index, point, target ref, due tick, cause); rcN live entries
+  private rcK = new Int32Array(MAX_RECASTS); private rcX = new Float64Array(MAX_RECASTS); private rcY = new Float64Array(MAX_RECASTS);
+  private rcT = new Int32Array(MAX_RECASTS); private rcG = new Uint32Array(MAX_RECASTS); private rcDue = new Int32Array(MAX_RECASTS);
+  private rcCause = new Int32Array(MAX_RECASTS); private rcN = 0;
+
+  constructor() { for (let k = 0; k < MAX_ZONES; k++) this.zones.push({ active: false, kind: 0, x: 0, y: 0, r: 0, start: 0, end: 0, cause: -1, n: 0, launched: 0, p: 1 }); }
 
   init(w: World): void {
     this.rebuild(w);
@@ -136,7 +152,8 @@ export class AbilitiesSystem implements System {
     this.cd.fill(0);
     for (const z of this.zones) z.active = false;
     this.setOverdrive(w, 1);
-    this.odTicks = 0; this.surgeTicks = 0; this.markIdx = NO_ENTITY; this.bossN = 0;
+    this.odTicks = 0; this.surgeTicks = 0; this.markIdx = NO_ENTITY; this.bossN = 0; this.rcN = 0;
+    (w as WorldImpl).huntedGen = 0;
   }
 
   private setOverdrive(w: World, f: number): void {
@@ -190,56 +207,77 @@ export class AbilitiesSystem implements System {
     this.cd[k] = def.cooldown * TICK_RATE * this.cdMul;
     const cause = w.emit(Ev.Cast, `ability.${id}`, k, cost, x, y, -1, { ability: id, viaDirective, directive });
     this.lastCastEvent = cause;
+    this.effect(w, id, x, y, target, cause, 1);
+    notifyAbilityCast(w, id, x, y, target, viaDirective);   // boss Counters score only for casts that go off
+    // Feedback Loop (Anomaly): the cast repeats itself 1 s later at 50% power
+    if (s.hasAnomaly('feedback_loop') && this.rcN < MAX_RECASTS) {
+      const r = this.rcN++;
+      this.rcK[r] = k; this.rcX[r] = x; this.rcY[r] = y; this.rcCause[r] = cause;
+      this.rcT[r] = target >= 0 && w.alive(target) ? target : NO_ENTITY; this.rcG[r] = this.rcT[r] >= 0 ? e.gen[target] : 0;
+      this.rcDue[r] = w.tick + Math.max(1, Math.round(s.get('anomaly.feedback_loop.delay') * TICK_RATE));
+    }
+    return null;
+  }
+
+  /** One ability's effect at `power` (1 for a cast, anomaly.feedback_loop.power for a Feedback Loop recast). */
+  private effect(w: World, id: AbilityId, x: number, y: number, target: number, cause: number, power: number): void {
+    const def = abilityDef(id)!;
+    const e = w.enemies, t = w.tower, s = w.stats;
     const tag = `ability.${id}`;
     const now = w.tick;
     switch (id) {
       case 'hunter_mark': {
-        const dur = Math.round(s.get('ability.hunter_mark.duration') * TICK_RATE);
+        if (!(target >= 0 && w.alive(target))) return;
+        const dur = Math.round(s.get('ability.hunter_mark.duration') * TICK_RATE * power);
         w.applyStatus(target, 'marked', 1, dur, tag, cause);
         t.designated = target; t.designatedGen = e.gen[target];
         this.markIdx = target; this.markGen = e.gen[target];
+        (w as WorldImpl).huntedGen = e.gen[target];
         this.fx(FxKind.Counter, x, y, e.radius[target] * 2, 0);
         break;
       }
       case 'repulsor_pulse': {
-        const r = s.get('ability.repulsor_pulse.radius'), force = s.get('ability.repulsor_pulse.force');
+        const r = s.get('ability.repulsor_pulse.radius'), force = s.get('ability.repulsor_pulse.force') * power;
         const n = w.queryRadius(0, 0, r, this.scratch);
-        for (let j = 0; j < n; j++) { const i = this.scratch[j]; if (this.hostile(w, i)) w.knockback(i, e.x[i], e.y[i], force); }
+        for (let j = 0; j < n; j++) { const i = this.scratch[j]; if (this.hostile(w, i)) { stallCharge(w, i); w.knockback(i, e.x[i], e.y[i], force); } }
         this.fx(FxKind.Shockwave, 0, 0, r, 1);
         break;
       }
       case 'time_field': {
-        const dur = s.get('ability.time_field.duration');
+        const dur = s.get('ability.time_field.duration') * power;
         this.addZone(Z_TIME, x, y, def.radius, now + Math.round(dur * TICK_RATE), cause, 0);
         w.addHazard({ kind: 'time_field', x, y, radius: def.radius, life: dur, dps: 0, cause, owner: 'ability' });
         this.fx(FxKind.Shockwave, x, y, def.radius, 2);
         break;
       }
-      case 'bombardment':
-        this.addZone(Z_BOMB, x, y, s.get('ability.bombardment.radius'), now + Math.round(s.get('ability.bombardment.fuse') * TICK_RATE), cause, 0);
+      case 'bombardment': {
+        const z = this.addZone(Z_BOMB, x, y, s.get('ability.bombardment.radius') * (s.get('combat.blast_radius_mul') || 1), now + Math.round(s.get('ability.bombardment.fuse') * TICK_RATE), cause, 0);
+        if (z) z.p = power;
         break;
+      }
       case 'emp': {
-        const dur = Math.round(s.get('ability.emp.duration') * TICK_RATE);
+        const dur = Math.round(s.get('ability.emp.duration') * TICK_RATE * power);
         const n = w.queryRadius(0, 0, def.radius, this.scratch);
         for (let j = 0; j < n; j++) {
           const i = this.scratch[j];
           if (!this.hostile(w, i)) continue;
           e.shield[i] = 0;
           if ((e.flags[i] & EMP_INTERRUPT) && e.staggerT[i] < dur) e.staggerT[i] = Math.min(65535, dur);
+          if (e.flags[i] & EnemyFlag.Boss) empLinkCut(w, i, dur);
         }
         this.fx(FxKind.Shockwave, 0, 0, def.radius, 3);
         break;
       }
       case 'overdrive':
-        this.odTicks = Math.round(s.get('ability.overdrive.duration') * TICK_RATE);
+        this.odTicks = Math.max(this.odTicks, Math.round(s.get('ability.overdrive.duration') * TICK_RATE * power));
         this.setOverdrive(w, Math.max(1, s.get('ability.overdrive.speed')));
         break;
       case 'emergency_repair':
-        w.healTower(t.maxHp * s.get('ability.emergency_repair.heal'), cause);
+        w.healTower(t.maxHp * s.get('ability.emergency_repair.heal') * power, cause);
         this.fx(FxKind.Shockwave, 0, 0, TOWER_RADIUS * 2, 4);
         break;
       case 'drone_surge': {
-        const n = Math.max(0, Math.floor(s.get('ability.drone_surge.count') + 1e-9));
+        const n = Math.max(power < 1 ? 1 : 0, Math.floor(s.get('ability.drone_surge.count') * power + 1e-9));
         const dmg = DRONE_DAMAGE_MUL * s.get('ballistics.damage');
         for (let j = 0; j < n; j++) {
           const a = (j / Math.max(1, n)) * TAU;
@@ -253,15 +291,35 @@ export class AbilitiesSystem implements System {
       }
       case 'missile_storm': {
         const z = this.addZone(Z_STORM, x, y, def.radius, now + Math.max(1, Math.round(def.duration * TICK_RATE)), cause,
-          Math.max(0, Math.floor(s.get('ability.missile_storm.missiles') + 1e-9)));
+          Math.max(0, Math.floor(s.get('ability.missile_storm.missiles') * power + 1e-9)));
         if (z) this.fx(FxKind.Tell, x, y, def.radius, 5);
         break;
       }
-      case 'singularity_bomb':
-        this.addZone(Z_SING, x, y, def.radius, now + Math.round(s.get('ability.singularity_bomb.pull_seconds') * TICK_RATE), cause, 0);
+      case 'singularity_bomb': {
+        const z = this.addZone(Z_SING, x, y, def.radius, now + Math.round(s.get('ability.singularity_bomb.pull_seconds') * TICK_RATE), cause, 0);
+        if (z) z.p = power;
         break;
+      }
     }
-    return null;
+  }
+
+  /** Feedback Loop: release recasts that are due (Ev.Anomaly cause → the recast's effects). */
+  private releaseRecasts(w: World): void {
+    let r = 0;
+    while (r < this.rcN) {
+      if (this.rcDue[r] > w.tick) { r++; continue; }
+      const id = ABILITY_IDS[this.rcK[r]];
+      const tg = this.rcT[r] >= 0 ? w.resolveEnemy(this.rcT[r], this.rcG[r]) : NO_ENTITY;
+      if (w.run.phase === 'combat' && w.tower.hp > 0) {
+        const ev = w.emit(Ev.Anomaly, 'anomaly.feedback_loop', this.rcK[r], 0, this.rcX[r], this.rcY[r], this.rcCause[r]);
+        this.effect(w, id, this.rcX[r], this.rcY[r], tg, ev, Math.max(0, w.stats.get('anomaly.feedback_loop.power')));
+      }
+      const l = --this.rcN;
+      if (l !== r) {
+        this.rcK[r] = this.rcK[l]; this.rcX[r] = this.rcX[l]; this.rcY[r] = this.rcY[l]; this.rcT[r] = this.rcT[l];
+        this.rcG[r] = this.rcG[l]; this.rcDue[r] = this.rcDue[l]; this.rcCause[r] = this.rcCause[l];
+      }
+    }
   }
 
   private addZone(kind: number, x: number, y: number, r: number, end: number, cause: number, n: number): Zone | null {
@@ -270,7 +328,7 @@ export class AbilitiesSystem implements System {
     if (!z) {   // all busy: replace the one ending soonest (lowest index on ties)
       for (const c of this.zones) if (!z || c.end < z.end) z = c;
     }
-    z!.active = true; z!.kind = kind; z!.x = x; z!.y = y; z!.r = r; z!.end = end; z!.cause = cause; z!.n = n; z!.launched = 0;
+    z!.active = true; z!.kind = kind; z!.x = x; z!.y = y; z!.r = r; z!.end = end; z!.cause = cause; z!.n = n; z!.launched = 0; z!.p = 1;
     z!.start = -1;
     return z;
   }
@@ -298,13 +356,15 @@ export class AbilitiesSystem implements System {
       const m = w.resolveEnemy(this.markIdx, this.markGen);
       if (m < 0 || e.markedT[m] === 0) {
         if (t.designatedGen === this.markGen) { t.designated = NO_ENTITY; t.designatedGen = 0; }
+        if ((w as WorldImpl).huntedGen === this.markGen) (w as WorldImpl).huntedGen = 0;
         this.markIdx = NO_ENTITY;
       } else this.markIdx = m;
     }
+    if (this.rcN > 0) this.releaseRecasts(w);
     // zones
     const now = w.tick;
     for (const z of this.zones) if (z.active) this.tickZone(w, z, now);
-    // drone surge: retarget drones whose target died or was already struck
+    // drone surge: retarget drones whose target died or was already struck; at the end they dive and explode
     if (this.surgeTicks > 0) { this.surgeTicks--; this.retargetDrones(w); }
   }
 
@@ -338,18 +398,23 @@ export class AbilitiesSystem implements System {
         if (now >= z.end) { z.active = false; return; }
         const slow = 1 - Math.min(1, Math.max(0, s.get('ability.time_field.slow')));
         const n = w.queryRadius(z.x, z.y, z.r, this.scratch);
-        for (let j = 0; j < n; j++) { const i = this.scratch[j]; if (this.hostile(w, i) && e.fieldSlow[i] < slow) e.fieldSlow[i] = slow; }
+        for (let j = 0; j < n; j++) {
+          const i = this.scratch[j];
+          if (!this.hostile(w, i)) continue;
+          if (e.fieldSlow[i] < slow) e.fieldSlow[i] = slow;
+          stallCharge(w, i);   // dashes and charges that enter the field stall
+        }
         return;
       }
       case Z_BOMB:
         if (now < z.end) return;
         z.active = false;
-        w.explode(z.x, z.y, z.r, s.get('ability.bombardment.damage') * s.get('ballistics.damage'), { source: 'ability', srcTag: 'ability.bombardment', cause: z.cause });
+        w.explode(z.x, z.y, z.r, s.get('ability.bombardment.damage') * s.get('ballistics.damage') * z.p, { source: 'ability', srcTag: 'ability.bombardment', cause: z.cause });
         return;
       case Z_SING: {
         if (now >= z.end) {
           z.active = false;
-          w.explode(z.x, z.y, SINGULARITY_BLAST, s.get('ability.singularity_bomb.damage') * s.get('ballistics.damage'),
+          w.explode(z.x, z.y, SINGULARITY_BLAST * (s.get('combat.blast_radius_mul') || 1), s.get('ability.singularity_bomb.damage') * s.get('ballistics.damage') * z.p,
             { source: 'ability', srcTag: 'ability.singularity_bomb', cause: z.cause, falloff: false });
           return;
         }
@@ -379,7 +444,7 @@ export class AbilitiesSystem implements System {
     const a = atan2(ty, tx) + ((z.launched % 5) - 2) * 0.25;
     w.spawnProjectile({ kind: ProjKind.Missile, source: ABILITY_SOURCE, srcTag: 'ability.missile_storm',
       x: cos(a) * TOWER_RADIUS, y: sin(a) * TOWER_RADIUS, vx: cos(a) * MISSILE_SPEED, vy: sin(a) * MISSILE_SPEED,
-      damage: MISSILE_DAMAGE_MUL * w.stats.get('ballistics.damage'), radius: 4, life: MISSILE_LIFE, blast: MISSILE_BLAST,
+      damage: MISSILE_DAMAGE_MUL * w.stats.get('ballistics.damage'), radius: 4, life: MISSILE_LIFE, blast: MISSILE_BLAST * (w.stats.get('combat.blast_radius_mul') || 1),
       target: tg, flags: ProjFlag.Homing, cause: z.cause });
   }
 
@@ -387,6 +452,15 @@ export class AbilitiesSystem implements System {
     const p = w.projectiles, tag = this.surgeTag;
     for (let i = 0; i < p.count; i++) {
       if (p.tag[i] !== tag || (p.flags[i] & ProjFlag.Dead)) continue;
+      if (p.blast[i] === 0 && p.life[i] <= DIVE_TICKS) {
+        // the drone's last 0.75 s: dive at the nearest enemy; its next impact is an explosion
+        const nt = w.nearestExcluding(p.x[i], p.y[i], ARENA_RADIUS * 2, this.scratch, 0);
+        p.target[i] = nt; p.targetGen[i] = nt >= 0 ? w.enemies.gen[nt] : 0;
+        p.pierce[i] = 0; p.blast[i] = DIVE_BLAST * (w.stats.get('combat.blast_radius_mul') || 1); p.damage[i] *= DIVE_MUL;
+        p.hitMask[i] = 0; p.lastHit[i] = NO_ENTITY;
+        continue;
+      }
+      if (p.blast[i] > 0) continue;   // diving: keep the dive target
       const cur = p.target[i];
       if (cur >= 0 && cur !== p.lastHit[i] && w.alive(cur)) continue;
       this.scratch[0] = p.lastHit[i];

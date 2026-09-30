@@ -25,7 +25,8 @@ describe('Anomaly stat effects resolve through the StatResolver', () => {
   const cases: [string, string, (base: number) => number][] = [
     ['mirror_node', 'laser.damage', (b) => b * 0.6],
     ['cold_iron', 'frost.chill_armor_shred', (b) => b + 0.01],
-    ['heavy_water', 'poison.damage', (b) => b * 1.5],
+    ['heavy_water', 'poison.damage', (b) => b * 1.2],   // EFFECT-AUDIT: ticks ×1.25 slower, each ×1.5 harder → ×1.2 per second
+    ['heavy_water', 'poison.tick_interval', (b) => b * 1.25],
     ['overcharged_capacitor', 'economy.ce_cap', (b) => b * 1.5],
     ['glass_cannon', 'combat.power_mul', (b) => b * 1.5],   // balance pass: +80% → +50%
     ['unstable_isotope', 'combat.blast_radius_mul', (b) => b + 0.5],
@@ -120,28 +121,45 @@ describe('Rare / Common / Cursed mechanics', () => {
     expect(eventsSrc(sim, 'anomaly.pinball')).toBe(1);
   });
 
-  it('Stormglass: lightning on a frozen enemy arcs at double range', () => {
-    const sim = calmSim();
-    const w = sim.world;
-    socket(sim, 'stormglass');
-    const a = tough(sim, 100, 0), b = tough(sim, 100, 180);
-    w.freeze(a, 600, 'frost', -1);
-    const hp = w.enemies.hp[b];
-    w.damage(a, 100, { source: 'element', srcTag: 'lightning', element: 'lightning', cause: -1 });
-    expect(w.enemies.hp[b]).toBeLessThan(hp);
-    expect(eventsSrc(sim, 'anomaly.stormglass')).toBe(1);
+  it('Stormglass: arcs from or to a frozen / max-Chill enemy reach double range', () => {
+    // EFFECT-AUDIT: the arc itself reaches 2 × range (it used to add a separate 50% arc)
+    const struck = (glass: boolean, freeze: 'from' | 'to' | 'none'): boolean => {
+      const sim = calmSim();
+      const w = sim.world;
+      w.build.attunements = ['lightning'];
+      w.rebuildStats();
+      if (glass) socket(sim, 'stormglass');
+      const a = tough(sim, 100, 0), b = tough(sim, 100, 180);   // 180 apart: beyond the 110 arc range, within 220
+      if (freeze === 'from') w.freeze(a, 600, 'frost', -1);
+      if (freeze === 'to') w.freeze(b, 600, 'frost', -1);
+      const el = sim.plugins.find((pl) => pl.id === 'elements') as unknown as { arcs: { chain(w: unknown, o: number, x: number, y: number, n: number, d: number, c: number): number } };
+      const hp = w.enemies.hp[b];
+      el.arcs.chain(w, a, w.enemies.x[a], w.enemies.y[a], 1, 50, -1);
+      return w.enemies.hp[b] < hp;
+    };
+    expect(struck(false, 'from')).toBe(false);
+    expect(struck(true, 'from')).toBe(true);
+    expect(struck(true, 'to')).toBe(true);
+    expect(struck(true, 'none')).toBe(false);
   });
 
-  it('Clockwork Blade reverses every 6 s with a knockback shockwave', () => {
+  it('Clockwork Blade reverses every 6 s with a shockwave at the blade tip', () => {
     const sim = calmSim();
     const w = sim.world;
     w.build.hardpoints.push('blade');
     socket(sim, 'clockwork_blade');
-    const e = tough(sim, 60, 0);
+    w.run.attemptTick = 6 * 60 - 1;
+    combatTick(sim);                                   // the blade publishes its geometry
+    const a = w.shared.bladeAngles[0], tip = w.shared.bladeInner[0] + w.shared.bladeLens[0];
+    const near = tough(sim, Math.cos(a) * (tip + 60), Math.sin(a) * (tip + 60));   // just past the tip
+    const far = tough(sim, -Math.cos(a) * 60, -Math.sin(a) * 60);                   // by the tower, opposite the blade
+    const d0 = Math.hypot(w.enemies.x[near], w.enemies.y[near]);
+    const fx = w.enemies.x[far], fy = w.enemies.y[far];
     w.run.attemptTick = 6 * 60;
     combatTick(sim);
     expect(w.signals.bladeDir).toBe(-1);
-    expect(w.enemies.x[e]).toBeGreaterThan(60);
+    expect(Math.hypot(w.enemies.x[near], w.enemies.y[near])).toBeGreaterThan(d0 + 20);   // pushed away from the tip
+    expect([w.enemies.x[far], w.enemies.y[far]]).toEqual([fx, fy]);                     // out of the shockwave
     expect(eventsSrc(sim, 'anomaly.clockwork_blade')).toBeGreaterThan(0);
   });
 
@@ -232,18 +250,30 @@ describe('Rare / Common / Cursed mechanics', () => {
     expect(ex[0].a).toBeCloseTo(28, 3);
   });
 
-  it('Feedback Loop: a cast repeats its damage at 50% one second later', () => {
+  it('Feedback Loop: every cast recasts itself 1 s later at 50% power (damage and utility)', () => {
     const sim = calmSim();
     const w = sim.world;
     socket(sim, 'feedback_loop');
-    const e = tough(sim, 100, 0, 1e6);
-    const cast = w.emit(Ev.Cast, 'ability.bombardment', 3, 0, 100, 0, -1);
-    combatTick(sim);
-    w.damage(e, 1000, { source: 'ability', srcTag: 'ability.bombardment', cause: cast });
-    const after = w.enemies.hp[e];
-    ticks(sim, 62);
-    expect(after - w.enemies.hp[e]).toBeGreaterThan(0);
-    expect(sim.events.recent(0).some((ev) => ev.type === Ev.Hit && ev.src === 'anomaly.feedback_loop')).toBe(true);
+    w.run.phase = 'combat';
+    w.build.abilities = ['bombardment', 'emergency_repair'];
+    w.rebuildStats();
+    tough(sim, 200, 0);
+    w.tower.ce = w.tower.ceCap;
+    cmd(sim, { type: 'cast', ability: 'bombardment', x: 200, y: 0 });
+    ticks(sim, 120);
+    const booms = sim.events.recent(0).filter((ev) => ev.type === Ev.Explosion && ev.src === 'ability.bombardment');
+    expect(booms.length).toBe(2);
+    expect(booms[1].b).toBeCloseTo(booms[0].b * 0.5, 6);
+    expect(sim.events.recent(0).filter((ev) => ev.type === Ev.Cast).length).toBe(1);   // the recast is free and not a Cast
+    expect(eventsSrc(sim, 'anomaly.feedback_loop')).toBe(1);
+    // a utility ability repeats too: Emergency Repair heals 30% then 15%
+    w.tower.hp = w.tower.maxHp * 0.3;
+    w.tower.ce = w.tower.ceCap;
+    cmd(sim, { type: 'cast', ability: 'emergency_repair', x: 0, y: 0 });
+    ticks(sim, 1);
+    expect(w.tower.hp / w.tower.maxHp).toBeCloseTo(0.6, 3);
+    ticks(sim, 70);
+    expect(w.tower.hp / w.tower.maxHp).toBeCloseTo(0.75, 3);
   });
 
   it('Rot Bloom: poisoned deaths leave a poisoning cloud', () => {

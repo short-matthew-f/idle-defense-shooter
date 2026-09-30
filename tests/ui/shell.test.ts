@@ -167,8 +167,12 @@ describe('tab badges', () => {
     expect(tabBadges(draft).build).toMatchObject({ kind: 'alert', label: 'Anomaly draft waiting' });
     const fork = badgeState({ shop: [entry('ballistics.multishot', 0, { kind: 'doctrine' })] });
     expect(tabBadges(fork).build).toMatchObject({ kind: 'new', label: 'Doctrine fork open' });
-    const chosen = badgeState({ shop: fork.shop, build: { hardpoints: [], attunements: [], doctrines: { ballistics: 'multishot' as never } } });
+    // chosen: the other cards are changes (1 Core), not a free fork
+    const chosen = badgeState({ shop: [entry('ballistics.multishot', 1, { kind: 'doctrine' })], build: { hardpoints: [], attunements: [], doctrines: { ballistics: 'piercing' as never } } });
     expect(tabBadges(chosen).build).toBeNull();
+    // Reachability: an empty second-Doctrine slot (free) badges Build like a fork
+    const second = badgeState({ shop: fork.shop, build: { hardpoints: [], attunements: [], doctrines: { ballistics: 'piercing' as never } } });
+    expect(tabBadges(second).build).toMatchObject({ kind: 'new', label: 'Doctrine fork open' });
   });
   it('flags Prestige recommended and an open Ascension', () => {
     const f = { echoesNow: 1, echoRate: 1, peakRate: 1, nextBossEchoes: 1, nextBossRate: 1, reclimbSeconds: 1, wallGaugeSeconds: null, recommended: true, curve: [] };

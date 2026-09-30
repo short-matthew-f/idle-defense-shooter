@@ -19,6 +19,7 @@ import { fmtDuration, fmtNum, substituteDesc, titleCase } from './format';
 import { nextPurchase, openSlots } from './advice';
 import { CHASSIS, ELEMENTS, ELEMENT_BLURB, HARDPOINTS, HARDPOINT_BLURB, NODE_BY_ID, TREE_BY_ID, TREE_LABEL } from './content';
 import { confirmDialog, openModal } from './modal';
+import { doctrineFork, forkKey } from './doctrine';
 import { prefs, setPref } from './prefs';
 import type { UiCtx } from './ctx';
 
@@ -341,7 +342,7 @@ export class Shop {
     const t = TREE_BY_ID.get(chip as TreeId);
     if (!t) return [];
     const ids = new Set<string>([...t.shared.map((n) => n.id), ...t.doctrines.flatMap((d) => d.nodes.map((n) => n.id)), t.exotic.id, ...t.doctrines.map((d) => `${t.id}.${d.id}`)]);
-    return ui.shop.filter((e) => ids.has(e.node));
+    return ui.shop.filter((e) => ids.has(e.node) || (t.id === 'reactor' && e.tree === 'ability'));   // Reactor lists the ability rank nodes
   }
 
   private affordableCount(ui: UiState, chip: string): number {
@@ -459,7 +460,7 @@ export class Shop {
 
     const items = this.plan(ui);
     const sortKey = prefs().affordableFirst ? items.map((i) => (i.t === 'node' ? (i.e.affordable ? 1 : 0) : '')).join('') : '';
-    const key = `${this.cat}|${this.tree}|${sortKey}|` + items.map((i) => i.t === 'node' ? i.e.node : i.t === 'fork' ? `fork:${this.forkKey(ui, i.tree)}` : i.t === 'el' ? `el:${i.key}` : `${i.t}:${i.text}`).join(',');
+    const key = `${this.cat}|${this.tree}|${sortKey}|` + items.map((i) => i.t === 'node' ? i.e.node : i.t === 'fork' ? `fork:${forkKey(ui, i.tree)}` : i.t === 'el' ? `el:${i.key}` : `${i.t}:${i.text}`).join(',');
     if (key !== this.viewKey) {
       this.viewKey = key;
       this.render(ui, items);
@@ -546,6 +547,11 @@ export class Shop {
     const t = TREE_BY_ID.get(chip as TreeId);
     if (!t) return out;
     out.push({ t: 'head', text: t.name, sub: 'Core nodes', spend: t.id });
+    // Reachability: a Borrowed Blade takes base nodes only; mounting it in an open slot opens the rest
+    if ((ui.extraSystems ?? []).some((x) => x.system === t.id && x.via === 'borrowed')) {
+      const free = openSlots(ui).find((x) => x.cat === 'hardpoints');
+      out.push({ t: 'note', text: `Borrowed by an Anomaly: tier-1 nodes only, no Doctrines or Exotic.${free ? ' Mount it in your open hardpoint slot to open its whole tree.' : ' Mount it in a hardpoint slot when one opens to open its whole tree.'}` });
+    }
     out.push(...nodes(t.shared.map((n) => n.id)));
     out.push({ t: 'head', text: 'Doctrine', sub: 'Choose one path; the fork opens after enough core nodes.' });
     out.push({ t: 'fork', tree: t.id });
@@ -556,19 +562,24 @@ export class Shop {
       out.push(...nodes(d.nodes.map((n) => n.id)));
     }
     const ex = byId.get(t.exotic.id);
-    if (ex) { out.push({ t: 'head', text: 'Exotic', sub: 'Costs Cores; one per tree.' }); out.push({ t: 'node', e: ex }); }
+    if (ex) {
+      out.push({ t: 'head', text: 'Exotic', sub: 'Costs Cores; one per tree.' });
+      const granted = grantedExotic(ui, ex.node);
+      if (granted) out.push({ t: 'note', text: granted });
+      out.push({ t: 'node', e: ex });
+    }
+    if (t.id === 'reactor') {
+      // ability rank nodes (visible while the ability is slotted; Reactor's "Spend here" buys them too)
+      const ab = this.sorted(ui.shop.filter((e) => e.tree === 'ability'));
+      out.push({ t: 'head', text: 'Ability ranks', sub: 'One per slotted tactical ability. Slot abilities from the Battle bar or the Build tab.' });
+      if (!ab.length) out.push({ t: 'note', text: 'No ability is slotted: slot one to upgrade it here.' });
+      for (const e of ab) out.push({ t: 'node', e });
+    }
     if (this.cat === 'hardpoints') {
       const slot = ui.build.hardpoints.indexOf(t.id as HardpointId);
       if (slot >= 0) out.push({ t: 'el', key: `refit-one:${t.id}:${ui.run.cores >= REFIT_CORES}`, make: () => h('div', { class: 'refit-one' }, button(`Refit ${t.name}… (${REFIT_CORES} Cores)`, () => this.refitPicker(slot), { class: 'btn ghost', disabled: ui.run.cores < REFIT_CORES })) });
     }
     return out;
-  }
-
-  private forkKey(ui: UiState, tree: TreeId): string {
-    const t = TREE_BY_ID.get(tree);
-    if (!t) return tree;
-    const e = t.doctrines.map((d) => { const x = ui.shop.find((s) => s.node === `${tree}.${d.id}`); return x ? `${x.cost}${x.affordable}${x.locked ?? ''}` : '-'; }).join(';');
-    return `${tree}:${ui.build.doctrines[tree] ?? ''}:${ui.build.secondDoctrines[tree] ?? ''}:${e}`;
   }
 
   // ---------------------------------------------------------------- render
@@ -598,44 +609,11 @@ export class Shop {
         used.add(it.e.node);
         host.appendChild(row.el);
       } else if (it.t === 'note') host.appendChild(h('p', { class: 'note', text: it.text }));
-      else if (it.t === 'fork') host.appendChild(this.fork(ui, it.tree));
+      else if (it.t === 'fork') host.appendChild(doctrineFork(this.ctx, ui, it.tree, { title: this.cat === 'cores' }));
       else host.appendChild(it.make());
     }
     for (const k of [...this.rows.keys()]) if (!used.has(k)) this.rows.delete(k);
     this.body.replaceChildren(frag);
-  }
-
-  private fork(ui: UiState, tree: TreeId): HTMLElement {
-    const t = TREE_BY_ID.get(tree)!;
-    const cur = ui.build.doctrines[tree], second = ui.build.secondDoctrines[tree];
-    const wrap = h('div', { class: 'fork', attrs: { role: 'group', 'aria-label': `${t.name} Doctrine` } });
-    if (this.cat === 'cores') wrap.appendChild(h('div', { class: 'fork-title', text: t.name }));
-    const cards = h('div', { class: 'fork-cards' });
-    wrap.appendChild(cards);
-    for (const d of t.doctrines) {
-      const e = ui.shop.find((s) => s.node === `${tree}.${d.id}`);
-      const isCur = cur === d.id, isSecond = second === d.id;
-      const cap = NODE_BY_ID.get(d.capstone);
-      const card = h('div', { class: `doctrine${isCur || isSecond ? ' chosen' : ''}` },
-        h('div', { class: 'doc-name' }, isCur || isSecond ? icon('check', 'ico tiny') : null, d.name, isSecond ? h('span', { class: 'tag', text: '2nd' }) : null),
-        h('p', { class: 'doc-id', text: d.identity }),
-        cap ? h('p', { class: 'doc-cap' }, h('b', { text: 'Capstone: ' }), cap.name) : null);
-      if (isCur || isSecond) card.appendChild(h('span', { class: 'doc-state', text: 'Chosen' }));
-      else if (e) {
-        const change = !!cur;
-        const label = change ? `Change · 1` : e.cost > 0 ? `Choose · ${e.cost}` : 'Choose';
-        const b = button([label, e.cost > 0 ? icon('cores', 'ico tiny') : null], async () => {
-          if (change && !(await confirmDialog(`Change ${t.name} Doctrine?`, `Switch from ${t.doctrines.find((x) => x.id === cur)?.name} to ${d.name} for ${e.cost} Core. Nodes bought in the old Doctrine stop working.`, 'Change'))) return;
-          if (!change && !(await confirmDialog(`Choose ${d.name}?`, `${d.identity} Doctrines lock for this Prestige; changing later costs 1 Core at a checkpoint.`, 'Choose'))) return;
-          this.ctx.host.send({ type: 'choose_doctrine', tree, doctrine: d.id });
-        }, { class: 'btn small primary', disabled: !!e.locked || !e.affordable });
-        if (e.locked) b.title = e.locked;
-        card.appendChild(b);
-        if (e.locked) card.appendChild(h('p', { class: 'node-lock', text: e.locked }));
-      } else card.appendChild(h('p', { class: 'node-lock', text: 'Not available' }));
-      cards.appendChild(card);
-    }
-    return wrap;
   }
 
   /** Attune / mount picker for an open slot (the Upgrades slot chip and the Build screen's Mount button). */
@@ -647,8 +625,16 @@ export class Shop {
     for (const id of list) {
       const name = TREE_LABEL[id as TreeId] ?? titleCase(id);
       const blurb = isEl ? ELEMENT_BLURB[id as ElementId] : HARDPOINT_BLURB[id as HardpointId];
+      // Frame free mount / Trial rule: shown with the reason instead of a Mount button that would fail
+      const blocked = isEl ? undefined : ui.mountBlocked?.[id as HardpointId];
+      const borrowed = !isEl && (ui.extraSystems ?? []).some((x) => x.system === id && x.via === 'borrowed');
+      if (blocked) {
+        wrap.appendChild(h('div', { class: `pick-card ${id} blocked` },
+          h('div', { class: 'pick-main' }, h('div', { class: 'pick-name', text: name }), h('p', { class: 'pick-blurb', text: blocked }))));
+        continue;
+      }
       wrap.appendChild(h('div', { class: `pick-card ${id}` },
-        h('div', { class: 'pick-main' }, h('div', { class: 'pick-name', text: name }), h('p', { class: 'pick-blurb', text: blurb })),
+        h('div', { class: 'pick-main' }, h('div', { class: 'pick-name', text: name }), h('p', { class: 'pick-blurb', text: borrowed ? `Borrowed now (tier 1). Mounting it here opens its full tree and Doctrines. ${blurb}` : blurb })),
         button(isEl ? 'Attune' : 'Mount', async () => {
           if (!(await confirmDialog(`${isEl ? 'Attune' : 'Mount'} ${name}?`, `${name} ${isEl ? 'is attuned' : 'is mounted'} for the rest of this Prestige.`, isEl ? 'Attune' : 'Mount'))) return;
           this.ctx.host.send(isEl ? { type: 'attune', slot, element: id as ElementId } : { type: 'mount_hardpoint', slot, system: id as HardpointId });
@@ -683,7 +669,7 @@ export class Shop {
     if (!old) return;
     const body = h('div', { class: 'slot-picker' }, h('p', { class: 'note', text: `Replace ${TREE_LABEL[old]} for ${REFIT_CORES} Cores. You get back 60% of the Scrap spent in ${TREE_LABEL[old]}; its ranks, Doctrine and Linkages are lost.` }));
     const m = openModal({ title: `Refit slot ${slot + 1}`, body });
-    for (const hp of HARDPOINTS.filter((x) => !ui.build.hardpoints.includes(x))) {
+    for (const hp of HARDPOINTS.filter((x) => !ui.build.hardpoints.includes(x) && !ui.mountBlocked?.[x])) {
       body.appendChild(h('div', { class: 'pick-card' },
         h('div', { class: 'pick-main' }, h('div', { class: 'pick-name', text: TREE_LABEL[hp] }), h('p', { class: 'pick-blurb', text: HARDPOINT_BLURB[hp] })),
         button('Refit', async () => {
@@ -695,4 +681,12 @@ export class Shop {
         }, { class: 'btn primary' })));
     }
   }
+}
+
+/** A note when an Anomaly already grants this Exotic (buying it would add nothing), else null. */
+export function grantedExotic(ui: Pick<UiState, 'build'>, node: string): string | null {
+  if (node === 'ordnance.cluster_warheads' && ui.build.anomalies.includes('recursive_warhead') && (ui.build.ranks[node] | 0) === 0) {
+    return 'Recursive Warhead already gives you Cluster Warheads: buying this Exotic adds nothing while it is socketed.';
+  }
+  return null;
 }

@@ -33,8 +33,9 @@
  *          through enemies.fieldSlow), Permafrost (stacks fall off one at a time), Glacial Shot (every 5th
  *          bullet pierces all and applies max Chill); Shatter: Brittle (status + damageMul), Fracture, Iceburst.
  *          Absolute Zero: enemies at max Chill have their attack timer (enemies.attackT) run at half speed —
- *          this system adds one tick back every other tick after the AI decremented it. WP5 boss ability
- *          cooldowns should run at ×0.5 while `chill >= statusCap('chill')` and `stats.has('frost.absolute_zero')`.
+ *          this system adds one tick back every other tick after the AI decremented it; the boss controller
+ *          (enemies/bosses/controller.ts) runs a max-Chill boss's tell timer and attack cadence at ×0.5.
+ *   Cold Iron (Anomaly): every Chill stack strips frost.chill_armor_shred of the target's armor (damageMul, like Corrosion).
  */
 import type { System, HitInfo, InstanceWriter } from '../core/system';
 import type { World } from '../core/world';
@@ -59,6 +60,8 @@ const STORM_TICKS = 12;
 const EMBER_SPEED = 220;
 const BOSS_FREEZE_SLOW = 0.8;
 const PERSIST = EnemyFlag.Boss | EnemyFlag.Immovable;
+/** Seventh Shot's Fireballs (systems/anomalies.ts) also count toward Meteor Round. */
+const SEVENTH_SHOT = 'anomaly.seventh_shot';
 /** Flashpoints detonated per tick (the rest wait in FIFO order; see BurstQueue). */
 export const FLASH_BUDGET = 16;
 
@@ -93,7 +96,7 @@ export class ElementsSystem implements System {
   // frost
   private chillChance = 0; private chillDur = 120; private deepFreeze = 0; private freezeLock = 300;
   private permafrost = 0; private glacialEvery = 0; private brittle = 0; private fracture = 0; private brittleOn = false;
-  private iceburst = false; private iceR = 70; private iceFrac = 0.2; private absZero = false;
+  private iceburst = false; private iceR = 70; private iceFrac = 0.2; private absZero = false; private chillShred = 0;
   // triad
   private catalyst = 0;
 
@@ -188,6 +191,7 @@ export class ElementsSystem implements System {
     this.iceburst = shatter && s.has('frost.shatter.iceburst') && this.brittleOn;
     this.iceR = s.get('frost.shatter.iceburst.radius') * this.blastMul; this.iceFrac = s.get('frost.shatter.iceburst.fraction');
     this.absZero = s.has('frost.absolute_zero');
+    this.chillShred = Math.max(0, s.get('frost.chill_armor_shred'));   // Cold Iron: armor −1% per Chill stack
     this.catalyst = s.has('triad.catalyst') ? s.get('triad.catalyst') : 0;
   }
 
@@ -349,6 +353,7 @@ export class ElementsSystem implements System {
     const tag = hit.srcTag;
     if (tag === TAG.sunburst) { this.burn(w, i, 1, hit.damage, hit.eventId); return; }
     if (tag === TAG.fireball || tag === TAG.meteor) this.fireballHit(w, hit, tag === TAG.meteor);
+    else if (tag === SEVENTH_SHOT && this.meteor) this.otherFireball(w, hit);
     else if (tag === TAG.glacial) w.applyStatus(i, 'chill', this.cap(w, 'chill'), this.chillDur, 'frost', hit.eventId);
     const el = hit.element, primary = src === 'primary';
     let landed = 0;   // bit per element: 1 fire, 2 lightning, 4 poison
@@ -411,6 +416,15 @@ export class ElementsSystem implements System {
           damage: hit.damage * 0.1, radius: 3, life, element: 'fire', cause: hit.cause });
       }
     }
+  }
+
+  /** A Fireball from outside Inferno (Seventh Shot) counts toward Meteor Round ("every 5th Fireball, from any source"). */
+  private otherFireball(w: World, hit: HitInfo): void {
+    if (hit.cause === this.burstCause) return;        // once per explosion
+    this.burstCause = hit.cause;
+    if (++this.fireballs % this.meteorEvery !== 0) return;
+    w.addHazard({ kind: 'fire_zone', x: hit.x, y: hit.y, radius: this.meteorR, life: this.meteorDur, dps: this.burnFrac * hit.damage * 2,
+      element: 'fire', cause: hit.cause, owner: 'primary', srcTag: TAG.meteor });
   }
 
   onStatusApply(w: World, i: number, status: StatusId, n: number, srcTag: string, id: number): void {
@@ -513,12 +527,13 @@ export class ElementsSystem implements System {
       if (hit.crit && this.fracture > 0) m *= (this.critMul + this.fracture) / this.critMul;
     }
     const p = e.poison[i];
-    if (p > 0) {
-      if (this.virulence > 0 && p > 5 && hit.srcTag === 'poison') m *= 1 + this.virulence * (p - 5);
-      if (this.corrosion > 0 && !ignoreArmor && e.armor[i] > 0) {
-        const ar = e.armor[i], strip = Math.min(this.corrosionCap, this.corrosion * p);
-        m *= (100 + ar) / (100 + ar * (1 - strip));
-      }
+    if (p > 0 && this.virulence > 0 && p > 5 && hit.srcTag === 'poison') m *= 1 + this.virulence * (p - 5);
+    // armor strips: Corrosion (Venom, per Poison stack, ≤ corrosion.cap) and Cold Iron (Anomaly, per Chill stack)
+    let strip = p > 0 && this.corrosion > 0 ? Math.min(this.corrosionCap, this.corrosion * p) : 0;
+    if (this.chillShred > 0 && e.chill[i] > 0) strip += this.chillShred * e.chill[i];
+    if (strip > 0 && !ignoreArmor && e.armor[i] > 0) {
+      const ar = e.armor[i];
+      m *= (100 + ar) / (100 + ar * (1 - Math.min(0.9, strip)));
     }
     return m;
   }

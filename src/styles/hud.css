@@ -69,6 +69,14 @@ body:is(.shell-phone) .wave-sub { max-width: 100%; }
 .btn.ctl.mode-btn.patrol { border-color: var(--info); color: var(--info); }
 .btn.ctl.speed-btn.fast { border-color: var(--accent); color: var(--accent); }
 .topbar .pause-btn { flex: none; }
+/* Reachability: the "2 designators" status chip (not a button) */
+.desig-chip {
+  display: inline-flex; align-items: center; gap: 5px; height: 36px; padding: 0 12px; border-radius: 18px; font-size: 14px; font-weight: 700;
+  background: rgba(22, 28, 40, 0.9); border: 1px solid #ff6b6b; color: #ffb3b3; font-variant-numeric: tabular-nums;
+}
+.desig-chip .ico { width: 16px; height: 16px; }
+.desig-chip > span { white-space: nowrap; }
+body.shell-rail .desig-label { display: none; }
 .trial-banner {
   display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 0 0 12px; border-radius: 18px; max-width: 62vw;
   background: color-mix(in srgb, var(--cores) 18%, var(--bg-2)); border: 1px solid var(--cores); font-size: 14px; font-weight: 600;

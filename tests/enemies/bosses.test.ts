@@ -10,6 +10,15 @@ import { ATTACKS, ATTACK_IDS, TELLS } from '../../src/sim/enemies/bosses/registr
 import { counterHint, bossCtrlOf } from '../../src/sim/enemies/bosses';
 import { cos, sin } from '../../src/sim/math/lut';
 import { expectWithinBudget } from '../core/perf-budget';
+import { findAbilities } from '../../src/sim/systems/abilities';
+
+/** Slot the abilities a test casts and clear their cooldowns (only casts that go off score Counters). */
+function ready(sim: Sim, ...abilities: AbilityId[]): void {
+  const w = sim.world;
+  w.build.abilities = [...abilities];
+  findAbilities(w)!.cd.fill(0);
+  w.tower.ce = w.tower.ceCap;
+}
 
 const MINUTES_4 = 4 * 60 * 60;
 
@@ -103,6 +112,7 @@ describe('tell → Counter', () => {
     const counter = TELL_COUNTERS[tellId];
     const b = sim.machine.boss();
     const mark0 = sim.events.nextId;
+    if (counter !== 'designate') ready(sim, counter as AbilityId);
     if (counter === 'designate') sim.command({ type: 'designate', enemy: b });
     else sim.command({ type: 'cast', ability: counter as AbilityId, x: w.enemies.x[b], y: w.enemies.y[b], target: b });
     sim.step();
@@ -113,7 +123,7 @@ describe('tell → Counter', () => {
     expect(w.bossTell.ability, 'tell opened').not.toBeNull();
     expect(w.bossTell.ticksLeft).toBeGreaterThan(0);
     expect(sim.uiState().wave.tellActive).toBe(w.bossTell.ability);
-    w.tower.ce = w.tower.ceCap;
+    if (w.bossTell.ability !== 'designate') ready(sim, w.bossTell.ability as AbilityId);
     const mark = sim.events.nextId;
     for (const c of counterCommands(sim)) sim.command(c);
     sim.step();
@@ -134,6 +144,7 @@ describe('tell → Counter', () => {
       let t = 0;
       while (w.bossTell.ability === null && t < 3600) { sim.step(); t++; }
       expect(w.bossTell.ability).toBe('repulsor_pulse');
+      ready(sim, 'repulsor_pulse');
       w.tower.ce = 50;
       const mark = sim.events.nextId;
       sim.command({ type: 'cast', ability: 'repulsor_pulse', x: 0, y: 0, viaDirective: via });
@@ -150,7 +161,7 @@ describe('tell → Counter', () => {
     let t = 0;
     while (w.bossTell.ability === null && t < 3600) { sim.step(); t++; }
     expect(w.bossTell.ability).toBe('bombardment');
-    w.tower.ce = w.tower.ceCap;
+    ready(sim, 'emp', 'bombardment');
     const b = sim.machine.boss();
     const mark = sim.events.nextId;
     sim.command({ type: 'cast', ability: 'emp', x: 0, y: 0 });

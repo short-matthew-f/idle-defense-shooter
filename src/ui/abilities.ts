@@ -17,6 +17,18 @@ const MIN_ABILITY_COST = Math.min(...ABILITIES.map((a) => a.cost));
 
 interface Slot { el: HTMLButtonElement; ico: HTMLSpanElement; cost: HTMLSpanElement; key: HTMLSpanElement; ability: AbilityId | null | undefined }
 
+/** Reachability: is Autocast on for `id` (meta.settings.autocastOff is a bitmask over the ABILITIES data order)? */
+export function autocastOn(mask: number, id: AbilityId): boolean {
+  const k = ABILITIES.findIndex((a) => a.id === id);
+  return k < 0 || (mask & (1 << k)) === 0;
+}
+/** The autocastOff mask with `id` switched on or off. */
+export function setAutocast(mask: number, id: AbilityId, on: boolean): number {
+  const k = ABILITIES.findIndex((a) => a.id === id);
+  if (k < 0) return mask;
+  return on ? mask & ~(1 << k) : mask | (1 << k);
+}
+
 /** Remaining cooldown as a 0..1 fraction. UiState does not document the unit: seconds, or ticks if larger than the whole cooldown. */
 export function cooldownFraction(remaining: number, total: number): number {
   if (!(remaining > 0) || !(total > 0)) return 0;
@@ -32,6 +44,8 @@ export class AbilityBar {
   private readonly hintText = h('span');
   private slots: Slot[] = [];
   private slotKey = '';
+  /** Usable slot count last seen (-1 before the first UiState): a rise toasts "new ability slot". */
+  private usable = -1;
 
   constructor(private readonly ctx: UiCtx) {
     this.hint.append(this.hintText, button('Cancel', () => this.cancel(), { class: 'btn small' }));
@@ -49,11 +63,18 @@ export class AbilityBar {
       return { el, ico, cost, key, ability: undefined };
     });
     this.row.replaceChildren(...this.slots.map((s) => s.el));
+    this.row.dataset.n = String(this.slots.length);
+    const usable = ui.abilitySlots ?? ui.build.abilities.length;
+    this.slots.forEach((s, i) => s.el.classList.toggle('inactive', i >= usable));
   }
 
   update(ui: UiState): void {
-    const key = String(ui.build.abilities.length);
+    const usable = ui.abilitySlots ?? ui.build.abilities.length;
+    const key = `${ui.build.abilities.length}|${usable}`;
     if (key !== this.slotKey) { this.slotKey = key; this.build(ui); }
+    // Reachability: a third / fourth slot appears the moment it is earned; say so once
+    if (this.usable >= 0 && usable > this.usable) this.ctx.toast(`New ability slot ${usable}: tap it to choose an ability`, 'good');
+    this.usable = usable;
     if (this.arming.sync(ui.build.abilities)) this.renderArmed();
     const info = new Map(ui.abilities.map((a) => [a.id, a]));
     ui.build.abilities.forEach((id, i) => {
@@ -63,7 +84,8 @@ export class AbilityBar {
         s.ability = id;
         s.ico.replaceChildren(id ? abilityIcon(id, 'ico') : icon('plus', 'ico'));
         const def = id ? ABILITY_BY_ID.get(id) : null;
-        attr(s.el, 'aria-label', def ? `${def.name} (${i + 1}); hold to change` : `Empty ability slot ${i + 1}: choose an ability`);
+        const off = i >= (ui.abilitySlots ?? Infinity) ? ' (inactive slot)' : '';
+        attr(s.el, 'aria-label', def ? `${def.name} (${i + 1})${off}; hold to change` : `Empty ability slot ${i + 1}: choose an ability`);
         s.el.title = def ? `${def.name}: ${def.desc}\nHold or right-click to change.` : 'Choose an ability';
         s.el.classList.toggle('empty', !id);
       }

@@ -66,7 +66,7 @@ export const PRESTIGE_NODES: PrestigeNodeDef[] = [
 
   // --- Prestige IV — Evolution (wave 80): build strange engines ------------
   node(4, 'expanded_frame', 'Expanded Frame', '+1 hardpoint cap on every Frame except Monolith (never above 4).', 60000, 1),
-  node(4, 'dual_doctrine', 'Dual Doctrine', 'At Prestige start, choose one tree: it runs a second Doctrine at 60% strength.', 80000, 1),
+  node(4, 'dual_doctrine', 'Dual Doctrine', 'One tree may run a second Doctrine at 60% strength: the first tree you give one claims it (clearing that second Doctrine frees the choice).', 80000, 1),
   node(4, 'duplication', 'Duplication', 'Primary shots have a 2% chance per rank to duplicate.', 20000, 10, [e('prestige.duplication', 'add', 0.02)]),
   node(4, 'double_launch', 'Double Launch', 'Every fifth missile launches twice.', 30000, 1),
   node(4, 'conscription', 'Conscription', 'Defeated elites fight for the tower as drones for 10 s.', 40000, 1),

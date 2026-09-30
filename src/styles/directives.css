@@ -25,3 +25,7 @@
 .bp { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 12px; margin: 6px 0; }
 .bp p { margin: 2px 0; }
 .bp-name { display: flex; gap: 6px; align-items: center; font-weight: 700; }
+/* Reachability: a rule that can never act says why; Blueprint rows carry Overwrite / Delete */
+.rule-warn { margin: 6px 0 0; font-size: 14px; line-height: 1.4; color: var(--warn); }
+.bp-head { display: flex; align-items: center; gap: 8px; }
+.bp-head .bp-name { flex: 1; min-width: 0; }

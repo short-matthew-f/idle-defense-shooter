@@ -41,7 +41,7 @@ export const ANOMALIES: AnomalyDef[] = [
   {
     id: 'mirror_node', name: 'Mirror Node', rarity: 'rare', pool: 'base', needs: ['laser'],
     desc: 'Laser nodes mirror across the tower: twice the nodes and beams, but beams deal 40% less damage.',
-    effects: [fx('laser.damage', 'mul', -0.4)],
+    effects: [fx('laser.damage@final', 'mul', -0.4)],
   },
   {
     id: 'pinball', name: 'Pinball', rarity: 'rare', pool: 'base', needs: ['primary'],
@@ -76,13 +76,13 @@ export const ANOMALIES: AnomalyDef[] = [
   },
   {
     id: 'heavy_water', name: 'Heavy Water', rarity: 'common', pool: 'base', needs: ['poison'],
-    desc: 'Poison ticks 25% slower but each tick hits 50% harder.',
-    effects: [fx('poison.tick_interval', 'mul', 0.25), fx('poison.damage', 'mul', 0.5)],
+    desc: 'Poison ticks 25% slower but each tick hits 50% harder (+20% Poison damage per second).',
+    effects: [fx('poison.tick_interval', 'mul', 0.25), fx('poison.damage@final', 'mul', 0.2)],
   },
   {
     id: 'overcharged_capacitor', name: 'Overcharged Capacitor', rarity: 'common', pool: 'base',
     desc: 'Command Energy cap +50%.',
-    effects: [fx('economy.ce_cap', 'mul', 0.5)],
+    effects: [fx('economy.ce_cap@final', 'mul', 0.5)],
   },
   {
     id: 'second_opinion', name: 'Second Opinion', rarity: 'common', pool: 'base',
@@ -93,11 +93,11 @@ export const ANOMALIES: AnomalyDef[] = [
   {
     id: 'glass_cannon', name: 'Glass Cannon', rarity: 'cursed', pool: 'base',
     desc: '+50% damage from every source, but −50% max HP.',
-    effects: [fx('combat.power_mul', 'mul', 0.5), fx('bastion.max_hp_final', 'mul', -0.5)],
+    effects: [fx('combat.power_mul@final', 'mul', 0.5), fx('bastion.max_hp_final', 'mul', -0.5)],
   },
   {
     id: 'unstable_isotope', name: 'Unstable Isotope', rarity: 'cursed', pool: 'base', needs: ['ordnance'],
-    desc: 'Explosions are 50% larger, but 5% of them also detonate on the tower for 10% of their damage.',
+    desc: 'Explosions are 50% larger, but 5% of them also detonate on the tower for 10% of their damage (at most 2% of max HP each).',
     effects: [fx('combat.blast_radius_mul', 'add', 0.5)],
   },
   {
@@ -128,7 +128,7 @@ export const ANOMALIES: AnomalyDef[] = [
   {
     id: 'feedback_loop', name: 'Feedback Loop', rarity: 'cursed', pool: 'echo',
     desc: 'NEW. Every tactical ability recasts itself 1 s later at 50% power, but Command Energy cap is 40% lower.',
-    effects: [fx('economy.ce_cap', 'mul', -0.4)],
+    effects: [fx('economy.ce_cap@final', 'mul', -0.4)],
   },
   {
     id: 'rot_bloom', name: 'Rot Bloom', rarity: 'rare', pool: 'rot', needs: ['poison'],

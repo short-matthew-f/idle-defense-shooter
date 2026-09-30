@@ -8,7 +8,8 @@ import type { Command, UiState } from '@sim/core/types';
 import { button, h, text } from './dom';
 import { icon } from './icons';
 import { echoesFor, fmtNum } from './format';
-import { ANOMALY_BY_ID, FRAME_BY_ID, TREES } from './content';
+import { ANOMALY_BY_ID, FRAME_BY_ID, FRAMES, TREES, TREE_LABEL } from './content';
+import type { FrameDef } from '@sim/data/schema';
 import { confirmDialog, openModal } from './modal';
 import type { UiCtx } from './ctx';
 
@@ -19,6 +20,8 @@ export function prestigeRank(ui: UiState, id: string): number { return ui.meta.p
 export function openPrestige(ctx: UiCtx): void {
   const ui = ctx.state();
   if (!ui) return;
+  // Reachability: the sim refuses a Prestige during a Trial; say so instead of a dialog that fails
+  if (ui.activeTrial) { ctx.toast('Finish or leave the Trial first (More → Trials, or End on the Battle screen)', 'warn'); return; }
   const echoes = ui.forecast?.echoesNow ?? echoesFor(ui.run.deepestCleared, ui.run.threatDial);
   const frames = (ui.meta.unlockedFrames.length ? ui.meta.unlockedFrames : ['standard' as FrameId]);
   let frame: FrameId = frames.includes(ui.build.frame) ? ui.build.frame : frames[0];
@@ -28,18 +31,23 @@ export function openPrestige(ctx: UiCtx): void {
   let discount: TreeId | undefined;
 
   const frameCards = h('div', { class: 'frame-cards', attrs: { role: 'radiogroup', 'aria-label': 'Frame' } });
+  // Reachability: Frames not yet unlocked are listed (disabled) with how to unlock them
+  const locked = FRAMES.filter((f) => !frames.includes(f.id));
   const renderFrames = (): void => {
     frameCards.replaceChildren(...frames.map((id) => {
       const f = FRAME_BY_ID.get(id);
       const b = button([
         h('span', { class: 'fr-name', text: f?.name ?? id }),
-        h('span', { class: 'fr-caps', text: `${f?.hardpointCap ?? '?'}${f?.freeMount ? ` + ${f.freeMount}` : ''} hardpoints · ${f?.attunementCap ?? '?'} attunements` }),
+        h('span', { class: 'fr-caps', text: f ? frameCapsText(f, ui) : '' }),
         h('span', { class: 'fr-trait', text: f?.trait ?? '' }),
       ], () => { frame = id; renderFrames(); }, { class: `frame-card${id === frame ? ' selected' : ''}` });
       b.setAttribute('role', 'radio');
       b.setAttribute('aria-checked', id === frame ? 'true' : 'false');
       return b;
-    }));
+    }), ...locked.map((f) => h('div', { class: 'frame-card locked', attrs: { 'aria-disabled': 'true' } },
+      h('span', { class: 'fr-name' }, icon('lock', 'ico tiny'), f.name),
+      h('span', { class: 'fr-caps', text: `Unlock: ${f.unlock}` }),
+      h('span', { class: 'fr-trait', text: f.trait }))));
   };
   renderFrames();
 
@@ -77,6 +85,11 @@ export function openPrestige(ctx: UiCtx): void {
     sections.push(h('h3', { class: 'sec-title', text: 'Keepsake' }), sel);
   }
 
+  if (prestigeRank(ui, 'dual_doctrine') > 0) {
+    sections.push(h('h3', { class: 'sec-title', text: 'Dual Doctrine' }),
+      h('p', { class: 'dim small', text: 'The first tree you give a second Doctrine this Prestige runs it at 60% (choose it on that tree\'s Doctrine fork once its first Doctrine is chosen).' }));
+  }
+
   if (prestigeRank(ui, 'branch_discount') > 0) {
     const sel = h('select', { class: 'select', attrs: { 'aria-label': 'Branch Discount tree' } }, h('option', { attrs: { value: '' }, text: 'No discount' }),
       ...TREES.map((t) => h('option', { attrs: { value: t.id }, text: `${t.name} (−25%)` })));
@@ -97,4 +110,13 @@ export function openPrestige(ctx: UiCtx): void {
     m.close();
   }, { class: 'btn primary wide' });
   const m = openModal({ title: 'Prestige', body: h('div', { class: 'prestige' }, ...sections), footer: go, variant: 'wide', className: 'prestige-modal' });
+}
+
+/** Hardpoint / attunement caps of a Frame for this player (Expanded Frame, Third Attunement; at most four systems). */
+export function frameCapsText(f: FrameDef, ui: Pick<UiState, 'meta'>): string {
+  const pr = (id: string): boolean => (ui.meta.prestigeRanks[`prestige.${id}`] | 0) > 0;
+  let hc = f.hardpointCap + (pr('expanded_frame') && f.id !== 'monolith' ? 1 : 0);
+  hc = Math.max(0, Math.min(hc, 4 - (f.freeMount ? 1 : 0)));
+  const ac = f.attunementCap + (pr('third_attunement') ? 1 : 0);
+  return `${hc}${f.freeMount ? ` + ${TREE_LABEL[f.freeMount]} (free)` : ''} hardpoint${hc === 1 && !f.freeMount ? '' : 's'} · ${ac} attunement${ac === 1 ? '' : 's'}`;
 }

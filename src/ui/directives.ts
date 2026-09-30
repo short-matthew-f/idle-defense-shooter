@@ -9,7 +9,7 @@ import type { Blueprint, Directive, DirectiveAction, DirectiveCondition, UiState
 import { button, h, text, clear, disable } from './dom';
 import { icon } from './icons';
 import { ACTIONS, ACT_KINDS, CONDITIONS, COND_KINDS, MAX_CONDITIONS, SYSTEM_LABELS, TARGETING_PROFILES, defaultAction, defaultCondition, describeDirective, describeUpgradeRule, directiveSlots, moveItem, newDirective, serializeDirectives, type ActKind, type CondKind, type ParamSpec } from './directive-model';
-import { FRAME_BY_ID, TREE_LABEL, nodeName } from './content';
+import { ABILITY_BY_ID, FRAME_BY_ID, TREE_BY_ID, TREE_LABEL, nodeName } from './content';
 import { confirmDialog } from './modal';
 import type { UiCtx } from './ctx';
 
@@ -70,7 +70,7 @@ export class DirectivesPanel {
     if (!this.isOpen) return;
     // Targeting and Blueprints mirror live state; editors keep their drafts.
     if (this.tab === 'targeting' || this.tab === 'blueprints') {
-      const key = JSON.stringify([ui.build.targeting, ui.build.hardpoints, ui.meta.blueprints.length]);
+      const key = JSON.stringify([ui.build.targeting, ui.build.hardpoints, ui.extraSystems, ui.meta.blueprints.map((b) => b.name)]);
       if (key !== this.content.dataset.key) this.render();
     }
   }
@@ -86,7 +86,7 @@ export class DirectivesPanel {
       this.tabRow.appendChild(b);
     }
     clear(this.content);
-    this.content.dataset.key = JSON.stringify([ui.build.targeting, ui.build.hardpoints, ui.meta.blueprints.length]);
+    this.content.dataset.key = JSON.stringify([ui.build.targeting, ui.build.hardpoints, ui.extraSystems, ui.meta.blueprints.map((b) => b.name)]);
     if (this.tab === 'directives') this.renderDirectives(ui);
     else if (this.tab === 'targeting') this.renderTargeting(ui);
     else if (this.tab === 'queue') this.renderQueue(ui);
@@ -108,7 +108,7 @@ export class DirectivesPanel {
     const save = button('Save', () => { this.ctx.host.send({ type: 'set_directives', directives: clone(this.draft) }); this.savedKey = serializeDirectives(this.draft); this.editing = -1; this.ctx.toast('Directives saved', 'good'); this.render(); }, { class: 'btn primary', disabled: !dirty });
     const revert = button('Revert', () => { const u = this.ctx.state(); if (u) this.draft = clone(u.meta.directives); this.editing = -1; this.render(); }, { class: 'btn ghost', disabled: !dirty });
     this.content.append(
-      h('p', { class: 'dim small', text: `${this.draft.length}/${slots} rule slots. Checked top to bottom; the first rule whose conditions all hold acts (0.6 s reaction delay).${autonomy ? '' : ' Adept conditions and the Prestige action need Autonomy (Prestige IV).'}` }),
+      h('p', { class: 'dim small', text: `${this.draft.length}/${slots} rule slots. Checked top to bottom; the first rule whose conditions all hold acts (${reactionDelay(rank(ui, 'directive_tuning')).toFixed(2).replace(/0$/, '')} s reaction delay).${autonomy ? '' : ' Adept conditions and the Prestige action need Autonomy (Prestige IV).'}` }),
       this.draft.length ? list : h('p', { class: 'note', text: 'No rules yet. Example: WHEN 5 enemies in the inner ring → Repulsor Pulse.' }),
       h('div', { class: 'row gap wrap' }, add, h('span', { class: 'grow' }), revert, save));
   }
@@ -140,7 +140,11 @@ export class DirectivesPanel {
       const out = this.draft.slice(); const [x] = out.splice(from, 1); out.splice(i, 0, x);
       this.draft = out; this.editing = -1; this.render();
     });
-    if (this.editing === i) card.appendChild(this.builder(d, autonomy, () => text(sentence, describeDirective(d))));
+    const warn = h('p', { class: 'rule-warn' });
+    const syncWarn = (): void => { const u = this.ctx.state(); const w = u ? ruleWarning(d, u) : null; text(warn, w ?? ''); warn.hidden = !w; };
+    syncWarn();
+    card.appendChild(warn);
+    if (this.editing === i) card.appendChild(this.builder(d, autonomy, () => { text(sentence, describeDirective(d)); syncWarn(); }));
     return card;
   }
 
@@ -182,7 +186,8 @@ export class DirectivesPanel {
   // ------------------------------------------------------------ Targeting
   private renderTargeting(ui: UiState): void {
     if (rank(ui, 'directives') <= 0) { this.locked('Targeting Profiles unlock with the Prestige III node "Directives".'); return; }
-    const systems: WeaponSystemId[] = ['primary', ...ui.build.hardpoints.filter((x): x is NonNullable<typeof x> => !!x)];
+    // slotted systems plus those that run without a slot (Frame free mount, Borrowed Blade): all of them target
+    const systems: WeaponSystemId[] = ['primary', ...ui.build.hardpoints.filter((x): x is NonNullable<typeof x> => !!x), ...(ui.extraSystems ?? []).map((x) => x.system)];
     const grid = h('div', { class: 'targeting' });
     for (const sys of systems) {
       const sel = h('select', { class: 'select', attrs: { 'aria-label': `${SYSTEM_LABELS[sys]} targeting` } }, ...TARGETING_PROFILES.map((p) => h('option', { attrs: { value: p.value }, text: p.label })));
@@ -240,27 +245,62 @@ export class DirectivesPanel {
     const slots = rank(ui, 'blueprint_slots');
     if (slots <= 0) { this.locked('Blueprints unlock with the Prestige II node "Blueprint Slots" (deepest-ever wave 40). A Blueprint saves Frame, Hardpoints, Attunements, Doctrines, Targeting Profiles and the Upgrade Queue, loadable at Prestige start.'); return; }
     const list = h('div', { class: 'bp-list' });
-    ui.meta.blueprints.forEach((b) => list.appendChild(h('div', { class: 'bp' },
-      h('div', { class: 'bp-name' }, icon('blueprint', 'ico tiny'), b.name),
+    const current = (u: UiState, nm: string): Blueprint => ({
+      name: nm, frame: u.build.frame,
+      hardpoints: u.build.hardpoints.filter((x): x is NonNullable<typeof x> => !!x),
+      attunements: u.build.attunements.filter((x): x is NonNullable<typeof x> => !!x),
+      doctrines: clone(u.build.doctrines), targeting: clone(u.build.targeting), upgradeQueue: clone(u.meta.upgradeQueue),
+    });
+    const docName = (t: string, d: string): string => TREE_BY_ID.get(t as TreeId)?.doctrines.find((x) => x.id === d)?.name ?? d;
+    ui.meta.blueprints.forEach((b, i) => list.appendChild(h('div', { class: 'bp' },
+      h('div', { class: 'bp-head' }, h('div', { class: 'bp-name' }, icon('blueprint', 'ico tiny'), b.name),
+        // Reachability: overwrite a slot with the current build (same name) or free it
+        button('Overwrite', async () => {
+          const u = this.ctx.state(); if (!u) return;
+          if (!(await confirmDialog(`Overwrite "${b.name}"?`, 'It is replaced by your current build.', 'Overwrite'))) return;
+          this.ctx.host.send({ type: 'save_blueprint', blueprint: current(u, b.name) });
+          this.ctx.toast(`Blueprint "${b.name}" overwritten`, 'good');
+        }, { class: 'btn small', label: `Overwrite blueprint ${b.name} with the current build` }),
+        button(icon('trash'), async () => {
+          if (!(await confirmDialog(`Delete "${b.name}"?`, 'The Blueprint slot is freed.', 'Delete', { danger: true }))) return;
+          this.ctx.host.send({ type: 'delete_blueprint', index: i });
+        }, { class: 'btn icon-btn ghost', label: `Delete blueprint ${b.name}` })),
       h('p', { class: 'dim small', text: `${FRAME_BY_ID.get(b.frame)?.name ?? b.frame} · ${b.hardpoints.map((x) => TREE_LABEL[x]).join(', ') || 'no hardpoints'} · ${b.attunements.map((x) => TREE_LABEL[x]).join(', ') || 'no elements'}` }),
-      h('p', { class: 'dim small', text: `Doctrines: ${Object.entries(b.doctrines).map(([t, d]) => `${TREE_LABEL[t as TreeId]}: ${d}`).join(', ') || 'none'} · Queue: ${b.upgradeQueue.length} rules` }))));
+      h('p', { class: 'dim small', text: `Doctrines: ${Object.entries(b.doctrines).map(([t, d]) => `${TREE_LABEL[t as TreeId]}: ${docName(t, String(d))}`).join(', ') || 'none'} · Queue: ${b.upgradeQueue.length} rules` }))));
     const name = h('input', { class: 'text-in', attrs: { type: 'text', maxlength: '32', placeholder: 'Blueprint name', 'aria-label': 'Blueprint name', value: `Build ${ui.meta.blueprints.length + 1}` } }) as HTMLInputElement;
     const full = ui.meta.blueprints.length >= slots;
-    const save = button('Save current build', async () => {
+    const save = button('Save current build', () => {
       const u = this.ctx.state(); if (!u) return;
-      if (full && !(await confirmDialog('Blueprint slots full', `You have ${slots} slot${slots > 1 ? 's' : ''}. The sim decides which Blueprint the new one replaces.`, 'Save anyway'))) return;
-      const bp: Blueprint = {
-        name: name.value.trim() || `Build ${u.meta.blueprints.length + 1}`, frame: u.build.frame,
-        hardpoints: u.build.hardpoints.filter((x): x is NonNullable<typeof x> => !!x),
-        attunements: u.build.attunements.filter((x): x is NonNullable<typeof x> => !!x),
-        doctrines: clone(u.build.doctrines), targeting: clone(u.build.targeting), upgradeQueue: clone(u.meta.upgradeQueue),
-      };
-      this.ctx.host.send({ type: 'save_blueprint', blueprint: bp });
-      this.ctx.toast(`Blueprint "${bp.name}" saved`, 'good');
-    }, { class: 'btn primary' });
+      const nm = name.value.trim() || `Build ${u.meta.blueprints.length + 1}`;
+      if (full && !u.meta.blueprints.some((b) => b.name === nm)) { this.ctx.toast('All Blueprint slots are full: overwrite or delete one above', 'warn'); return; }
+      this.ctx.host.send({ type: 'save_blueprint', blueprint: current(u, nm) });
+      this.ctx.toast(`Blueprint "${nm}" saved`, 'good');
+    }, { class: 'btn primary', disabled: full });
     this.content.append(
-      h('p', { class: 'dim small', text: `${ui.meta.blueprints.length}/${slots} slots. Load a Blueprint from the Prestige screen.` }),
+      h('p', { class: 'dim small', text: `${ui.meta.blueprints.length}/${slots} slots${full ? ' (full: overwrite or delete one)' : ''}. Load a Blueprint from the Prestige screen.` }),
       ui.meta.blueprints.length ? list : h('p', { class: 'note', text: 'No Blueprints saved yet.' }),
       h('div', { class: 'row gap wrap' }, name, save));
   }
+}
+
+/** Directive reaction delay in seconds: 0.6 − 0.06 per Directive Tuning rank (floor 0.3). */
+export function reactionDelay(tuningRank: number): number { return Math.max(0.3, 0.6 - 0.06 * Math.max(0, tuningRank)); }
+
+/**
+ * Reachability: why a saved rule can never act, or null. A cast of an ability that is not in a usable slot, and the
+ * Prestige action while Auto-Prestige is off (Settings) or Autonomy is not owned.
+ */
+export function ruleWarning(d: Directive, ui: Pick<UiState, 'build' | 'meta' | 'abilitySlots'>): string | null {
+  const a = d.action;
+  if (a.kind === 'cast') {
+    const i = ui.build.abilities.indexOf(a.ability);
+    const n = ui.abilitySlots ?? ui.build.abilities.length;
+    const name = ABILITY_BY_ID.get(a.ability)?.name ?? a.ability;
+    if (i < 0 || i >= n) return `${name} is not in an ability slot, so this rule cannot fire. Slot it on the Battle bar or the Build tab.`;
+  }
+  if (a.kind === 'prestige') {
+    if ((ui.meta.prestigeRanks['prestige.autonomy'] | 0) <= 0) return 'The Prestige action needs Autonomy (Prestige IV).';
+    if (!ui.meta.settings.autoPrestige) return 'Auto-Prestige is off (More → Settings): this rule will not Prestige until you switch it on.';
+  }
+  return null;
 }

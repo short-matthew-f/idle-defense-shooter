@@ -6,7 +6,7 @@
  *    Only the AI's speed auras multiply speedMul after this (see EnemyPool.speedMul for the full rule).
  *  - DoTs deal damage in 4 Hz pulses through World.damage (silent: no Hit event; kills still emit Kill):
  *      burn   burnDps × stacks   (fire, ignores armor)
- *      poison poisonDps × stacks (poison, ignores armor)
+ *      poison poisonDps × stacks (poison, ignores armor; pulses every 15 × poison.tick_interval ticks — Heavy Water)
  *      bleed  bleedDps × stacks  (physical, armor applies)
  *    Once per second per enemy per status, one Ev.StatusTick (b = damage summed over that second)
  *    is emitted with the StatusApply that last refreshed it as cause.
@@ -25,8 +25,11 @@ export class StatusesSystem implements System {
   init(w: World): void { this.rebuild(w); }
   /** WP2: while Frost is attuned its tree sets the slow (frost.slow_per_stack, capped at frost.slow_cap); otherwise 12%/stack, cap 90%. */
   private slowPer = 0.12; private slowCap = 0.9;
+  /** Poison pulse length in ticks: 15 × poison.tick_interval (Heavy Water ×1.25 → 19); damage per pulse scales with it. */
+  private poisonPulse = PULSE;
   rebuild(w: World): void {
     const s = w.stats;
+    this.poisonPulse = Math.max(1, Math.round(PULSE * Math.max(0.1, s.get('poison.tick_interval') || 1)));
     if (s.attuned('frost')) { this.slowPer = Math.max(0, s.get('frost.slow_per_stack')); this.slowCap = Math.min(0.9, Math.max(0, s.get('frost.slow_cap'))); }
     else { this.slowPer = 0.12; this.slowCap = 0.9; }
   }
@@ -36,6 +39,7 @@ export class StatusesSystem implements System {
     const e = w.enemies;
     const tick = w.tick;
     const pulse = tick % PULSE === 0;
+    const pp = this.poisonPulse, poisonPulse = tick % pp === 0, poisonDt = pp / 60;
     const second = tick % 60 === 0;
     for (let i = 0; i < e.count; i++) {
       const f = e.flags[i];
@@ -65,15 +69,12 @@ export class StatusesSystem implements System {
           const h = w.damage(i, e.burnDps[i] * e.burn[i] * PULSE_DT, { source: 'status', srcTag: 'burn', element: 'fire', cause: e.burnCause[i], ignoreArmor: true, silent: true });
           e.burnAcc[i] += h.damage;
         }
-        if (e.poison[i] > 0 && !(e.flags[i] & EnemyFlag.Dead)) {
-          const h = w.damage(i, e.poisonDps[i] * e.poison[i] * PULSE_DT, { source: 'status', srcTag: 'poison', element: 'poison', cause: e.poisonCause[i], ignoreArmor: true, silent: true });
-          e.poisonAcc[i] += h.damage;
-        }
+        if (poisonPulse) this.poisonTick(w, i, poisonDt);
         if (e.bleed[i] > 0 && !(e.flags[i] & EnemyFlag.Dead)) {
           const h = w.damage(i, e.bleedDps[i] * e.bleed[i] * PULSE_DT, { source: 'status', srcTag: 'bleed', element: null, cause: e.bleedCause[i], silent: true });
           e.bleedAcc[i] += h.damage;
         }
-      }
+      } else if (poisonPulse) this.poisonTick(w, i, poisonDt);
       if (second && !(e.flags[i] & EnemyFlag.Dead)) {
         const bits = w.stateBits(i) << 8;
         if (e.burnAcc[i] > 0) { w.emitC(Ev.StatusTick, 'burn', i, e.burnAcc[i], 0 | bits, e.x[i], e.y[i], e.burnCause[i]); e.burnAcc[i] = 0; }
@@ -81,5 +82,12 @@ export class StatusesSystem implements System {
         if (e.bleedAcc[i] > 0) { w.emitC(Ev.StatusTick, 'bleed', i, e.bleedAcc[i], 4 | bits, e.x[i], e.y[i], e.bleedCause[i]); e.bleedAcc[i] = 0; }
       }
     }
+  }
+
+  private poisonTick(w: WorldImpl, i: number, dt: number): void {
+    const e = w.enemies;
+    if (e.poison[i] <= 0 || (e.flags[i] & EnemyFlag.Dead)) return;
+    const h = w.damage(i, e.poisonDps[i] * e.poison[i] * dt, { source: 'status', srcTag: 'poison', element: 'poison', cause: e.poisonCause[i], ignoreArmor: true, silent: true });
+    e.poisonAcc[i] += h.damage;
   }
 }

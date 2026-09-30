@@ -30,7 +30,11 @@ export interface BoonView {
   id: BoonId; name: string; category: BoonCategory; categoryLabel: string; rarity: BoonRarity; rarityLabel: string;
   short: string; desc: string; needs: BoonNeed[];
 }
-type NeedsBuild = Pick<BuildState, 'hardpoints' | 'attunements' | 'ranks'>;
+type NeedsBuild = Pick<BuildState, 'hardpoints' | 'attunements' | 'ranks'> & { /** systems running without a slot (UiState.extraSystems) */ extra?: readonly string[] };
+/** Reachability: what boon needs are checked against (a Frame's free mount or a Borrowed Blade counts as mounted). */
+export function needsBuild(ui: Pick<UiState, 'build' | 'extraSystems'>): NeedsBuild {
+  return { hardpoints: ui.build.hardpoints, attunements: ui.build.attunements, ranks: ui.build.ranks, extra: (ui.extraSystems ?? []).map((x) => x.system) };
+}
 
 /** What a boon needs and whether the build has it ('fusion' = a Fusion with a rank whose two elements are attuned). */
 export function boonNeeds(id: BoonId, build: NeedsBuild | null): BoonNeed[] {
@@ -40,7 +44,7 @@ export function boonNeeds(id: BoonId, build: NeedsBuild | null): BoonNeed[] {
       const have = !build || FUSIONS.some((f) => (build.ranks[f.node.id] | 0) > 0 && f.elements.every((e) => build.attunements.includes(e)));
       return { label: 'a Fusion', have };
     }
-    const have = !build || build.hardpoints.includes(n as never) || build.attunements.includes(n as never);
+    const have = !build || build.hardpoints.includes(n as never) || build.attunements.includes(n as never) || !!build.extra?.includes(n);
     return { label: TREE_LABEL[n as keyof typeof TREE_LABEL] ?? titleCase(n), have };
   });
 }
@@ -133,7 +137,7 @@ export function boonsSection(ui: UiState, openOffer: () => void): HTMLElement {
   }
   active.forEach((id, i) => {
     const note = active.length >= cap && i === 0 ? 'Oldest: the next pick replaces it unless you choose another.' : null;
-    list.appendChild(boonRowEl(boonView(id, ui.build), note));
+    list.appendChild(boonRowEl(boonView(id, needsBuild(ui)), note));
   });
   if (!active.length) list.appendChild(h('div', { class: 'bs-socket', text: r.mode === 'patrol' ? 'No active boons. Offers come at the start of an attempt and after each boss, in Push.' : 'No active boons. Offers come at the start of every retry and after each boss.' }));
   return h('section', { class: 'bs-section' },
@@ -148,7 +152,7 @@ export function openActiveBoons(ui: UiState): ModalHandle {
   const cap = ui.run.boonCap || 4;
   const body = h('div', { class: 'boon-list' },
     h('p', { class: 'dim', text: `${active.length} of ${cap}. Boons last until this attempt ends (death, restart, Prestige; a reload is a new attempt).` }),
-    ...active.map((id, i) => boonRowEl(boonView(id, ui.build), active.length >= cap && i === 0 ? 'Oldest: replaced first at the cap.' : null)));
+    ...active.map((id, i) => boonRowEl(boonView(id, needsBuild(ui)), active.length >= cap && i === 0 ? 'Oldest: replaced first at the cap.' : null)));
   return openModal({ title: 'Active boons', body, className: 'boon-modal' });
 }
 
@@ -259,7 +263,7 @@ export class BoonOffer {
     const r = ui.run, cap = r.boonCap || 4;
     clear(this.cards);
     for (const id of offer) {
-      const v = boonView(id, ui.build);
+      const v = boonView(id, needsBuild(ui));
       const on = id === this.selected;
       const card = button([
         categoryTag(v, true),
@@ -274,7 +278,7 @@ export class BoonOffer {
     }
     // detail: the selected card's full text, and what it replaces at the cap
     clear(this.detail);
-    const sel = this.selected ? boonView(this.selected, ui.build) : null;
+    const sel = this.selected ? boonView(this.selected, needsBuild(ui)) : null;
     const drop = replacedBy(active, cap, this.replace);
     show(this.detail, !!sel || active.length >= cap);
     const change = (name: string): HTMLButtonElement => button('Change', () => this.chooseReplace(ui), { class: 'btn ctl bo-change', label: `Choose which active boon to replace (now ${name})` });
@@ -320,7 +324,7 @@ export class BoonOffer {
     const list = h('div', { class: 'boon-list' });
     const m = openModal({ title: 'Replace which boon?', body: list, className: 'boon-modal' });
     active.forEach((id, i) => {
-      list.appendChild(boonRowEl(boonView(id, ui.build), i === 0 ? 'Oldest' : null,
+      list.appendChild(boonRowEl(boonView(id, needsBuild(ui)), i === 0 ? 'Oldest' : null,
         [button(id === (this.replace ?? active[0]) ? 'Chosen' : 'Replace this', () => { this.replace = id; m.close(); this.key = ''; const s = this.ctx.state(); if (s) this.update(s); }, { class: `btn small${id === (this.replace ?? active[0]) ? ' primary' : ''}` })]));
     });
   }

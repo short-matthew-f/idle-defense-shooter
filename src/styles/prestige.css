@@ -15,3 +15,6 @@
 .pshop .player.closed .node { opacity: 0.5; }
 .pshop .player .node-lock::before { content: '🔒︎ '; }
 .echo-val, .star-val { font-variant-numeric: tabular-nums; }
+/* Reachability: Frames not unlocked yet (not selectable; they say how to unlock) */
+.frame-card.locked { opacity: 0.6; border-style: dashed; cursor: default; }
+.frame-card.locked .fr-name { display: inline-flex; gap: 6px; align-items: center; }

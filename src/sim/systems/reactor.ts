@@ -8,8 +8,8 @@
  *   economy.ce_cap (Command Capacitor Array writes it) — WorldImpl.cacheStats → tower.ceCap after every rebuild
  *   economy.scrap_mul, combat.power_mul (Salvage Protocol), economy.first_clear_mul (Strip Mine sets 4) —
  *   WorldImpl.finishKill; economy.boss_scrap_mul (Boss Scavenging) — WorldImpl.finishKill on boss/elite kills
- *   reactor.targeting_logic — NOT implemented: it needs core/targeting.ts (core-owned) and each weapon's
- *   targeting; left for WP1/WP3 (key resolves: 0..3).
+ *   reactor.targeting_logic — WorldImpl.nearestEnemy + core/targeting.ts (rank 1: doomed enemies last; rank 3: hardpoints
+ *   spread over distinct targets) and the aiming systems (rank 2: Ballistics and Drones lead exactly).
  * Implemented here:
  *   Overdrive Core   every overdrive_core.every s of the attempt, `duration` s of ×(1 + bonus) speed (World.dynamicSpeedMul)
  *   Critical Mass    more than `threshold` live enemies: ×(1 + min(cap, per_enemy × (n − threshold))) speed

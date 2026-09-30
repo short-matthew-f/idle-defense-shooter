@@ -82,9 +82,13 @@ export function starsFor(D: number, A = 0): number {
   return Math.floor(4 * (1 + A) * growth(1.1, D - 100));
 }
 
-/** Offline Scrap: measured Patrol rate × capped elapsed time × efficiency. */
-export function offlineScrap(patrolScrapPerSecond: number, elapsedSeconds: number, longPatrol: boolean): number {
-  const cap = longPatrol ? OFFLINE.longCapSeconds : OFFLINE.capSeconds;
-  const eff = longPatrol ? OFFLINE.longEfficiency : OFFLINE.efficiency;
+/**
+ * Offline Scrap: measured Patrol rate × capped elapsed time × efficiency. `longPatrol` is either the resolved Long Patrol
+ * stats (offline.cap_hours / offline.efficiency: +4 h and +7.5 points per rank, 8 h / 40% → 24 h / 70% at rank 4) or a
+ * boolean (legacy callers: true = the full rank-4 values).
+ */
+export function offlineScrap(patrolScrapPerSecond: number, elapsedSeconds: number, longPatrol: boolean | { capHours: number; efficiency: number }): number {
+  const cap = typeof longPatrol === 'object' ? Math.max(0, longPatrol.capHours) * 3600 : longPatrol ? OFFLINE.longCapSeconds : OFFLINE.capSeconds;
+  const eff = typeof longPatrol === 'object' ? Math.max(0, longPatrol.efficiency) : longPatrol ? OFFLINE.longEfficiency : OFFLINE.efficiency;
   return Math.floor(Math.max(0, patrolScrapPerSecond) * Math.min(Math.max(0, elapsedSeconds), cap) * eff);
 }

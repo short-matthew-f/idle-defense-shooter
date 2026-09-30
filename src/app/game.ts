@@ -201,7 +201,7 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
 
   // ---------------------------------------------------------------- offline / hidden tab
   function creditOffline(secs: number): void {
-    const long = ((latestUi?.meta.prestigeRanks['prestige.long_patrol'] ?? 0) | 0) > 0;
+    const long = (latestUi?.meta.prestigeRanks['prestige.long_patrol'] ?? 0) | 0;   // rank: each adds 4 h of cap and 7.5 points of efficiency
     const est = offlineEstimate(latestUi?.run.patrolScrapPerSecond ?? lastSave?.run.patrolScrapPerSecond ?? 0, secs, long);
     client.send({ type: 'offline_return', elapsedSeconds: secs });
     ui.expectOffline(secs, est);

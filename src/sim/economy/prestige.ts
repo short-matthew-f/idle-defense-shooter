@@ -139,8 +139,8 @@ const fx = (stat: string, op: StatEffect['op'], perRank: number): StatEffect => 
 
 /**
  * Meta-level stat effects (applied by StatResolver after Anomalies, rank 1):
- *  Trial rewards (tier 1 completed): Monochrome +1 element stack cap, Blackout +10% Directive
- *  efficiency and Autocast efficiency, Swarmstorm Critical Mass threshold −30%, Poverty Strip Mine
+ *  Trial rewards (tier 1 completed): Monochrome +1 element stack cap, Blackout +10% Counter
+ *  efficiency for Directive and Autocast casts, Swarmstorm Critical Mass threshold −30%, Poverty Strip Mine
  *  ×5 (only while Strip Mine is owned under Salvage). (Commander's second designator is read by the
  *  abilities system from meta.trials; Scatter's reward is a price rule; frames unlock directly.)
  *  Active Trial constraints: Poverty Scrap −75%.
@@ -149,7 +149,7 @@ export function metaEffects(meta: MetaState, build: BuildState): StatEffect[] {
   const out: StatEffect[] = [];
   const t = meta.trials;
   if ((t.monochrome ?? 0) >= 1) out.push(fx('status.stack_cap_bonus', 'add', 1));
-  if ((t.blackout ?? 0) >= 1) out.push(fx('directives.counter_efficiency', 'add', 0.1), fx('directives.autocast_efficiency', 'add', 0.1));
+  if ((t.blackout ?? 0) >= 1) out.push(fx('directives.counter_efficiency', 'add', 0.1));   // Directive and Autocast casts both score at it
   if ((t.swarmstorm ?? 0) >= 1) out.push(fx('reactor.critical_mass.threshold', 'mul', -0.3));
   if ((t.poverty ?? 0) >= 1 && (build.ranks['reactor.salvage.strip_mine'] | 0) > 0
     && (build.doctrines.reactor === 'salvage' || build.secondDoctrines.reactor === 'salvage')) out.push(fx('economy.first_clear_mul', 'set', 5));

@@ -13,7 +13,7 @@
  *    tick through run/commands.ts → System.onCommand, exactly like player input), flagged
  *    `viaDirective: true` (casts also carry `directive: <index>`, which lands in Ev.Cast data).
  *    Queued enemy indices are repaired in onCompact (dead targets drop the command).
- *  - Autocast (`prestige.autocast`) runs after the Directives for abilities no enabled Directive casts.
+ *  - Autocast (`prestige.autocast`) runs after the Directives for abilities no enabled Directive casts and the player left on (meta.settings.autocastOff).
  *  - Upgrade Queue (`prestige.directives`): every 15 ticks between waves, every 2 s in combat.
  *
  * Conditions (see core/types.ts DirectiveCondition):
@@ -38,7 +38,7 @@ import type { AbilityId } from '../core/ids';
 import type { Command, Directive, DirectiveAction, DirectiveCondition } from '../core/types';
 import { EnemyFlag, INNER_RING, NO_ENTITY, TICK_RATE } from '../core/types';
 import { abilityDef, kindIndex } from '../core/content';
-import { abilityCost, findAbilities, type AbilitiesSystem } from '../systems/abilities';
+import { abilityCost, abilityIndex, findAbilities, type AbilitiesSystem } from '../systems/abilities';
 import { GroupFinder, findBoss, hostile, isTargetingProfile, nearestWith, pickDesignation } from './targeting-profiles';
 import { Autocast } from './autocast';
 import { runUpgradeQueue, sanitizeRules } from './upgrade-queue';
@@ -138,6 +138,9 @@ export class DirectivesSystem implements System {
     own.length = 0;
     const list = w.meta.directives, n = Math.min(slots, list.length);
     for (let k = 0; k < n; k++) { const a = list[k].action; if (list[k].enabled && a.kind === 'cast' && !own.includes(a.ability)) own.push(a.ability); }
+    // Reachability: abilities the player switched Autocast off for (meta.settings.autocastOff, bit = ABILITIES order)
+    const off = w.meta.settings.autocastOff ?? 0;
+    if (off) for (const id of w.build.abilities) if (id && (off & (1 << abilityIndex(id))) !== 0 && !own.includes(id)) own.push(id);
   }
 
   private runDirectives(w: World, slots: number): void {

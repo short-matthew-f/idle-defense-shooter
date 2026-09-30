@@ -57,7 +57,12 @@ describe('purchase advice', () => {
     expect(openSlots(state([], 0, { attunementSlotsOpen: 1 }, { attunements: ['fire'] }))).toEqual([]);
     const fork = entry('ballistics.multishot', 0, { affordable: true, kind: 'doctrine' });
     expect(openForks(state([fork], 0)).length).toBe(1);
-    expect(openForks(state([fork], 0, {}, { doctrines: { ballistics: 'piercing' } as AdviceState['build']['doctrines'] })).length).toBe(0);
+    // with a Doctrine chosen the other cards cost a Core to change (never suggested) ...
+    const change = { ...fork, cost: 1 };
+    expect(openForks(state([change], 0, {}, { doctrines: { ballistics: 'piercing' } as AdviceState['build']['doctrines'] })).length).toBe(0);
+    // ... unless a free second-Doctrine slot is open (Spare Barrel, Dual Doctrine, Monolith ...), until it is filled
+    expect(openForks(state([fork], 0, {}, { doctrines: { ballistics: 'piercing' } as AdviceState['build']['doctrines'] })).length).toBe(1);
+    expect(openForks(state([fork], 0, {}, { doctrines: { ballistics: 'piercing' } as AdviceState['build']['doctrines'], secondDoctrines: { ballistics: 'multishot' } as never })).length).toBe(0);
   });
 
   it('death headline names the boss and the restart wave', () => {

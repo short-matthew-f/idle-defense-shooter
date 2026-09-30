@@ -201,6 +201,8 @@ export interface TowerState {
   manualAim: boolean; manualAngle: number;
   designated: number; designatedGen: number;
   designated2: number; designated2Gen: number;   // Second Opinion / Commander
+  /** Reachability addition: the designator slot a tap replaces when both are filled (the older one). Live combat only. */
+  designateNext?: 0 | 1;
   lowHpTicks: number;
 }
 
@@ -330,7 +332,9 @@ export interface MetaState {
   upgradeQueue: UpgradeRule[];
   keepsake: AnomalyId | null;
   records: { deepestWave: number; longestChain: number; fastestWave100Seconds: number | null };
-  settings: { clarity: number; autoPrestige: boolean };
+  settings: { clarity: number; autoPrestige: boolean;
+    /** Reachability addition: Autocast switched off per ability, a bitmask over the ABILITIES data order (bit k = ABILITIES[k]). */
+    autocastOff?: number };
   // --- WP8 additions (optional) ---
   /** The main run, parked while a Trial runs (run/trials.ts). */
   parkedRun?: RunSave;
@@ -402,7 +406,12 @@ export type Command =
   | { type: 'set_speed'; speed: 1 | 2 | 4 | 8 }
   | { type: 'designate'; enemy: number | null; slot?: 0 | 1;
       /** WP9 addition: issued by a Directive (not a human). */ viaDirective?: boolean }
-  /** Integration addition: designate the live enemy nearest (x, y) within max(24, radius + 8) units (UI taps). */
+  /**
+   * Integration addition: designate the live enemy nearest (x, y) within max(24, radius + 8) units (UI taps).
+   * Reachability addition: without `slot` the sim picks it: tapping a designated enemy clears that designation
+   * (except while a boss tell asks for a designation: then it re-designates, so the Counter scores); otherwise the
+   * enemy fills slot 0, then slot 1 when a second designator is available; with both filled it replaces the older.
+   */
   | { type: 'designate_at'; x: number; y: number; slot?: 0 | 1 }
   | { type: 'manual_aim'; active: boolean; angle: number }
   | { type: 'cast'; ability: AbilityId; x: number; y: number; target?: number;
@@ -430,7 +439,13 @@ export type Command =
    */
   | { type: 'pick_boon'; boon: BoonId; replace?: BoonId }
   | { type: 'reroll_boon' }
-  | { type: 'decline_boon' };
+  | { type: 'decline_boon' }
+  /**
+   * Reachability additions. `clear_second_doctrine` drops the tree's second Doctrine (same rule as a change: 1 Core, at a
+   * checkpoint), so Dual Doctrine can move to another tree. `delete_blueprint` frees a Blueprint slot.
+   */
+  | { type: 'clear_second_doctrine'; tree: TreeId }
+  | { type: 'delete_blueprint'; index: number };
 
 // ---------------------------------------------------------------------------
 // Events (sim → everyone). Every event carries a cause for the kill chain.
@@ -529,6 +544,9 @@ export const enum FxKind { Hit = 0, Kill = 1, Explosion = 2, Spark = 3, Ember = 
    *  Scrap / Core motes flying from (x, y) to the HUD counter. */
   Shatter = 14, ChainPips = 15, Punch = 16, Shake = 17, SlowMo = 18, Pickup = 19, PickupCore = 20 }
 
+/** What lets a tree run a second Doctrine (see StatResolver.secondDoctrineInfo). */
+export type SecondDoctrineSource = 'monolith' | 'bulwark' | 'singularity_core' | 'dual_doctrine' | 'spare_barrel';
+
 /** Everything the UI draws from, sent ~10 Hz. Plain JSON, no typed arrays. */
 export interface UiState {
   tick: number;
@@ -546,6 +564,20 @@ export interface UiState {
    * to show their trees.
    */
   extraSystems?: { system: HardpointId; via: 'frame' | 'borrowed' }[];
+  // --- Reachability additions (docs/reviews/REACHABILITY.md) ---
+  /**
+   * Per active tree that can run (or runs) a second Doctrine: whether one may be chosen now, the strength it runs at
+   * (1 = full) and what grants it. Trees without an entry cannot take a second Doctrine.
+   */
+  secondDoctrine?: Partial<Record<TreeId, { allowed: boolean; strength: number; source: SecondDoctrineSource }>>;
+  /** Usable tactical ability slots (2; +1 Third Tactical Slot; +1 Command capstone). build.abilities may hold more (inactive). */
+  abilitySlots?: number;
+  /** Target Designators: how many the player has (0 in Blackout, 2 with Second Opinion / the Commander reward) and how many are live. */
+  designators?: { slots: number; live: number };
+  /** Hardpoint slots and attunements this Frame (+ Prestige, Trial) allows in total, for the Build screen. */
+  slotCaps?: { hardpoint: number; attunement: number };
+  /** Hardpoints that cannot be mounted (or refitted in) right now, with the reason (Frame free mount, Trial rule, borrowed). */
+  mountBlocked?: Partial<Record<HardpointId, string>>;
   /** Wave whose clear opens the next hardpoint / attunement slot (run/slots.ts), or null when no more can open. */
   nextHardpointWave: number | null;
   nextAttunementWave: number | null;

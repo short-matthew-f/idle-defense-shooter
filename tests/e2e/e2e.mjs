@@ -8,11 +8,14 @@
 //                     nothing under the tab bar, quick buy by tap on the Upgrades screen, bulk buy
 //                     (quantity Max + Ballistics "Spend here"), Boons: restart → the start-of-attempt offer card,
 //                     select a card + Take → the boon is active (row under the top bar) and the offer is gone
+//   phone reach       (Reachability, docs/reviews/REACHABILITY.md) a save with Spare Barrel, Second Opinion and the Third
+//                     Tactical Slot: choose a second Ballistics Doctrine on the fork, the third ability slot appears,
+//                     is assigned from its picker and cast, and two enemies are designated (HUD "2/2"), one cleared by a re-tap
 // Exit code 1 on any failed check.
 //
 // Environment: PLAYWRIGHT_DIR (a directory holding the `playwright` package; default: the global npm root),
 // CHROMIUM (browser executable; default: Playwright's own), E2E_URL (skip the preview server and test this URL),
-// E2E_OUT (screenshots; default tests/e2e/out), E2E_SKIP_DESKTOP=1 / E2E_SKIP_PHONE=1.
+// E2E_OUT (screenshots; default tests/e2e/out), E2E_SKIP_DESKTOP=1 / E2E_SKIP_PHONE=1 / E2E_SKIP_REACH=1.
 import { createRequire } from 'node:module';
 import { spawn, execSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -79,6 +82,7 @@ const tab = async (page, id) => { await page.locator(`.tabbar .tab-btn[data-tab=
 try {
   if (!process.env.E2E_SKIP_DESKTOP) await desktop();
   if (!process.env.E2E_SKIP_PHONE) await phone();
+  if (!process.env.E2E_SKIP_REACH) await reach();
 } catch (e) {
   check('no exceptions', false, String(e && e.stack || e));
 } finally {
@@ -380,5 +384,125 @@ async function phone() {
   await page.screenshot({ path: `${OUT}/phone-boon-active.png` });
   check('phone: picking a boon makes it active and clears the offer', bo1.boons.length === 1 && bo1.boons[0] === picked && !bo1.offer && rowShown && !(await page.locator('.boon-offer').isVisible()), { bo1, rowShown });
   check('phone: zero console errors', errors.length === 0, errors);
+  await ctx.close();
+}
+
+// ================================================================ phone: reachability (second Doctrine, third slot, two designators)
+async function reach() {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
+  // the save is stored from a same-origin image URL (the game must not run and autosave over it); Chromium then asks
+  // for /favicon.ico, which the preview server does not have: answer it so the console stays clean
+  await ctx.route('**/favicon.ico', (r) => r.fulfill({ status: 204, body: '' }));
+  const page = await ctx.newPage();
+  const errors = [];
+  attachLogs(page, errors);
+  await page.goto(URL);
+  await page.waitForFunction(() => !!window.__citadel?.game?.ready, null, { timeout: 60000 });
+  await skipOnboarding(page);
+  // take the fresh save and grant: Spare Barrel + Second Opinion socketed, the Ballistics fork open with its first
+  // Doctrine chosen, Prestige III's Third Tactical Slot; then park the game on another URL, store it and reload
+  const save = await page.evaluate(async () => {
+    const g = window.__citadel.game, ui = g.latestUi();
+    const s = await g.client.requestSave();
+    const docs = ui.shop.filter((e) => e.tree === 'ballistics' && e.kind === 'doctrine').map((e) => e.node.split('.')[1]);
+    for (const e of ui.shop) if (e.tree === 'ballistics' && e.kind !== 'doctrine' && e.kind !== 'exotic') s.run.build.ranks[e.node] = Math.max(1, s.run.build.ranks[e.node] | 0);
+    s.run.build.doctrines = { ballistics: docs[0] };
+    s.run.build.anomalies = ['spare_barrel', 'second_opinion'];
+    s.meta.prestigeRanks['prestige.third_tactical_slot'] = 1;
+    s.meta.deepestEver = Math.max(60, s.meta.deepestEver);
+    s.run.scrap = 5000; s.run.cores = 3;
+    s.savedAtMs = Date.now();
+    return s;
+  });
+  await page.goto(`${BASE}icons/icon-192.png`);
+  await page.evaluate(async (save) => {
+    await new Promise((res, rej) => {
+      const r = indexedDB.open('citadel', 1);
+      r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('saves')) r.result.createObjectStore('saves'); };
+      r.onsuccess = () => { const t = r.result.transaction('saves', 'readwrite'); t.objectStore('saves').put(save, 'main'); t.oncomplete = () => { r.result.close(); res(); }; t.onerror = () => rej(t.error); };
+      r.onerror = () => rej(r.error);
+    });
+  }, save);
+  await page.goto(`${BASE}?fast=1`);
+  await page.waitForFunction(() => !!window.__citadel?.game?.ready, null, { timeout: 60000 });
+  await page.waitForTimeout(800);
+  await skipOnboarding(page);
+  const rs = () => page.evaluate(() => { const u = window.__citadel.game.latestUi(); return { second: u.build.secondDoctrines, sd: u.secondDoctrine, slots: u.build.abilities, usable: u.abilitySlots, des: u.designators, phase: u.run.phase, abilities: u.abilities, ce: u.tower.ce }; });
+
+  // 1. second Doctrine: the Ballistics fork offers "Choose as 2nd · 50%" (Spare Barrel); choose it
+  const r0 = await rs();
+  await tab(page, 'upgrades');
+  await page.locator('.screen.s-upgrades .cat-tabs .tab', { hasText: 'Chassis' }).tap();
+  await page.locator('.screen.s-upgrades .tree-chip', { hasText: 'Ballistics' }).tap();
+  await page.waitForTimeout(300);
+  const second = page.locator('.screen.s-upgrades .doctrine button[data-action="second"]');
+  const label = ((await second.first().textContent()) ?? '').trim();
+  await second.first().scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${OUT}/phone-reach-second-fork.png` });
+  await second.first().tap();
+  await page.locator('[role="dialog"]').getByRole('button', { name: 'Choose as 2nd' }).tap();
+  for (let k = 0; k < 20 && !(await rs()).second.ballistics; k++) await page.waitForTimeout(150);
+  const r1 = await rs();
+  const tag = await page.locator('.screen.s-upgrades .doctrine.second .doc-tag').first().textContent().catch(() => null);
+  await page.screenshot({ path: `${OUT}/phone-reach-second-chosen.png` });
+  check('reach: a second Doctrine is offered (Spare Barrel, 50%) and chosen from the fork', r0.sd?.ballistics?.strength === 0.5 && label.startsWith('Choose as 2nd · 50%') && !!r1.second.ballistics && tag === '2nd · 50%', { label, second: r1.second, tag });
+
+  // 2. third ability slot: three buttons on Battle; the empty one opens its picker; slot Repulsor Pulse there and cast it
+  await tab(page, 'battle');
+  const btns = page.locator('.ability-row .btn.ability');
+  const n = await btns.count();
+  await btns.nth(2).tap();
+  await page.waitForTimeout(400);
+  await page.locator('.abp-item', { hasText: 'Repulsor Pulse' }).first().tap();
+  for (let k = 0; k < 20 && (await rs()).slots[2] !== 'repulsor_pulse'; k++) await page.waitForTimeout(150);
+  const r2 = await rs();
+  await page.evaluate(() => window.__citadel.game.setFast(8));
+  await waitUi(page, (u) => u.phase === 'combat' && u.abilities.some((a) => a.id === 'repulsor_pulse' && a.ready), 240000, 'Repulsor Pulse ready');
+  await page.evaluate(() => window.__citadel.game.setFast(1));
+  await btns.nth(2).tap();
+  await page.waitForTimeout(700);
+  const r3 = await rs();
+  const rp = r3.abilities.find((a) => a.id === 'repulsor_pulse');
+  const geo = await page.evaluate(() => { const a = document.querySelector('.ability-row').getBoundingClientRect(), tb = document.querySelector('.tabbar').getBoundingClientRect(); return { rowBottom: a.bottom, tabTop: tb.top, left: a.left, right: a.right }; });
+  await page.screenshot({ path: `${OUT}/phone-reach-third-slot.png` });
+  check('reach: the third ability slot shows, is assigned from its picker and casts', r0.usable === 3 && r0.slots.length === 3 && n === 3 && r2.slots[2] === 'repulsor_pulse' && !!rp && rp.cooldown > 0 && geo.rowBottom <= geo.tabTop && geo.left >= 0 && geo.right <= 390, { usable: r0.usable, n, slots: r2.slots, cooldown: rp?.cooldown, geo });
+
+  // 3. two designators: tap two enemies (both reticles, HUD 2/2), re-tap one to clear it
+  await waitUi(page, (u) => u.phase === 'combat', 60000, 'combat for designators');
+  const targets = async () => page.evaluate(() => {
+    const c = window.__citadel, s = c.app.snapshot; if (!s || s.instances.buffer.byteLength === 0) return [];
+    const out = [];
+    for (let i = 0; i < s.instanceCount; i++) { const o = i * 12; if (s.instances[o + 9] !== 4) continue; const x = s.instances[o], y = s.instances[o + 1]; if (Math.hypot(x, y) > 460 || Math.hypot(x, y) < 90) continue; out.push({ x, y }); }
+    out.sort((a, b) => Math.hypot(b.x, b.y) - Math.hypot(a.x, a.y));
+    const pick = []; for (const e of out) if (pick.every((p) => Math.hypot(p.x - e.x, p.y - e.y) > 60)) pick.push(e);
+    const r = c.app.canvas.getBoundingClientRect();
+    return pick.map((e) => { const p = c.app.camera.toScreen(e.x, e.y); return { sx: r.left + p.x, sy: r.top + p.y }; }).filter((q) => document.elementFromPoint(q.sx, q.sy) === c.app.canvas);
+  });
+  let two = [];
+  for (let k = 0; k < 60 && two.length < 2; k++) { two = await targets(); if (two.length < 2) await page.waitForTimeout(250); }
+  await page.evaluate(() => window.__citadel.game.setFast(1));
+  const cmdBefore = await page.evaluate(() => window.__citadel.game.cmdErrors.length);
+  for (const e of two.slice(0, 2)) { await page.touchscreen.tap(e.sx, e.sy); await page.waitForTimeout(250); }
+  await page.waitForTimeout(400);
+  const r4 = await rs();
+  const chip = ((await page.locator('.desig-chip').textContent()) ?? '').trim();
+  const reticles = await page.evaluate(() => { const s = window.__citadel.app.snapshot; let k = 0; for (let i = 0; i < s.instanceCount; i++) { const o = i * 12; if (s.instances[o + 9] === 7 && s.instances[o + 11] !== 0) k++; } return k; });
+  await page.screenshot({ path: `${OUT}/phone-reach-two-designators.png` });
+  const cmdErrs = await page.evaluate((n0) => window.__citadel.game.cmdErrors.slice(n0), cmdBefore);
+  check('reach: two taps designate two enemies (both reticles, HUD shows 2 designators)', two.length >= 2 && r4.des?.slots === 2 && r4.des?.live === 2 && reticles >= 2 && /2\/2/.test(chip) && cmdErrs.length === 0, { taps: two.length, des: r4.des, reticles, chip, cmdErrs });
+  // re-tap the enemy nearest the last tap: its designation clears (it may have moved: aim at its drawn position)
+  const again = await page.evaluate((t) => {
+    const c = window.__citadel, s = c.app.snapshot, r = c.app.canvas.getBoundingClientRect();
+    let best = null;
+    for (let i = 0; i < s.instanceCount; i++) { const o = i * 12; if (s.instances[o + 9] !== 7 || s.instances[o + 11] === 0) continue; const p = c.app.camera.toScreen(s.instances[o], s.instances[o + 1]); const d = Math.hypot(r.left + p.x - t.sx, r.top + p.y - t.sy); if (!best || d < best.d) best = { d, sx: r.left + p.x, sy: r.top + p.y }; }
+    return best;
+  }, two[1]);
+  const before = await rs();
+  if (again) await page.touchscreen.tap(again.sx, again.sy);
+  await page.waitForTimeout(300);
+  const r5 = await rs();
+  // relative to the count just before the tap (a designated enemy can also die in between)
+  check('reach: tapping a designated enemy clears it', !!again && before.des?.live >= 1 && r5.des?.live === before.des.live - 1, { before: before.des, after: r5.des });
+  check('reach: zero console errors', errors.length === 0, errors);
   await ctx.close();
 }

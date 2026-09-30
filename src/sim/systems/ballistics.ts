@@ -6,12 +6,13 @@
  *   ballistics.gunstorm            exotic: every 8th attack each barrel fires a 6-round burst
  *   reactor.global_attack_speed    multiplier on the fire rate
  * Doctrines (strength 1 primary, 0.5–1 as a second doctrine):
- *   multishot     projectiles = clamp(multishot.count, 1..5) in a 20° fan; each deals ×(1 − multishot.penalty);
+ *   multishot     projectiles = clamp(multishot.count, 1..5) in a 20° fan (count's ranks are already scaled by the
+ *                 doctrine strength in the resolver); with 2+ projectiles each deals ×(1 − multishot.penalty);
  *                 Split Sight: extra projectiles pick their own targets (nearest first)
  *   piercing      pierce = piercing.count; damage × retention × (1 + velocity) and speed × (1 + velocity) per pierce;
  *                 Last Rites: the final pierce deals ×4
  *   ricochet      bounces = ricochet.bounces within ricochet.range, ×0.8 damage per bounce; Return Fire revisits
- *   heavy_rounds  fire rate × heavy.fire_rate (0.75), damage × heavy.base_damage (1.9) × heavy.damage, radius ×
+ *   heavy_rounds  fire rate × heavy.fire_rate (0.85), damage × heavy.base_damage (1.9) × heavy.damage, radius ×
  *                 heavy.base_size (2.5) × heavy.size, knockback heavy.base_knockback (18) + heavy.knockback; Staggerhead staggers elites / interrupts bosses (staggerT)
  * Targeting: build.targeting.primary (default 'nearest'); a live designated enemy in range always wins.
  * Manual aim (tower.manualAim) overrides direction; manual shots get +10% crit chance (ProjFlag.Manual).
@@ -40,6 +41,8 @@ export class BallisticsSystem implements System {
   private bounces = 0; private bounceRange = 120; private returnFire = false;
   private radius = 3; private knock = 0; private stagger = false;
   private execBonus = 0; private execRefund = 0; private gunstorm = false;
+  /** Reactor Targeting Logic rank 2+: shots lead moving targets exactly (else 60% + Target Acquisition). */
+  private perfectLead = false;
   private picked = new Int32Array(8);
   /** Current target (index + generation) so equidistant enemies don't make the turret flip-flop. */
   private tgt = NO_ENTITY; private tgtGen = 0;
@@ -63,9 +66,11 @@ export class BallisticsSystem implements System {
     this.execBonus = s.has('ballistics.execution') ? s.get('ballistics.execution') : 0;
     this.execRefund = s.has('ballistics.execution') ? s.get('ballistics.execution.ce_refund') : 0;
     this.gunstorm = s.has('ballistics.gunstorm');
+    this.perfectLead = s.get('reactor.targeting_logic') >= 2;
 
     const ms = s.doctrineStrength('ballistics', 'multishot');
-    this.n = ms > 0 ? clamp(Math.floor(1 + (s.get('ballistics.multishot.count') - 1) * ms + 1e-9), 1, 5) : 1;
+    // the resolver already scales doctrine node ranks by the doctrine's strength (a 50% second Multishot gets half the barrels)
+    this.n = ms > 0 ? clamp(Math.floor(s.get('ballistics.multishot.count') + 1e-9), 1, 5) : 1;
     this.penalty = this.n > 1 ? clamp(s.get('ballistics.multishot.penalty'), 0, 0.9) : 0;
     this.splitSight = ms > 0 && s.has('ballistics.multishot.split_sight');
 
@@ -124,7 +129,7 @@ export class BallisticsSystem implements System {
     const x = e.x[i], y = e.y[i];
     const d = Math.sqrt(x * x + y * y);
     const tt = d / this.speed;
-    const k = Math.min(1, 0.6 + this.ta);
+    const k = this.perfectLead ? 1 : Math.min(1, 0.6 + this.ta);
     return atan2(y + e.vy[i] * tt * k, x + e.vx[i] * tt * k);
   }
 
@@ -142,25 +147,26 @@ export class BallisticsSystem implements System {
     if (target >= 0) this.picked[pickedN++] = target;
     for (let k = 0; k < n; k++) {
       let angle: number;
+      let aimed = k === (this.splitSight ? 0 : (n - 1) >> 1) ? target : NO_ENTITY;   // the round aimed at the target names it (Targeting Logic: damage in flight)
       if (this.splitSight && k > 0 && !manual) {
         const other = w.nearestExcluding(0, 0, this.range, this.picked, pickedN);
-        if (other >= 0) { this.picked[pickedN++] = other; angle = this.leadAngle(w, other); }
+        if (other >= 0) { this.picked[pickedN++] = other; angle = this.leadAngle(w, other); aimed = other; }
         else angle = this.aim + (k - (n - 1) / 2) * (FAN / Math.max(1, n - 1));
       } else {
         angle = n > 1 ? this.aim + (k - (n - 1) / 2) * (FAN / (n - 1)) : this.aim;
       }
-      this.launch(w, angle, per, flags, crit);
+      this.launch(w, angle, per, flags, crit, aimed);
       if (gun) for (let j = 1; j < GUNSTORM_ROUNDS; j++) this.launch(w, angle + (j - GUNSTORM_ROUNDS / 2) * 0.04, per, flags, crit);
     }
   }
 
-  private launch(w: World, angle: number, damage: number, flags: number, crit: number): void {
+  private launch(w: World, angle: number, damage: number, flags: number, crit: number, target: number = NO_ENTITY): void {
     const c = cos(angle), s = sin(angle);
     w.spawnProjectile({
       kind: ProjKind.Bullet, source: 0, srcTag: 'ballistics',
       x: c * TOWER_RADIUS, y: s * TOWER_RADIUS, vx: c * this.speed, vy: s * this.speed,
       damage, radius: this.radius, life: Math.ceil((this.range * 1.15 / this.speed) * 60),
-      pierce: this.pierce, bounces: this.bounces, flags, critChance: crit, critMul: this.critM, cause: -1,
+      pierce: this.pierce, bounces: this.bounces, flags, critChance: crit, critMul: this.critM, cause: -1, target,
       retention: this.retention, pierceSpeed: this.pierceSpeed, bounceRange: this.bounceRange, knock: this.knock, execBonus: this.execBonus,
     });
   }

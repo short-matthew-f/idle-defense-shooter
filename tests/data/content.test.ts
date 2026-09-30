@@ -138,7 +138,8 @@ describe('stats', () => {
 
   it('every StatKey referenced by an effect has a BASE_STATS entry', () => {
     const missing = new Set<string>();
-    for (const s of effectSources) for (const e of s.effects) if (!(e.stat in BASE_STATS)) missing.add(`${e.stat} (from ${s.owner})`);
+    // `key@final` is a final multiplier on `key` (core/stats.ts): its base is the key's
+    for (const s of effectSources) for (const e of s.effects) if (!(e.stat.replace(/@final$/, '') in BASE_STATS)) missing.add(`${e.stat} (from ${s.owner})`);
     expect([...missing]).toEqual([]);
   });
 
@@ -344,7 +345,7 @@ describe('design counts and tables', () => {
     }
     expect(FRAMES.find((f) => f.id === 'hive')!.freeMount).toBe('drones');
     expect(FRAMES.find((f) => f.id === 'prism')!.freeMount).toBe('laser');
-    expect(FRAMES.find((f) => f.id === 'arsenal')!.effects).toContainEqual({ stat: 'ballistics.damage', op: 'mul', perRank: -0.25 });
+    expect(FRAMES.find((f) => f.id === 'arsenal')!.effects).toContainEqual({ stat: 'ballistics.damage@final', op: 'mul', perRank: -0.25 });
   });
 
   it('anomalies have unique ids and valid needs', () => {

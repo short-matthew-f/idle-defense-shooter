@@ -128,6 +128,12 @@ body.shell-rail .shop-body { border-top: 0; }
 .doc-cap b { color: var(--text); font-weight: 600; }
 .doc-state { font-size: 14px; font-weight: 700; color: var(--ok); }
 .doctrine .btn { align-self: stretch; margin-top: 4px; }
+/* Reachability: a chosen second Doctrine (dashed accent) and the fork's second-Doctrine note */
+.doctrine.second { border-style: dashed; }
+.doc-tag { color: var(--accent); border-color: var(--accent); font-weight: 700; }
+.fork-note { display: flex; gap: 6px; align-items: flex-start; margin: 0 0 8px; font-size: 14px; line-height: 1.4; color: var(--text); background: color-mix(in srgb, var(--accent) 10%, var(--bg-2)); border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line-2)); border-radius: 10px; padding: 8px 10px; }
+.fork-note .ico { flex: none; margin-top: 2px; color: var(--accent); }
+.pick-card.blocked { opacity: .6; border-style: dashed; }
 
 .pick-card { display: flex; gap: 12px; align-items: center; background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 12px; padding: 12px 14px; margin: 8px 0; }
 .pick-main { flex: 1; min-width: 0; }

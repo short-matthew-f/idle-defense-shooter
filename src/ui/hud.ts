@@ -73,6 +73,10 @@ export class Hud {
   private readonly speedBtn: HTMLButtonElement;
   private readonly pauseBtn: HTMLButtonElement;
   private readonly trialBanner = h('div', { class: 'trial-banner' });
+  /** Reachability: "2 designators" hint (Second Opinion / Commander reward) with how many are in use. */
+  private readonly desig = h('span', { class: 'desig-chip', attrs: { role: 'status' } });
+  private readonly desigText = h('span');
+  private readonly desigLabel = h('span', { class: 'desig-label' });
   private readonly trialName = h('span');
   private rate = new RateMeter();
   /** Last measured Scrap income (per second), for ETAs elsewhere in the UI. */
@@ -122,7 +126,9 @@ export class Hud {
         this.pauseBtn),
       h('div', { class: 'tb-row tb-bars' }, this.hp.el, this.ce.el),
       this.cycle);
-    this.controls = h('div', { class: 'battle-controls', attrs: { role: 'toolbar', 'aria-label': 'Run controls' } }, this.trialBanner, this.modeBtn, this.speedBtn, restart, muteChip());
+    this.desig.append(abilityIcon('designate', 'ico tiny'), this.desigText, this.desigLabel);
+    this.desig.hidden = true;
+    this.controls = h('div', { class: 'battle-controls', attrs: { role: 'toolbar', 'aria-label': 'Run controls' } }, this.trialBanner, this.desig, this.modeBtn, this.speedBtn, restart, muteChip());
     this.bossBar = new BossBar((t) => this.onTell?.(t));
   }
 
@@ -196,6 +202,14 @@ export class Hud {
     this.speedBtn.classList.toggle('fast', r.speedMultiplier > 1);
     attr(this.speedBtn, 'aria-label', `Speed ×${r.speedMultiplier}; tap for ×${speedCycle(r.speedMultiplier, maxSpeed)}`);
     this.bossBar.update(ui);
+    const d = ui.designators;
+    show(this.desig, !!d && d.slots >= 2);
+    if (d && d.slots >= 2) {
+      text(this.desigText, d.live === 0 ? String(d.slots) : `${d.live}/${d.slots}`);
+      text(this.desigLabel, d.live === 0 ? 'designators' : 'designated');   // hidden on a landscape phone (narrow control column)
+      attr(this.desig, 'aria-label', `2 designators, ${d.live} in use. Tap enemies to designate them; tap a designated enemy to clear it.`);
+      this.desig.title = '2 designators: tap two enemies; a third tap replaces the older; tap a designated enemy to clear it';
+    }
   }
 }
 

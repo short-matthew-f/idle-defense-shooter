@@ -19,7 +19,8 @@ export function anomalyCard(id: AnomalyId, ui: UiState | null, extra?: HTMLEleme
   const a = ANOMALY_BY_ID.get(id);
   const rarity = a?.rarity ?? 'common';
   const needs = (a?.needs ?? []).map((n) => {
-    const have = !ui || n === 'primary' || ui.build.hardpoints.includes(n as never) || ui.build.attunements.includes(n as never);
+    // Reachability: a Frame's free mount or a Borrowed Blade counts too (ui.extraSystems)
+    const have = !ui || n === 'primary' || ui.build.hardpoints.includes(n as never) || ui.build.attunements.includes(n as never) || (ui.extraSystems ?? []).some((x) => x.system === n);
     return h('span', { class: `tag${have ? '' : ' missing'}`, text: `${have ? '' : 'Needs '}${n === 'primary' ? 'Primary' : TREE_LABEL[n as keyof typeof TREE_LABEL] ?? titleCase(n)}`, title: have ? 'Your build has this' : 'Your build lacks this system' });
   });
   return h('div', { class: `anomaly-card r-${rarity}` },
@@ -94,7 +95,23 @@ export class DraftModal {
     const list = h('div', { class: 'draft-cards replace' });
     const m = openModal({ title: `Replace which Anomaly with ${ANOMALY_BY_ID.get(id)?.name ?? id}?`, body: list, variant: 'wide' });
     ui.build.anomalies.forEach((cur, i) => {
-      list.appendChild(anomalyCard(cur, ui, button('Replace this', () => { m.close(); this.pick(id, i); }, { class: 'btn danger' })));
+      const loss = replaceLoss(cur, ui);
+      list.appendChild(anomalyCard(cur, ui, h('div', { class: 'an-replace' }, loss ? h('p', { class: 'node-lock', text: loss }) : null,
+        button('Replace this', () => { m.close(); this.pick(id, i); }, { class: 'btn danger' }))));
     });
+  }
+}
+
+/**
+ * Reachability: what the player loses with an Anomaly that grants a capability (so a replace is never a silent loss), or null.
+ */
+export function replaceLoss(id: AnomalyId, ui: Pick<UiState, 'build' | 'extraSystems' | 'meta'>): string | null {
+  const b = ui.build;
+  switch (id) {
+    case 'spare_barrel': return b.secondDoctrines.ballistics ? 'Your second Barrel Doctrine stops running.' : null;
+    case 'borrowed_blade': return (ui.extraSystems ?? []).some((x) => x.via === 'borrowed') ? 'The borrowed Orbital Blade leaves (its ranks stop working).' : null;
+    case 'second_opinion': return (ui.meta.trials.commander ?? 0) > 0 ? null : 'You lose the second Target Designator.';
+    case 'recursive_warhead': return (b.ranks['ordnance.cluster_warheads'] | 0) > 0 ? null : 'Missiles stop splitting (Cluster Warheads was free from this Anomaly).';
+    default: return null;
   }
 }

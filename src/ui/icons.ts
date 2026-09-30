@@ -71,6 +71,9 @@ const P: Record<string, string> = {
 
 export type IconName = keyof typeof P;
 
+/** Is there an icon called `name`? (tests/ui/coverage.test.ts: every ability, rarity and boon category has one) */
+export function hasIcon(name: string): boolean { return Object.prototype.hasOwnProperty.call(P, name); }
+
 /** An inline SVG element for `name` (aria-hidden; pair with a text label or aria-label). */
 export function icon(name: string, cls = 'ico'): SVGSVGElement {
   const ns = 'http://www.w3.org/2000/svg';

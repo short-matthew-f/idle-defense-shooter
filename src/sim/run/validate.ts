@@ -12,7 +12,7 @@ const ELEMENTS: readonly string[] = ['fire', 'lightning', 'poison', 'frost'];
 const WEAPONS: readonly string[] = ['primary', ...HARDPOINTS];
 const PROFILES: readonly string[] = ['nearest', 'closest_to_tower', 'lowest_hp', 'highest_hp', 'elites', 'support', 'fastest', 'designated'];
 const MODES: readonly string[] = ['push', 'patrol'];
-const SETTINGS: Readonly<Record<string, 'number' | 'boolean'>> = { clarity: 'number', autoPrestige: 'boolean' };
+const SETTINGS: Readonly<Record<string, 'number' | 'boolean'>> = { clarity: 'number', autoPrestige: 'boolean', autocastOff: 'number' };
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): boolean => typeof v === 'string' && v.length > 0 && v.length <= 128;
@@ -64,6 +64,9 @@ export function validateCommand(cmd: unknown): string | null {
       return isObj(b.doctrines) && isObj(b.targeting) ? null : bad('blueprint');
     }
     case 'start_trial': return str(c.trial) ? null : bad('trial');
+    // Reachability additions
+    case 'clear_second_doctrine': return str(c.tree) ? null : bad('tree');
+    case 'delete_blueprint': return int(c.index) ? null : bad('index');
     case 'set_threat_dial': return fin(c.level) ? null : bad('level');
     case 'offline_return': return fin(c.elapsedSeconds) && (c.elapsedSeconds as number) >= 0 ? null : bad('elapsedSeconds');
     // Boons: player-only. A command claiming to come from a Directive / Autocast is rejected outright.
@@ -76,6 +79,7 @@ export function validateCommand(cmd: unknown): string | null {
     case 'set_setting': {
       const kind = typeof c.key === 'string' && Object.prototype.hasOwnProperty.call(SETTINGS, c.key) ? SETTINGS[c.key] : undefined;
       if (!kind) return bad('key');
+      if (c.key === 'autocastOff') return int(c.value) && (c.value as number) >= 0 && (c.value as number) < 0x40000000 ? null : bad('value');   // bitmask
       return kind === 'number' ? (fin(c.value) ? null : bad('value')) : typeof c.value === 'boolean' ? null : bad('value');
     }
     default: return `Unknown command ${String(c.type)}`;

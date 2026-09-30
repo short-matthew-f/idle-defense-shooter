@@ -47,7 +47,7 @@ export const FIRE: TreeDef = {
     ]),
   ],
   exotic: exotic('fire.meteor_round', 'Meteor Round',
-    'Every 5th Fireball, from any source, becomes a Meteor Round that leaves an 80-unit burning zone for 4 s.'),
+    'Every 5th Fireball, from any source (Inferno or Seventh Shot), becomes a Meteor Round that leaves an 80-unit burning zone for 4 s.'),
 };
 
 // ---------------------------------------------------------------------------
@@ -110,7 +110,7 @@ export const POISON: TreeDef = {
         3, flat(3, 1)),
     ]),
     doctrine('poison', 'venom', 'Venom', 'Deep stacks that eat armor and burst.', [
-      stat('poison.venom.virulence', 'Virulence', 'Poison deals +2% damage per rank for every stack past the 5th on the target.', 'add', 0.02, DOC_BASE, DOC_G, 25, 2, { tags: ['damage'] }),
+      stat('poison.venom.virulence', 'Virulence', 'Under Venom, Poison deals +3% damage for every stack past the 5th on the target; +2% per rank.', 'add', 0.02, DOC_BASE, DOC_G, 25, 2, { tags: ['damage'] }),
       mech('poison.venom.corrosion', 'Corrosion',
         'Each Poison stack strips 1% of the enemy\'s armor per rank (up to 60%).',
         2, flat(2, 3), [fx('poison.venom.corrosion', 'add', 0.01)]),
@@ -147,7 +147,7 @@ export const FROST: TreeDef = {
         3, flat(3, 1)),
     ]),
     doctrine('frost', 'shatter', 'Shatter', 'Frozen enemies turn Brittle and break apart.', [
-      stat('frost.shatter.brittle', 'Brittle', 'Enemies at max Chill or frozen become Brittle: +4% damage taken per rank.', 'add', 0.04, DOC_BASE, DOC_G, 25, 2, { tags: ['damage'] }),
+      stat('frost.shatter.brittle', 'Brittle', 'Enemies at max Chill or frozen become Brittle (up to 3 stacks): +4% damage taken per rank, and critical hits on them deal +15% more per Brittle stack.', 'add', 0.04, DOC_BASE, DOC_G, 25, 2, { tags: ['damage'] }),
       mech('frost.shatter.fracture', 'Fracture',
         'Critical hits on Brittle enemies deal +25% crit damage per rank.',
         2, flat(2, 3), [fx('frost.shatter.fracture', 'add', 0.25)]),

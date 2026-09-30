@@ -6,6 +6,9 @@
  * where BASE(key) = BASE_STATS[key] ?? CORE_DEFAULTS[key] ?? 0. All `mul` effects on one key are
  * summed before multiplying (two +10% nodes give ×1.2, not ×1.21). Several `set` effects: the last
  * source in resolution order wins. Test/debug overrides (`override`) win over everything.
+ * Final multipliers (EFFECT-AUDIT): an effect on `${key}@final` (op 'mul') multiplies `key` AFTER the additive sum,
+ * each source separately: ×(1 + perRank·rank). Frame and Anomaly penalties that promise a real fraction ("primary
+ * damage −25%", "beams deal 40% less damage") use it, so upgrade ranks on the same key cannot dilute them.
  *
  * Effect sources, in resolution order: tree nodes (shared, doctrine, exotic; doctrine nodes only
  * while their doctrine is active, scaled by doctrineStrength), fusions/triads (both/all elements
@@ -17,7 +20,7 @@
  * unattuned elements; +1 on Fusions for frames flagged `fusions_start_rank1`).
  */
 import type { DerivedStats } from './world';
-import type { BuildState, MetaState } from './types';
+import type { BuildState, MetaState, SecondDoctrineSource } from './types';
 import type { ElementId, TreeId, WeaponSystemId } from './ids';
 import type { StatEffect } from '../data/schema';
 import { BASE_STATS } from '../data/index';
@@ -41,6 +44,21 @@ export const CORE_DEFAULTS: Record<string, number> = {
   'combat.power_mul': 1,
 };
 
+/** Most tactical ability slots a build can have. */
+export const MAX_TACTICAL_SLOTS = 4;
+
+/**
+ * Reachability: make `abilities` hold exactly `n` usable slots. Grows with empty (null) slots; when `n` falls,
+ * trailing empty slots beyond `n` are dropped but a filled slot is never removed (it stays, inactive). Deterministic.
+ */
+export function syncAbilitySlots(abilities: (string | null)[], n: number): void {
+  while (abilities.length < n) abilities.push(null);
+  while (abilities.length > n && abilities[abilities.length - 1] === null) abilities.pop();
+}
+
+/** Suffix of a final-multiplier effect key (see the header). */
+export const FINAL = '@final';
+
 /** WP8: node granted by the Recursive Warhead Anomaly. */
 const RECURSIVE_NODE = 'ordnance.cluster_warheads';
 
@@ -56,6 +74,8 @@ export class StatResolver implements DerivedStats {
   private add = new Map<string, number>();
   private mul = new Map<string, number>();
   private set = new Map<string, number>();
+  /** `${key}@final` effects: product of (1 + perRank·rank) per key, applied after the additive sum. */
+  private fin = new Map<string, number>();
   /** Incremented on every rebuild so systems can cheaply detect changes. */
   version = 0;
 
@@ -72,11 +92,12 @@ export class StatResolver implements DerivedStats {
 
   rebuild(): void {
     this.version++;
-    const add = this.add, mul = this.mul, set = this.set, ranks = this.ranks;
-    add.clear(); mul.clear(); set.clear(); ranks.clear();
+    const add = this.add, mul = this.mul, set = this.set, ranks = this.ranks, fin = this.fin;
+    add.clear(); mul.clear(); set.clear(); ranks.clear(); fin.clear();
     const apply = (effects: readonly StatEffect[], scale: number): void => {
       for (let k = 0; k < effects.length; k++) {
         const e = effects[k];
+        if (e.stat.endsWith(FINAL)) { const b = e.stat.slice(0, -FINAL.length); fin.set(b, (fin.get(b) ?? 1) * (1 + e.perRank * scale)); continue; }
         if (e.op === 'add') add.set(e.stat, (add.get(e.stat) ?? 0) + e.perRank * scale);
         else if (e.op === 'mul') mul.set(e.stat, (mul.get(e.stat) ?? 0) + e.perRank * scale);
         else set.set(e.stat, e.perRank * (scale > 0 ? 1 : 0));
@@ -117,14 +138,22 @@ export class StatResolver implements DerivedStats {
     for (const k of add.keys()) keys.add(k);
     for (const k of mul.keys()) keys.add(k);
     for (const k of set.keys()) keys.add(k);
+    for (const k of fin.keys()) keys.add(k);
     for (const k of this.overrides.keys()) keys.add(k);
     for (const k of keys) {
-      let v = (baseStat(k) + (add.get(k) ?? 0)) * (1 + (mul.get(k) ?? 0));
+      let v = (baseStat(k) + (add.get(k) ?? 0)) * (1 + (mul.get(k) ?? 0)) * (fin.get(k) ?? 1);
       const s = set.get(k); if (s !== undefined) v = s;
       if (k === 'combat.power_mul' || k === 'economy.scrap_mul') v *= codexMul;   // WP8: Codex bonus
       const o = this.overrides.get(k); if (o !== undefined) v = o;
       values.set(k, v);
     }
+    // Reachability: the build always offers every usable tactical slot (a third / fourth slot appears the moment it is earned)
+    if (this.build.abilities) syncAbilitySlots(this.build.abilities, this.tacticalSlots());
+  }
+
+  /** Tactical ability slots: 2; +1 prestige.third_tactical_slot; +1 the Command capstone (same rule as systems/abilities.abilitySlotCount). */
+  tacticalSlots(): number {
+    return Math.min(MAX_TACTICAL_SLOTS, 2 + (this.has('prestige.third_tactical_slot') ? 1 : 0) + (this.has('reactor.command.fourth_slot') ? 1 : 0));
   }
 
   private rawRank(info: NodeInfo): number {
@@ -185,12 +214,17 @@ export class StatResolver implements DerivedStats {
   doctrineStrength(tree: string, doctrine: string): number {
     if (this.build.doctrines[tree as TreeId] === doctrine) return 1;
     if (this.build.secondDoctrines[tree as TreeId] !== doctrine) return 0;
+    return this.secondDoctrineInfo(tree).strength;
+  }
+  /** Strength a second Doctrine in `tree` runs at, and what grants it (Reachability: the UI labels "Choose as 2nd · 60%"). */
+  secondDoctrineInfo(tree: string): { strength: number; source: SecondDoctrineSource } {
     const f = this.build.frame;
-    if ((f === 'monolith' && tree === 'ballistics') || (f === 'bulwark' && tree === 'bastion')) return 1;
-    const dual = (this.meta.prestigeRanks['prestige.dual_doctrine'] | 0) > 0 || f === 'singularity_core';
-    if (dual) return 0.6;
-    if (tree === 'ballistics' && this.hasAnomaly('spare_barrel')) return 0.5;
-    return 0.6;
+    if (f === 'monolith' && tree === 'ballistics') return { strength: 1, source: 'monolith' };
+    if (f === 'bulwark' && tree === 'bastion') return { strength: 1, source: 'bulwark' };
+    if ((this.meta.prestigeRanks['prestige.dual_doctrine'] | 0) > 0) return { strength: 0.6, source: 'dual_doctrine' };
+    if (f === 'singularity_core') return { strength: 0.6, source: 'singularity_core' };
+    if (tree === 'ballistics' && this.hasAnomaly('spare_barrel')) return { strength: 0.5, source: 'spare_barrel' };
+    return { strength: 0.6, source: 'dual_doctrine' };
   }
   /** May `tree` hold a second doctrine right now (Monolith, Bulwark, Singularity Core, Spare Barrel, Dual Doctrine)? */
   secondDoctrineAllowed(tree: string): boolean {

@@ -48,6 +48,15 @@ body.arming #game { cursor: crosshair; }
 .btn.ability.suggest { border-color: var(--ce); animation: pulse 1.6s infinite; --warn: var(--ce); }
 
 /* Landscape phone: the abilities are a column at the left edge of the arena, next to the rail. */
-body.shell-rail .abilities { left: 12px; top: 50%; bottom: auto; transform: translateY(-50%); align-items: flex-start; }
+/* Anchored bottom-left (Reachability): the run controls above can wrap to three rows (designator chip, trial banner)
+   while a boon card narrows the left strip; a centred column could slide under them. */
+body.shell-rail .abilities { left: 12px; top: auto; bottom: calc(12px + var(--safe-bottom)); transform: none; align-items: flex-start; }
 body.shell-rail .ability-row { flex-direction: column; gap: 14px; }
 body.shell-rail .arm-hint { order: 2; }
+
+/* Reachability: a slot beyond the usable count (the capstone that granted it no longer applies) */
+.btn.ability.inactive { opacity: 0.45; border-style: dotted; }
+/* Three or four slots on a landscape phone: a 2×2 grid, so the column stays clear of the run controls above it */
+body.shell-rail .ability-row[data-n="3"], body.shell-rail .ability-row[data-n="4"] { display: grid; grid-template-columns: repeat(2, 50px); gap: 12px 10px; }
+body.shell-rail .ability-row[data-n="3"] .btn.ability, body.shell-rail .ability-row[data-n="4"] .btn.ability { width: 50px; height: 50px; min-width: 50px; }
+body.shell-rail .ability-row[data-n="3"] .ab-ico, body.shell-rail .ability-row[data-n="4"] .ab-ico { width: 40px; height: 40px; }
