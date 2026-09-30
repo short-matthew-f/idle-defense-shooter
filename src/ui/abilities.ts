@@ -110,6 +110,12 @@ export class AbilityBar {
     });
   }
 
+  /**
+   * Progressive reveal: the slot buttons show from stage 4 (progression.ts 'abilities'). Hidden, the boss-tell banner
+   * still casts through press() and the armed hint still shows, so a Counter works before the bar appears.
+   */
+  setVisible(on: boolean): void { show(this.row, on); }
+
   /** Keyboard / tap on slot i. */
   press(i: number): void {
     const ui = this.ctx.state();

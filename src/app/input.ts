@@ -2,6 +2,7 @@
  * Pointer input for the game canvas. No sim knowledge: it only turns pointer events into
  *   - onTap(worldX, worldY)                 short press without much movement
  *   - onAimStart(angle) / onAim(angle) / onAimEnd()   press-and-hold steers manual aim
+ *   - onHoldStart(worldX, worldY) → true claims a hold instead (Overcharge on the tower); onHoldEnd(cancelled) on lift
  *   - pinch / wheel zoom (applied to the Camera; onZoom fires after)
  * Angles are radians from `aimOrigin` (the tower, default 0,0) to the pointer in world space
  * (atan2(dy, dx), +y down on screen). Touch and mouse both go through Pointer Events.
@@ -52,6 +53,10 @@ export interface InputCallbacks {
   onAim?: (angle: number) => void;
   onAimEnd?: () => void;
   onZoom?: (zoom: number) => void;
+  /** Active edge: a hold fired at world (x, y) where the finger went down; return true to claim it (no manual aim). */
+  onHoldStart?: (worldX: number, worldY: number) => boolean;
+  /** The claimed hold ended: lifted (false) or cancelled by a second finger / pointercancel (true). */
+  onHoldEnd?: (cancelled: boolean) => void;
 }
 
 export interface InputOptions {
@@ -71,6 +76,8 @@ export class Input {
   onAim: InputCallbacks['onAim'];
   onAimEnd: InputCallbacks['onAimEnd'];
   onZoom: InputCallbacks['onZoom'];
+  onHoldStart: InputCallbacks['onHoldStart'];
+  onHoldEnd: InputCallbacks['onHoldEnd'];
   enabled = true;
   holdMs: number;
   slopPx: number;
@@ -97,6 +104,8 @@ export class Input {
   private active = 0;
 
   private aiming = false;
+  /** A hold claimed by onHoldStart (Overcharge charging) is in progress. */
+  private holding = false;
   private moved = false;
   private holdTimer = 0;
   private pinching = false;
@@ -122,6 +131,8 @@ export class Input {
     this.onAim = callbacks.onAim;
     this.onAimEnd = callbacks.onAimEnd;
     this.onZoom = callbacks.onZoom;
+    this.onHoldStart = callbacks.onHoldStart;
+    this.onHoldEnd = callbacks.onHoldEnd;
     this.holdMs = opts.holdMs ?? 260;
     this.slopPx = opts.slopPx ?? 10;
     this.aimOrigin = opts.aimOrigin ?? { x: 0, y: 0 };
@@ -239,6 +250,7 @@ export class Input {
       // second finger: pinch. Abort tap / aim.
       this.cancelHold();
       if (this.aiming) this.endAim();
+      if (this.holding) this.endHold(true);
       this.pinching = true;
       this.moved = true;
       this.startPinch();
@@ -250,6 +262,7 @@ export class Input {
     if (!this.enabled || this.moved || this.active !== 1 || this.pinching) return;
     const slot = this.firstActive();
     if (slot < 0) return;
+    if (this.onHoldStart?.(this.downWX[slot], this.downWY[slot])) { this.holding = true; return; }
     this.aiming = true;
     this.onAimStart?.(this.angleTo(slot));
   };
@@ -295,6 +308,7 @@ export class Input {
     this.setPos(slot, e);
     const wasSingle = this.active === 1 && !this.pinching;
     const wasAiming = this.aiming;
+    const wasHolding = this.holding;
     const wasMoved = this.moved;
     this.release(slot, e.pointerId);
     if (!wasSingle) {
@@ -302,6 +316,7 @@ export class Input {
       return;
     }
     this.cancelHold();
+    if (wasHolding) { this.endHold(false); return; }
     if (wasAiming) { this.endAim(); return; }
     // the world point under the finger when it went down (the frame the player aimed at)
     if (!wasMoved && this.enabled) this.onTap?.(this.downWX[slot], this.downWY[slot]);
@@ -314,6 +329,7 @@ export class Input {
     this.release(slot, e.pointerId);
     this.cancelHold();
     if (this.aiming) this.endAim();
+    if (this.holding) this.endHold(true);
     if (this.active <= 1) this.pinching = false;
   };
 
@@ -327,6 +343,11 @@ export class Input {
   private endAim(): void {
     this.aiming = false;
     this.onAimEnd?.();
+  }
+
+  private endHold(cancelled: boolean): void {
+    this.holding = false;
+    this.onHoldEnd?.(cancelled);
   }
 
   private cancelHold(): void {

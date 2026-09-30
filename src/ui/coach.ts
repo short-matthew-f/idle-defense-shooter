@@ -42,7 +42,7 @@ export interface CoachLive { boonOffer: boolean; draft: boolean }
  * (a boon offer, an Anomaly draft) first, else the earliest in reveal order.
  */
 export function pendingCoach(f: Features, seen: ReadonlySet<string>, live: CoachLive = { boonOffer: false, draft: false }): CoachMsg | null {
-  if (f.showEverything) return null;
+  if (f.unlockAll) return null;
   const open = COACH.filter((m) => f[m.feature] && !seen.has(m.id));
   if (!open.length) return null;
   const urgent = open.find((m) => (m.id === 'boons' && live.boonOffer) || (m.id === 'anomalies' && live.draft));
@@ -59,7 +59,7 @@ export function unlockedCoach(f: Features): CoachMsg[] {
  * save must not get a stack of banners), except on a brand-new game, where the first message shows.
  */
 export function initialSeen(f: Features, stage: number): CoachId[] {
-  if (stage === 0 || f.showEverything) return [];
+  if (stage === 0 || f.unlockAll) return [];
   return unlockedCoach(f).map((m) => m.id);
 }
 

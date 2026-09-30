@@ -16,6 +16,7 @@ import { setPref } from './prefs';
 import { cycleBar } from './shell-logic';
 import { muteChip } from '../audio/ui';
 import type { UiCtx } from './ctx';
+import type { Features } from './progression';
 
 const SPEEDS = [1, 2, 4, 8] as const;
 
@@ -85,6 +86,13 @@ export class Hud {
   readonly bossBar: BossBar;
   /** Tapping the boss tell (arm / equip its Counter); GameUi wires it to the ability bar. */
   onTell: ((tell: AbilityId | 'designate') => void) | null = null;
+  /** The Settings chip (before the More tab is revealed); GameUi opens More. */
+  onMenu: (() => void) | null = null;
+  private readonly restartBtn: HTMLButtonElement;
+  private readonly menuBtn: HTMLButtonElement;
+  private readonly coresItem: HTMLElement;
+  /** Progressive reveal: what this HUD shows (GameUi sets it; everything until then). */
+  private feats: Pick<Features, 'runControls' | 'abilities' | 'inspector' | 'moreTab' | 'cores' | 'boons'> | null = null;
 
   constructor(ctx: UiCtx) {
     this.modeBtn = button('Push', () => {
@@ -96,7 +104,7 @@ export class Hud {
       const next = speedCycle(s.run.speedMultiplier, s.speedAllowed ?? 1);
       if (next !== s.run.speedMultiplier) ctx.host.send({ type: 'set_speed', speed: next });
     }, { class: 'btn ctl speed-btn', title: 'Simulation speed: tap to cycle (solved waves only)' });
-    const restart = button(icon('restart'), async () => {
+    const restart = this.restartBtn = button(icon('restart'), async () => {
       const s = ctx.state();
       const ok = await confirmDialog('Restart from checkpoint?', `The current attempt ends and you restart at wave ${(s?.run.checkpoint ?? 0) + 1}. Scrap and upgrades are kept.`, 'Restart');
       if (ok) ctx.host.send({ type: 'restart_checkpoint' });
@@ -122,14 +130,28 @@ export class Hud {
         h('div', { class: 'wave-line' }, this.waveNum, this.waveSub),
         h('div', { class: 'res' },
           h('div', { class: 'res-item scrap', title: 'Scrap: spend it on upgrades. Banks on every kill and survives death.' }, icon('scrap', 'ico res-ico'), h('span', { class: 'res-stack' }, this.scrap, this.scrapRate)),
-          h('div', { class: 'res-item cores', title: 'Cores: commitment currency (Exotics, Refits, Doctrine changes, rerolls).' }, icon('cores', 'ico res-ico'), this.cores)),
+          this.coresItem = h('div', { class: 'res-item cores', title: 'Cores: commitment currency (Exotics, Refits, Doctrine changes, rerolls).' }, icon('cores', 'ico res-ico'), this.cores)),
         this.pauseBtn),
       h('div', { class: 'tb-row tb-bars' }, this.hp.el, this.ce.el),
       this.cycle);
     this.desig.append(abilityIcon('designate', 'ico tiny'), this.desigText, this.desigLabel);
     this.desig.hidden = true;
-    this.controls = h('div', { class: 'battle-controls', attrs: { role: 'toolbar', 'aria-label': 'Run controls' } }, this.trialBanner, this.desig, this.modeBtn, this.speedBtn, restart, muteChip());
+    this.menuBtn = button(icon('settings'), () => this.onMenu?.(), { class: 'btn ctl icon menu-chip', label: 'Settings and help' });
+    this.menuBtn.hidden = true;
+    this.controls = h('div', { class: 'battle-controls', attrs: { role: 'toolbar', 'aria-label': 'Run controls' } }, this.trialBanner, this.desig, this.modeBtn, this.speedBtn, restart, muteChip(), this.menuBtn);
     this.bossBar = new BossBar((t) => this.onTell?.(t));
+  }
+
+  /**
+   * Progressive reveal (progression.ts): Push / Patrol and Restart from the first checkpoint, CE with the ability bar,
+   * pause (it opens the Inspector) with the Inspector, Cores once they matter; a Settings chip until the More tab shows.
+   */
+  setFeatures(f: Features): void {
+    this.feats = f;
+    show(this.restartBtn, f.runControls);
+    show(this.ce.el, f.abilities);
+    show(this.pauseBtn, f.inspector);
+    show(this.menuBtn, !f.moreTab);
   }
 
   /** Forget income history (offline credit, Prestige) so the rate shows live income only. */
@@ -191,6 +213,9 @@ export class Hud {
       this.ceMarks.replaceChildren(...ui.abilities.filter((a) => a.cost < t.ceCap).map((a) => h('i', { style: { left: `${(a.cost / t.ceCap) * 100}%` }, title: `${ABILITY_BY_ID.get(a.id)?.name}: ${Math.round(a.cost)} CE` })));
     }
 
+    const f = this.feats;
+    show(this.coresItem, !f || f.cores || f.boons || r.cores > 0 && f.runControls);
+    show(this.modeBtn, !f || f.runControls || r.mode === 'patrol');
     text(this.modeBtn, r.mode === 'push' ? 'Push' : 'Patrol');
     attr(this.modeBtn, 'aria-pressed', r.mode === 'patrol' ? 'true' : 'false');
     attr(this.modeBtn, 'aria-label', r.mode === 'push' ? 'Mode: Push. Tap for Patrol (P)' : 'Mode: Patrol. Tap for Push (P)');

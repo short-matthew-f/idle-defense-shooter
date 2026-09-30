@@ -332,6 +332,25 @@ function onEvent(ev: SimEvent): void {
       break;
     case Ev.Prestige: out.fx(FxKind.Punch, 0, 0, 0.8, 0.6, 1, PUNCH.prestige, 1); break;
     case Ev.CoreDrop: out.fx(FxKind.PickupCore, ev.x, ev.y, 0.75, 0.55, 1, 4.5, Math.max(1, Math.min(4, ev.a))); break;
+    // Active edge (systems/active.ts): assist muzzle flash + hit, salvage pickup motes, Overcharge release
+    case Ev.Assist: {
+      const d = Math.sqrt(ev.x * ev.x + ev.y * ev.y) || 1, k = (TOWER_RADIUS * 1.45) / d;
+      out.fx(FxKind.Muzzle, ev.x * k, ev.y * k, 1, 0.92, 0.6, 7, 3);
+      out.fx(FxKind.Hit, ev.x, ev.y, 1, 0.9, 0.55, 10, 7);
+      break;
+    }
+    case Ev.SalvageDrop: out.fx(FxKind.Spark, ev.x, ev.y, 1, 0.85, 0.4, 3, 4); break;
+    case Ev.SalvageCollect:
+      if (ev.src === 'salvage.tap') {
+        out.fx(FxKind.Pickup, ev.x, ev.y, 1, 0.85, 0.35, 3.2, 3);
+        out.fx(FxKind.Shockwave, ev.x, ev.y, 1, 0.9, 0.5, 26 + 6 * Math.min(4, ev.b), 1);
+      } else out.fx(FxKind.Pickup, ev.x, ev.y, 1, 0.8, 0.35, 2.4, 1);
+      break;
+    case Ev.Overcharge:
+      out.fx(FxKind.Shockwave, 0, 0, 1, 0.85, 0.4, ev.a ? 120 : 70, 1);
+      out.fx(FxKind.Muzzle, ev.x * 0.06, ev.y * 0.06, 1, 0.9, 0.5, ev.a ? 16 : 10, 6);
+      if (ev.a) out.fx(FxKind.Punch, 0, 0, 1, 0.85, 0.4, PUNCH.counter * 0.6, 1);
+      break;
     case Ev.BarrierBreak:
       out.fx(FxKind.Shockwave, 0, 0, 0.55, 0.85, 1, 90, 1);
       if (SHAKE.barrierBreak > shake) shake = SHAKE.barrierBreak;

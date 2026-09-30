@@ -24,7 +24,11 @@ export const EV_KILL: number = Ev.Kill;
 const WINDOW_TICKS = 15 * 60;
 const MAX_KILLS = 400;
 
-export function evName(t: number): string { return EV_NAMES[t] ?? `Event ${t}`; }
+/** Active-edge events (systems/active.ts), named by id so the positional table above needs no padding. */
+const ACTIVE_EV_NAMES: Readonly<Record<number, string>> = {
+  [Ev.Assist]: 'Assist shot', [Ev.SalvageDrop]: 'Salvage drop', [Ev.SalvageCollect]: 'Salvage collect', [Ev.Overcharge]: 'Overcharge',
+};
+export function evName(t: number): string { return ACTIVE_EV_NAMES[t] ?? EV_NAMES[t] ?? `Event ${t}`; }
 
 /** StateBit (core/events.ts): Frozen 1, Chilled 2, Burning 4, Poisoned 8, Shocked 16, Elite 32, Boss 64, Clump 128. */
 export function victimLabel(bits: number): string {

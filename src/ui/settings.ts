@@ -1,7 +1,7 @@
 /**
- * Settings (a More sub-screen): Clarity slider, bloom, Auto-Prestige, export / import save, hard
- * reset (double confirm), install PWA. Help (another sub-screen): gestures, keyboard shortcuts,
- * replay the intro, about.
+ * Settings (a More sub-screen): Clarity slider, bloom, Auto-Prestige, Unlock everything (progressive reveal
+ * master switch), export / import save, Start over (hard reset, double confirm), install PWA. Help (another
+ * sub-screen): gestures, keyboard shortcuts, the coach tips unlocked so far (and replay them), about.
  */
 import '../styles/settings.css';
 import { BUILD, checkForUpdate } from '@app/pwa';
@@ -9,7 +9,8 @@ import type { UiState } from '@sim/core/types';
 import { button, h } from './dom';
 import { icon } from './icons';
 import { confirmDialog } from './modal';
-import { maybeOnboard } from './onboard';
+import { resetCoach, unlockedCoach } from './coach';
+import { prefs, setPref } from './prefs';
 import { graphicsSettings } from './graphics-settings';
 import { soundSettings } from '../audio/ui';
 import type { UiCtx } from './ctx';
@@ -83,8 +84,8 @@ export function settingsPanel(ctx: UiCtx): HTMLElement {
     try { await ctx.host.importSave(s); } catch (e) { ctx.toast(`Import failed: ${e instanceof Error ? e.message : String(e)}`, 'warn'); }
   }, { class: 'btn' });
 
-  const reset = button('Hard reset…', async () => {
-    if (!(await confirmDialog('Erase all progress?', 'Every Prestige, Echo, Star, Codex entry and setting on this device is deleted.', 'Erase', { danger: true }))) return;
+  const reset = button('Start over (new game)…', async () => {
+    if (!(await confirmDialog('Start over?', 'Every Prestige, Echo, Star, Codex entry and setting on this device is deleted. The game starts again from wave 1, tips included.', 'Erase and start over', { danger: true }))) return;
     if (!(await confirmDialog('Are you absolutely sure?', 'This cannot be undone.', 'Yes, erase everything', { danger: true }))) return;
     await ctx.host.hardReset();
   }, { class: 'btn danger' });
@@ -93,8 +94,14 @@ export function settingsPanel(ctx: UiCtx): HTMLElement {
   install.hidden = !ctx.host.canInstall();
 
   const autonomy = ((ui?.meta.prestigeRanks['prestige.autonomy'] ?? 0) | 0) > 0;
+  // the progressive reveal's master switch (progression.ts unlockAll); GameUi applies it on the next UiState
+  const unlock = toggle('Unlock everything', prefs().unlockAll, (v) => {
+    setPref('unlockAll', v);
+    ctx.toast(v ? 'Everything unlocked: every tab and control shows' : 'Unlocks follow your progress again', 'info');
+  });
   const body = h('div', { class: 'settings' },
     row('Clarity', h('div', { class: 'range-wrap' }, slider, val), 'Spectacle ↔ Clarity: player effects fade, enemies never do', true),
+    row('Unlock everything', unlock, 'For experienced players: every tab, control and choice from the start, instead of one at a time as you climb.'),
     row('Auto-Prestige', toggle('Auto-Prestige', !!ui?.meta.settings.autoPrestige, (v) => ctx.host.send({ type: 'set_setting', key: 'autoPrestige', value: v })), autonomy ? 'Lets a Prestige Directive fire' : 'Needs Autonomy (Prestige IV) and a Prestige Directive'),
     ...graphicsSettings(ctx, row, toggle),
     ...soundSettings(row, toggle),
@@ -103,13 +110,19 @@ export function settingsPanel(ctx: UiCtx): HTMLElement {
     h('div', { class: 'row gap wrap' }, exportBtn, downloadBtn), exportArea,
     importArea, h('div', { class: 'row gap wrap' }, importBtn),
     h('h3', { class: 'sec-title', text: 'App' }),
-    h('div', { class: 'row gap wrap' }, install, reset));
+    h('div', { class: 'row gap wrap' }, install),
+    h('p', { class: 'dim small', text: 'Start over erases this device\'s progress and plays the opening again from the beginning, one unlock at a time.' }),
+    h('div', { class: 'row gap wrap' }, reset));
   return body;
 }
 
-/** The Help sub-screen: gestures, keyboard shortcuts, the intro again, about. */
+/** The Help sub-screen: gestures, keyboard shortcuts, the tips unlocked so far (and replaying them), about. */
 export function helpPanel(ctx: UiCtx): HTMLElement {
+  const tips = unlockedCoach(ctx.features());
   return h('div', { class: 'settings help' },
+    h('h3', { class: 'sec-title', text: 'Tips' }),
+    h('ul', { class: 'tips' }, ...tips.map((m) => h('li', { text: m.text }))),
+    h('div', { class: 'row gap wrap' }, button('Show tips again', () => { resetCoach(); ctx.toast('Tips will show again, one at a time', 'info'); }, { class: 'btn' })),
     h('h3', { class: 'sec-title', text: 'Touch' }),
     h('dl', { class: 'keys' }, ...GESTURES.flatMap(([k, d]) => [h('dt', { text: k }), h('dd', { text: d })])),
     h('h3', { class: 'sec-title', text: 'Keyboard' }),
@@ -117,7 +130,7 @@ export function helpPanel(ctx: UiCtx): HTMLElement {
     h('h3', { class: 'sec-title', text: 'About' }),
     h('p', { class: 'dim small', text: 'Project Citadel: an idle tower-defense game where the tower is the character and each Prestige is a new machine. No dailies, no streaks, nothing decays.' }),
     h('p', { class: 'dim small build-id', text: `Build ${BUILD}` }),
-    h('div', { class: 'row gap wrap' }, button('Replay intro', () => maybeOnboard(true), { class: 'btn' }), updateButton()),
+    h('div', { class: 'row gap wrap' }, updateButton()),
     h('h3', { class: 'sec-title', text: 'Tap accuracy' }),
     h('p', { class: 'dim small', text: 'Taps landing off target? The touch test shows where the browser reads each touch and where the game acts on it, and can calibrate taps for this device.' }),
     h('div', { class: 'row gap wrap' }, button('Touch test', () => openTouchTest(ctx), { class: 'btn' })),

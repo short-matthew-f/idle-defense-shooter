@@ -10,6 +10,12 @@
  *             slotted ability (or designates the boss on 'designate' tells), keeps a designation on
  *             the boss / healers / wardens, Repulsor Pulse when the inner ring holds ≥ 5 enemies,
  *             Emergency Repair below 30% HP, Bombardment into big groups with spare CE.
+ *             Active-edge pieces (systems/active.ts, docs/ACTIVE.md; off with RunConfig.activeExtras = false) under
+ *             human limits: at most 2 taps/s in total; each salvage crate is collected with 70% probability, 0.35 s
+ *             or more after it drops; otherwise assist taps at the boss / the designated enemy / the enemy nearest
+ *             the tower whenever the assist is off cooldown (aimed at the enemy's position one reaction earlier);
+ *             Overcharge charged when full with ≥ 3 enemies (or a boss) up and released at the window's centre
+ *             ± 0.3 s (deterministic per volley: about 3 in 4 land in the window).
  *
  * Abilities, Directives and Tells are being implemented by WP5/WP9 in parallel: this file only
  * speaks `Command`s and reads `world.bossTell` / `UiState`. A command the sim rejects is counted in
@@ -23,7 +29,9 @@ import { EnemyFlag, INNER_RING, TICK_RATE } from '../src/sim/core/types';
 import { abilityDef } from '../src/sim/core/content';
 import { bossForWave, BOSS_BY_ID } from '../src/sim/data/bosses';
 import { applyCommand } from '../src/sim/run/commands';
-import type { PolicyId } from './types';
+import { findActive } from '../src/sim/systems/active';
+import { ACTIVE } from '../src/sim/data/active';
+import type { ActivePiece, PolicyId } from './types';
 
 export interface PolicyStats { casts: number; designations: number; directivesInstalled: number; noops: Record<string, number> }
 
@@ -178,9 +186,82 @@ export class ActivePolicy extends Policy {
   private tellHandled = false;
   private designatedGen = -1;
   private uiPoll = 0;
+  /** Active-edge pieces on (default) or off (RunConfig.activeExtras = false: the pre-active-edge policy, for comparison). */
+  private readonly pieces: ReadonlySet<ActivePiece>;
+  constructor(extras: boolean | readonly ActivePiece[] = true) {
+    super();
+    this.pieces = new Set<ActivePiece>(extras === true ? ['assist', 'salvage', 'overcharge'] : extras === false ? [] : extras);
+  }
+  static readonly TAP_GAP = Math.ceil(TICK_RATE / 2);          // ≤ 2 taps/s
+  static readonly CRATE_REACT = Math.round(0.35 * TICK_RATE);
+  static readonly COLLECT_SHARE = 0.7;
+  private nextTap = 0;
+  private releaseAt = -1;
+  private volleys = 0;
+  stat = { assists: 0, collects: 0, skippedCrates: 0, volleys: 0 };
+
+  override reset(): void { super.reset(); this.nextTap = 0; this.releaseAt = -1; }
+
+  /** Deterministic 0..1 from integers (no PRNG draw: the policy must not perturb the sim). */
+  private static u01(a: number, b: number): number {
+    let h = Math.imul(a ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(b + 0x632be5ab, 0xc2b2ae35);
+    h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d); h ^= h >>> 12;
+    return (h >>> 8) / 16777216;
+  }
+
+  /** Taps, crates and Overcharge: every tick, under the human limits above. */
+  private activeExtras(sim: Sim): void {
+    const w = sim.world, run = w.run, s = findActive(w);
+    if (!s) return;
+    const now = run.tick;
+    // Overcharge: charge when full with a target-rich field, release around the window centre
+    if (!this.pieces.has('overcharge')) { /* piece off */ } else if (s.charging) {
+      if (this.releaseAt < 0) this.releaseAt = Math.round((0.5 * (ACTIVE.overcharge.perfectFrom + ACTIVE.overcharge.perfectTo) + (ActivePolicy.u01(this.volleys, run.prestigeSeed) - 0.5) * 0.6) * TICK_RATE);
+      if (s.hold >= this.releaseAt) { applyCommand(sim.machine, { type: 'overcharge', action: 'release' }); this.releaseAt = -1; this.volleys++; this.stat.volleys++; }
+    } else if (s.canCharge(w) && (sim.machine.boss() >= 0 || this.alive(w) >= 3)) {
+      applyCommand(sim.machine, { type: 'overcharge', action: 'charge' });
+      this.releaseAt = -1;
+    }
+    if (now < this.nextTap) return;
+    // salvage first: 70% of crates, after a reaction delay
+    for (let k = 0; k < s.crateLive.length && this.pieces.has('salvage'); k++) {
+      if (!s.crateLive[k] || now - s.crateBorn[k] < ActivePolicy.CRATE_REACT) continue;
+      if (ActivePolicy.u01(s.crateBorn[k], k + 7 * run.prestigeSeed) >= ActivePolicy.COLLECT_SHARE) continue;
+      applyCommand(sim.machine, { type: 'collect_salvage', x: s.crateX[k], y: s.crateY[k] });
+      this.stat.collects++;
+      this.nextTap = now + ActivePolicy.TAP_GAP;
+      return;
+    }
+    // assist tap when off cooldown (in combat)
+    if (!this.pieces.has('assist') || run.phase !== 'combat' || s.uiState(w).assistCooldown > 0) return;
+    const e = w.enemies, t = w.tower;
+    let i = sim.machine.boss();
+    if (i < 0 && t.designated >= 0 && w.alive(t.designated) && e.gen[t.designated] === t.designatedGen) i = t.designated;
+    if (i < 0) {
+      let best = Infinity;
+      for (let j = 0; j < e.count; j++) {
+        if (e.flags[j] & (EnemyFlag.Dead | EnemyFlag.Ally)) continue;
+        const d = e.x[j] * e.x[j] + e.y[j] * e.y[j];
+        if (d < best) { best = d; i = j; }
+      }
+    }
+    if (i < 0) return;
+    // the tap lands where the enemy was one reaction ago (its velocity is ~constant over 0.2 s)
+    const lag = ActivePolicy.REACTION / TICK_RATE;
+    this.send(sim, { type: 'tap_assist', x: e.x[i] - e.vx[i] * lag * 0.5, y: e.y[i] - e.vy[i] * lag * 0.5 }, 0);
+    this.stat.assists++;
+    this.nextTap = now + ActivePolicy.TAP_GAP;
+  }
+
+  private alive(w: WorldImpl): number {
+    const e = w.enemies; let n = 0;
+    for (let i = 0; i < e.count; i++) if (!(e.flags[i] & (EnemyFlag.Dead | EnemyFlag.Ally))) n++;
+    return n;
+  }
 
   protected decide(sim: Sim): void {
     const w = sim.world, run = w.run;
+    if (this.pieces.size) this.activeExtras(sim);
     if (run.phase === 'between' && this.slotWave !== run.wave) { this.slotWave = run.wave; this.slotFor(sim, run.wave); }
     if (run.phase !== 'combat' || run.tick < this.nextCheck) return;
     this.nextCheck = run.tick + ActivePolicy.REACTION;
@@ -256,10 +337,10 @@ export class ActivePolicy extends Policy {
   }
 }
 
-export function makePolicy(id: PolicyId): Policy {
+export function makePolicy(id: PolicyId, cfg?: { activeExtras?: boolean | ActivePiece[] }): Policy {
   switch (id) {
     case 'idle': return new IdlePolicy();
     case 'directive': return new DirectivePolicy();
-    case 'active': return new ActivePolicy();
+    case 'active': return new ActivePolicy(cfg?.activeExtras ?? true);
   }
 }

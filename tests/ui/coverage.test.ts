@@ -234,6 +234,11 @@ function checkTable(name: string, ids: readonly string[], table: Record<string, 
 }
 
 describe('capabilities reach a control', () => {
+  it('Quartermaster (unlocks at the first Prestige): its card sends set_quartermaster and reads UiState.quartermaster', () => {
+    const src = read('src/ui/quartermaster.ts');
+    expect(src.includes("type: 'set_quartermaster'")).toBe(true);
+    expect(src.includes('ui.quartermaster')).toBe(true);
+  });
   checkTable('Prestige nodes', PRESTIGE_NODES.map((p) => p.id), PRESTIGE);
   checkTable('Anomalies', ANOMALIES.map((a) => a.id), ANOMALY);
   checkTable('Frames', FRAMES.map((f) => f.id), FRAME);
@@ -281,5 +286,23 @@ describe('UiState fields are read by the UI', () => {
     for (const k of runKeys) if (!UNREAD[`run.${k}`] && !new RegExp(`\\.${k}\\b`).test(UI_AND_AUDIO_SRC)) missing.push(`run.${k}`);
     for (const k of waveKeys) if (!UNREAD[`wave.${k}`] && !new RegExp(`\\.${k}\\b`).test(UI_AND_AUDIO_SRC)) missing.push(`wave.${k}`);
     expect(missing).toEqual([]);
+  });
+});
+
+// ------------------------------------------------------------------ progressive reveal (src/ui/progression.ts)
+describe('the unlock ladder never hides a capability for good', () => {
+  it('Unlock everything (the reachability view) shows every feature; so does any save after its first Prestige', async () => {
+    const { FEATURE_IDS, features } = await import('../../src/ui/progression');
+    const fresh = { run: { deepestCleared: 0 }, meta: { deepestEver: 0, prestigeCount: 0 } };
+    const all = features(fresh, { unlockAll: true });
+    expect(FEATURE_IDS.filter((id) => !all[id])).toEqual([]);
+    const prestiged = features({ run: { deepestCleared: 0 }, meta: { deepestEver: 20, prestigeCount: 1 } });
+    expect(FEATURE_IDS.filter((id) => !prestiged[id])).toEqual([]);
+  });
+  it('every More item gated by the ladder names a real feature id; Settings and Help are never gated', async () => {
+    const { FEATURE_IDS } = await import('../../src/ui/progression');
+    const { MORE_ITEMS } = await import('../../src/ui/screens');
+    for (const it of MORE_ITEMS) if (it.reveal) expect(FEATURE_IDS as readonly string[]).toContain(it.reveal);
+    expect(MORE_ITEMS.filter((it) => it.id === 'settings' || it.id === 'help').every((it) => !it.reveal)).toBe(true);
   });
 });

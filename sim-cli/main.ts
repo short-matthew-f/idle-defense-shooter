@@ -11,7 +11,9 @@
  * Options: --stop-wave W, --dial T, --wall-minutes M, --force-anomaly ID, --doctrine tree.doctrine,
  *          --force-boon ID (inject that boon into every offer; once active, take the first card, or with
  *          --boon-companions none decline), --no-boons (decline every offer),
- *          --stop-at-recommendation, --out DIR, --jobs N (parallel processes; default = cores).
+ *          --stop-at-recommendation, --out DIR, --jobs N (parallel processes; default = cores),
+ *          --quartermaster [RESERVE] (from Prestige 1 on: Quartermaster on at RESERVE% (default 25); the agent then
+ *          leaves the stat ranks to it and only makes choices; see docs/QUARTERMASTER.md).
  * Agents: greedy survival elemental generalist random hp_ordnance hp_drones hp_blade hp_laser
  *         hp_gravitics optimizer optimizer_lite doctrine:<tree>.<doctrine>
  */
@@ -84,6 +86,7 @@ async function main(): Promise<void> {
     ...(typeof a['force-boon'] === 'string' ? { forceBoon: a['force-boon'] as BoonId } : {}),
     ...(a['no-boons'] ? { noBoons: true } : {}),
     ...(a['boon-companions'] === 'none' || a['boon-companions'] === 'first' ? { boonCompanions: a['boon-companions'] } : {}),
+    ...(a.quartermaster ? { quartermaster: true, quartermasterReserve: num(a.quartermaster, 25) } : {}),
   };
   if (base.forceBoon && !boonDef(base.forceBoon)) throw new Error(`Unknown boon '${base.forceBoon}'`);
   if (typeof a.doctrine === 'string') { const [t, d] = a.doctrine.split('.'); base.doctrineOverrides = { [t as TreeId]: d as DoctrineId }; }

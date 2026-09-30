@@ -27,8 +27,11 @@ export interface Prefs {
   musicOn: boolean;
   /** Tap calibration (More → Help → Touch test); null = identity. Validated with parseCal on use. */
   touchCal: TouchCal | null;
-  /** Progressive reveal (progression.ts): Settings → Show everything (every tab and control, as before the ladder). */
-  showEverything: boolean;
+  /**
+   * Progressive reveal master switch (progression.ts `unlockAll`, alias showEverything): Settings → "Unlock everything
+   * (for experienced players)". Every tab, control and content id, as before the unlock ladder. Survives reloads.
+   */
+  unlockAll: boolean;
   /** Coach banners already read (coach.ts ids). Presentation only: never decides what is revealed. */
   coachSeen: string[];
   /** Tabs opened at least once (a newly revealed tab carries a "New" badge until then). */
@@ -40,7 +43,7 @@ export interface Prefs {
 const KEY = 'citadel.prefs.v1';
 const DEFAULTS: Prefs = { onboarded: false, bloom: true, affordableFirst: false, panelOpen: true, shopCategory: 'chassis', shopTree: 'ballistics', activeTrial: null, buyCoach: 0, buyQty: 1, suggestOpen: true,
   soundMaster: 0.71, soundSfx: 0.8, soundMusic: 0.55, soundMuted: false, musicOn: true, touchCal: null,
-  showEverything: false, coachSeen: [], tabsVisited: [], revealInit: false };
+  unlockAll: false, coachSeen: [], tabsVisited: [], revealInit: false };
 
 let cache: Prefs | null = null;
 

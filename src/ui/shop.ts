@@ -7,6 +7,8 @@
  * visible nodes changes. The Suggested card on top shows the 3 cheapest affordable buys with a
  * "Buy all" button; the quantity selector (×1 · ×10 · Max, Q) drives every Buy button, the
  * suggestion chips, Buy all and each tree's "Spend here" (bulk.ts has the pure planning).
+ * Progressive reveal (progression.ts, setFeatures): categories appear as they are earned; the Suggested card,
+ * quantity selector and "Spend here" wait for 'bulk' (until then every Buy is ×1 and Q does nothing).
  */
 import '../styles/shop.css';
 import type { DoctrineId, ElementId, HardpointId, TreeId } from '@sim/core/ids';
@@ -21,6 +23,7 @@ import { CHASSIS, ELEMENTS, ELEMENT_BLURB, HARDPOINTS, HARDPOINT_BLURB, NODE_BY_
 import { confirmDialog, openModal } from './modal';
 import { doctrineFork, forkKey } from './doctrine';
 import { prefs, setPref } from './prefs';
+import { STARTER_IDS, contentPool, type Features } from './progression';
 import type { UiCtx } from './ctx';
 
 export type Category = 'chassis' | 'elements' | 'hardpoints' | 'cross' | 'cores';
@@ -151,6 +154,8 @@ export class Shop {
   private chipKey = '';
   private viewKey = '';
   private ui: UiState | null = null;
+  private readonly qtyTools: HTMLElement[];
+  private revealKey = '';
 
   constructor(private readonly ctx: UiCtx) {
     const p = prefs();
@@ -218,10 +223,32 @@ export class Shop {
         h('div', { class: 'shop-sub' }, this.treeRow),
         h('div', { class: 'shop-tools' }, h('span', { class: 'qty-label', text: 'Buy', attrs: { 'aria-hidden': 'true' } }), this.qtySeg, h('span', { class: 'tools-gap' }), this.sortBtn)),
       this.body);
+    this.qtyTools = [this.el.querySelector('.qty-label') as HTMLElement, this.qtySeg];
+  }
+
+  private get f(): Features { return this.ctx.features(); }
+
+  /** Progressive reveal: categories, the Suggested card and the quantity tools (GameUi, every UiState). */
+  setFeatures(f: Features): void {
+    const key = `${f.elements}${f.hardpoints}${f.cross}${f.cores}${f.bulk}${f.chassisAll}`;
+    if (key === this.revealKey) return;
+    this.revealKey = key;
+    const cats = this.shownCats(f);
+    for (const [id, x] of this.catBtns) x.b.hidden = !cats.includes(id);
+    this.catRow.hidden = cats.length < 2;   // one category: its tree chips say enough
+    for (const el of this.qtyTools) el.hidden = !f.bulk;
+    this.el.classList.toggle('no-bulk', !f.bulk);
+    if (!cats.includes(this.cat)) this.setCategory('chassis');
+    this.syncQty();
+    this.chipKey = ''; this.viewKey = '';
+  }
+
+  private shownCats(f: Features): Category[] {
+    return CATEGORIES.map((c) => c.id).filter((c) => c === 'chassis' || f[c]);
   }
 
   // ---------------------------------------------------------------- bulk buying
-  get qty(): BuyQty { return parseQty(prefs().buyQty); }
+  get qty(): BuyQty { return this.f.bulk ? parseQty(prefs().buyQty) : 1; }
 
   /** Set the quantity selector (×1 · ×10 · Max). */
   setQty(q: BuyQty): void {
@@ -391,10 +418,10 @@ export class Shop {
       this.slotRow.replaceChildren(...slots.map((x) => button([icon('plus', 'ico tiny'), x.cat === 'elements' ? 'Attune an element' : 'Mount a weapon'],
         () => this.open(x.cat, `slot:${x.slot}`), { class: 'btn chip quick slot-chip' })));
     }
-    // quick chips + Buy all
+    // quick chips + Buy all (the Suggested card waits for the 'bulk' reveal)
     const sugg = cheapestAffordable(ui.shop);
     this.quickList.sync(sugg, (e) => e.node);
-    show(this.quick, true);
+    show(this.quick, this.f.bulk);
     const empty = this.quickList.rows.size === 0;
     const plan = planBuyAll(sugg, ui.run.scrap, this.qty);
     show(this.buyAll, plan.cmds.length > 0);
@@ -428,6 +455,7 @@ export class Shop {
 
     for (const c of CATEGORIES) {
       const cb = this.catBtns.get(c.id)!;
+      if (cb.b.hidden) continue;
       const n = this.categoryCount(ui, c.id);
       text(cb.n, n > 0 ? String(n) : '');
       attr(cb.b, 'aria-label', n > 0 ? `${c.label} (${n} affordable)` : c.label);
@@ -515,7 +543,7 @@ export class Shop {
 
     if (this.cat === 'cross') {
       const list = this.sorted(ui.shop.filter((e) => e.tree === chip));
-      if (list.length) out.push({ t: 'head', text: chip === 'fusion' ? 'Fusions' : chip === 'link' ? 'Linkages' : 'Infusions', spend: chip });
+      if (list.length) out.push({ t: 'head', text: chip === 'fusion' ? 'Fusions' : chip === 'link' ? 'Linkages' : 'Infusions', spend: this.f.bulk ? chip : undefined });
       if (!list.length) out.push({ t: 'note', text: chip === 'fusion' ? 'Fusions appear when two elements are attuned (Triads need three, from Ascension II).' : chip === 'link' ? 'Linkages appear when two systems are mounted (the primary counts), or a hardpoint pairs with Bastion or Reactor.' : 'Infusions appear when a mounted hardpoint meets an attuned element.' });
       for (const e of list) out.push({ t: 'node', e });
       return out;
@@ -546,7 +574,8 @@ export class Shop {
 
     const t = TREE_BY_ID.get(chip as TreeId);
     if (!t) return out;
-    out.push({ t: 'head', text: t.name, sub: 'Core nodes', spend: t.id });
+    if (!this.f.chassisAll) { out.push({ t: 'head', text: t.name }, ...nodes(t.shared.map((n) => n.id).filter((id) => STARTER_IDS.has(id)))); return out; }   // stage 0: 3 stats
+    out.push({ t: 'head', text: t.name, sub: 'Core nodes', spend: this.f.bulk ? t.id : undefined });
     // Reachability: a Borrowed Blade takes base nodes only; mounting it in an open slot opens the rest
     if ((ui.extraSystems ?? []).some((x) => x.system === t.id && x.via === 'borrowed')) {
       const free = openSlots(ui).find((x) => x.cat === 'hardpoints');
@@ -621,7 +650,8 @@ export class Shop {
     const ui = this.ctx.state() ?? this.ui!;
     const wrap = h('div', { class: 'slot-picker' },
       h('p', { class: 'note', text: isEl ? 'Attune an element to this slot. Attunements lock for the rest of this Prestige.' : 'Mount a weapon system in this slot. Mounts lock for this Prestige (a Refit costs 3 Cores). At most four systems ever: one always sits out.' }));
-    const list = isEl ? ELEMENTS.filter((e) => !ui.build.attunements.includes(e)) : HARDPOINTS.filter((hp) => !ui.build.hardpoints.includes(hp));
+    const pool = contentPool(ui, { unlockAll: this.f.unlockAll });   // what this Prestige offers (progression.ts)
+    const list = isEl ? ELEMENTS.filter((e) => pool.elements.includes(e) && !ui.build.attunements.includes(e)) : HARDPOINTS.filter((hp) => pool.hardpoints.includes(hp) && !ui.build.hardpoints.includes(hp));
     for (const id of list) {
       const name = TREE_LABEL[id as TreeId] ?? titleCase(id);
       const blurb = isEl ? ELEMENT_BLURB[id as ElementId] : HARDPOINT_BLURB[id as HardpointId];

@@ -1,8 +1,0 @@
-/* First-run cards. */
-.onboard { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 6px 4px; }
-.ob-ico { color: var(--accent); }
-.ob-title { margin: 0; font-size: 20px; font-weight: 800; }
-.ob-body { margin: 0; font-size: 16px; line-height: 1.5; color: var(--text-dim); max-width: 380px; }
-.ob-dots { display: flex; gap: 6px; margin-top: 6px; }
-.ob-dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--bg-4); }
-.ob-dots span.on { background: var(--accent); }

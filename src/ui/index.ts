@@ -10,6 +10,7 @@ import { sectorIndexForWave } from '@sim/data/sectors';
 import { h } from './dom';
 import { Hud, StatusStrip } from './hud';
 import { AbilityBar } from './abilities';
+import { ActiveWidget } from './active';   // Active edge: Overcharge button, salvage floaters
 import { Shop } from './shop';
 import { qtyLabel } from './bulk';
 import { DraftModal } from './draft';
@@ -25,7 +26,11 @@ import { TrialsPanel, activeTrial, trialName } from './trials';
 import { helpPanel, settingsPanel } from './settings';
 import { Feed } from './feed';
 import { DeathCard } from './death';
-import { maybeOnboard } from './onboard';
+import { CoachBanner, initialSeen, markCoachSeen } from './coach';
+import { StarterPanel } from './starter';
+import { features, stageOf, type Features } from './progression';
+import { tabsShown, TABS } from './shell-logic';
+import { prefs, setPref } from './prefs';
 import { showOfflineReturn } from './offline';
 import { BuildScreen } from './build';
 import { MoreScreen, PrestigeScreen, type MoreSub } from './screens';
@@ -39,6 +44,7 @@ export class GameUi {
   readonly ctx: UiCtx;
   readonly hud: Hud;
   readonly abilities: AbilityBar;
+  readonly active: ActiveWidget;
   readonly shop: Shop;
   readonly shell: Shell;
   readonly feed = new Feed();
@@ -61,6 +67,12 @@ export class GameUi {
   private sector = -1;
   private autoTab: AutoTab = 'directives';
   private pendingOffline: { seconds: number; estimate: number; timer: number } | null = null;
+  /** Progressive reveal: what the unlock ladder shows for the latest UiState (progression.ts). */
+  private feats: Features;
+  /** ?showall=1: Unlock everything for this session (tests, demos); the Settings switch persists it. */
+  private readonly showAll = (() => { try { return new URLSearchParams(location.search).get('showall') === '1'; } catch { return false; } })();
+  private readonly starter: StarterPanel;
+  private readonly coach = new CoachBanner();
 
   constructor(root: HTMLElement, readonly host: UiHost) {
     this.ctx = {
@@ -68,10 +80,13 @@ export class GameUi {
       state: () => this.latest,
       open: (s, arg) => this.open(s, arg),
       toast: (m, k) => this.feed.toast(m, k),
+      features: () => this.feats,
     };
+    this.feats = features({ run: { deepestCleared: 0 }, meta: { deepestEver: 0, prestigeCount: 0 } }, { unlockAll: this.unlockAll });
     mountModalLayer(root);
     this.hud = new Hud(this.ctx);
     this.abilities = new AbilityBar(this.ctx);
+    this.active = new ActiveWidget(this.ctx);
     this.shop = new Shop(this.ctx);
     this.inspector = new Inspector(this.ctx);
     this.inspector.onPauseChange = (p) => this.hud.setPaused(p);
@@ -87,6 +102,8 @@ export class GameUi {
     this.build = new BuildScreen(this.ctx, this.shop, this.abilities, this.draft, () => { this.shell.go('battle'); this.boonOffer.expand(); });
     this.prestigeScreen = new PrestigeScreen(this.ctx, this.forecast, this.pshop, this.constellation);
     this.strip = new StatusStrip(() => this.shell.go('battle'));
+    this.starter = new StarterPanel(this.ctx, () => this.hud.lastRate);
+    this.hud.onMenu = () => this.shell.go('more');
     this.more = new MoreScreen({
       codex: { title: 'Chain Codex', el: () => this.codex.el, onShow: () => this.codex.setShown(true, this.latest), onHide: () => this.codex.setShown(false, null) },
       automation: { title: 'Automation', el: () => this.directives.el, onShow: () => { this.directives.open(this.autoTab); this.directives.setShown(true); }, onHide: () => this.directives.setShown(false) },
@@ -110,8 +127,10 @@ export class GameUi {
     const battle = h('div', { class: 'battle-layer' },
       h('div', { class: 'arena-top' }, this.hud.bossBar.el, h('div', { class: 'arena-strip' }, this.boonRow.el, this.hud.controls), this.boonOffer.chip, this.death.el),
       this.boonOffer.el,
-      this.abilities.el);
-    const toasts = h('div', { class: 'toast-layer' }, this.feed.el);
+      this.starter.el,
+      this.abilities.el,
+      this.active.el);
+    const toasts = h('div', { class: 'toast-layer' }, this.coach.el, this.feed.el);
     this.shell = new Shell(root, host, {
       topbar: this.hud.el, battle, abilities: this.abilities.el, toasts, strip: this.strip,
       screens: {
@@ -130,15 +149,35 @@ export class GameUi {
   /** Recompute the layout and camera insets. */
   relayout(): void { this.shell.relayout(); }
 
-  /** First UiState: onboarding, accent, initial layout. */
+  /** First UiState: accent, initial layout (the coach banners replace the old intro cards). */
   onReady(ui: UiState): void {
     this.update(ui);
     this.relayout();
-    maybeOnboard();
+  }
+
+  /** The master switch (Settings → Unlock everything, or ?showall=1). */
+  private get unlockAll(): boolean { return this.showAll || prefs().unlockAll; }
+
+  /** Recompute what the unlock ladder reveals and hand it to every gated component. */
+  private reveal(ui: UiState): void {
+    const f = features(ui, { unlockAll: this.unlockAll });
+    if (!prefs().revealInit) {
+      // first run of the ladder on this device: an existing save has already seen what it has (no banner stack, no "New")
+      setPref('revealInit', true);
+      markCoachSeen(initialSeen(f, stageOf(ui)));
+      if (stageOf(ui) > 0) this.shell.markVisited(TABS.filter((t) => tabsShown(f)[t.id]).map((t) => t.id));
+    }
+    this.feats = f;
+    this.shell.setFeatures(f);
+    this.shop.setFeatures(f);
+    this.hud.setFeatures(f);
+    this.abilities.setVisible(f.abilities);
+    this.coach.update(f, { boonOffer: !!ui.run.boonOffer?.length, draft: !!ui.run.pendingDraft?.length });
   }
 
   update(ui: UiState): void {
     this.latest = ui;
+    this.reveal(ui);
     const si = sectorIndexForWave(ui.run.wave);
     if (si !== this.sector) {
       this.sector = si;
@@ -150,10 +189,12 @@ export class GameUi {
     this.hud.update(ui);
     this.hud.setTrial(trialName(activeTrial(ui)));
     this.abilities.update(ui);
+    this.active.update(ui);
+    this.starter.update(ui, this.feats);
     this.shell.update(ui);
     if (this.shell.isShown('upgrades')) this.shop.update(ui, this.hud.lastRate);
     this.death.update(ui);
-    this.feed.update(ui);
+    this.feed.update(ui, this.feats);
     this.draft.update(ui);
     this.boonOffer.update(ui);
     this.boonRow.update(ui);
@@ -162,7 +203,7 @@ export class GameUi {
     this.forecast.update(ui);
     this.pshop.update(ui);
     this.constellation.update(ui);
-    this.more.update(ui);
+    this.more.update(ui, this.feats);
     this.codex.update(ui);
     this.directives.update(ui);
     this.trials.update(ui);
@@ -171,6 +212,7 @@ export class GameUi {
   onEvents(events: readonly SimEvent[]): void {
     this.inspector.ring.push(events);
     this.feed.onEvents(events);
+    this.active.onEvents(events);
     this.shop.notePurchases(events);   // bulk-buy summary toast
     for (const e of events) {
       if (e.type === Ev.TowerDeath && this.latest) this.death.show(e.a || this.latest.run.wave, this.latest, e.data);
@@ -233,17 +275,19 @@ export class GameUi {
       e.preventDefault();
       if (e.repeat) return;
       (document.activeElement as HTMLElement | null)?.blur?.();
-      this.open('inspector');
+      if (this.feats.inspector || this.inspector.isOpen) this.open('inspector');
       return;
     }
     if (anyModalOpen()) return;
     const k = e.key.toLowerCase();
-    if (k >= '1' && k <= '4') { if (this.shell.battleVisible) { this.abilities.press(Number(k) - 1); e.preventDefault(); } }
+    const f = this.feats;
+    if (k >= '1' && k <= '4') { if (this.shell.battleVisible && f.abilities) { this.abilities.press(Number(k) - 1); e.preventDefault(); } }
     else if (k === 'escape') this.abilities.cancel();
-    else if (k === 'p') { const ui = this.latest; if (ui) this.host.send({ type: 'set_mode', mode: ui.run.mode === 'push' ? 'patrol' : 'push' }); }
+    else if (k === 'p') { const ui = this.latest; if (ui && f.runControls) this.host.send({ type: 'set_mode', mode: ui.run.mode === 'push' ? 'patrol' : 'push' }); }
     else if (k === 'b') this.shell.togglePanel();
-    else if (k === 'f') this.open('forecast');
+    else if (k === 'f') { if (f.forecast) this.open('forecast'); }
     else if (k === 'q') {
+      if (!f.bulk) return;   // no quantity selector yet: Q does nothing
       const q = this.shop.cycleQty();
       if (!this.shell.isShown('upgrades')) this.feed.toast(`Buy quantity: ${qtyLabel(q)}`, 'info');
     }

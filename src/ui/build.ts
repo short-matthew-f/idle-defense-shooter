@@ -3,6 +3,7 @@
  * page — Frame, this attempt's active Boons (and a pending boon offer), Hardpoint and Attunement slots, the
  * Doctrine per tree, Anomaly sockets, ability slots, and the Cores balance with what Cores buy. It reuses the shop's slot pickers, Refit dialog,
  * Doctrine fork cards (by opening the tree in Upgrades) and Cores tab rather than duplicating them.
+ * Progressive reveal (progression.ts): each section shows once its feature is earned (or the player has something in it).
  */
 import '../styles/build.css';
 import type { DoctrineId, TreeId } from '@sim/core/ids';
@@ -68,13 +69,16 @@ export class BuildScreen {
 
   update(ui: UiState): void {
     if (!this.shown) return;
-    const key = buildKey(ui);
+    const f = this.ctx.features();
+    const key = buildKey(ui) + `|${f.frame}${f.boons}${f.hardpoints}${f.elements}${f.anomalies}${f.abilities}${f.cores}`;
     if (key === this.key) return;
     this.key = key;
     const y = this.el.parentElement?.scrollTop ?? 0;
     clear(this.el);
     if (this.draft.pending) this.el.append(button([icon('info', 'ico'), h('span', { class: 'bs-name', text: 'An Anomaly draft is waiting: choose one' }), icon('right', 'ico tiny chev')], () => this.draft.open(), { class: 'btn bs-draft top' }));
-    this.el.append(this.frame(ui), boonsSection(ui, this.openBoonOffer), this.hardpoints(ui), this.attunements(ui), this.doctrines(ui), this.anomalies(ui), this.abilitySlots(ui), this.cores(ui));
+    const on = <T>(gate: boolean, make: () => T): T | null => (gate ? make() : null);
+    for (const sec of [on(f.frame, () => this.frame(ui)), on(f.boons, () => boonsSection(ui, this.openBoonOffer)), on(f.hardpoints, () => this.hardpoints(ui)),
+      on(f.elements, () => this.attunements(ui)), this.doctrines(ui), on(f.anomalies, () => this.anomalies(ui)), on(f.abilities, () => this.abilitySlots(ui)), on(f.cores, () => this.cores(ui))]) if (sec) this.el.append(sec);
     const dial = this.threatDial(ui);
     if (dial) this.el.append(dial);
     if (this.el.parentElement) this.el.parentElement.scrollTop = y;

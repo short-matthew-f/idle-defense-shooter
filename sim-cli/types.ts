@@ -8,6 +8,8 @@ import type { AnomalyId, BoonId, DoctrineId, ElementId, FrameId, HardpointId, Tr
 import type { MetaState } from '../src/sim/core/types';
 
 export type PolicyId = 'idle' | 'directive' | 'active';
+/** The active-edge pieces the active policy can use (RunConfig.activeExtras). */
+export type ActivePiece = 'assist' | 'salvage' | 'overcharge';
 
 export type AgentId =
   | 'greedy' | 'survival' | 'elemental' | 'generalist' | 'random'
@@ -56,6 +58,18 @@ export interface RunConfig {
   mode?: 'push' | 'patrol';
   /** Record per-wave event hashes (default true). */
   hashes?: boolean;
+  /**
+   * Active policy: use the active-edge pieces (tap-to-assist, salvage, Overcharge; default true). false = the pre-active-edge
+   * policy; a list (e.g. ['assist']) uses only those pieces (measuring each one's share of the edge).
+   */
+  activeExtras?: boolean | ActivePiece[];
+  /**
+   * Quartermaster (src/sim/directives/quartermaster.ts): once it unlocks (after Prestige 1) the runner switches it on
+   * with this reserve (default 25%) and the purchase agent stops buying the stat ranks it covers (the player hands the
+   * ramps to the Quartermaster and keeps making the choices), so nothing is bought twice.
+   */
+  quartermaster?: boolean;
+  quartermasterReserve?: number;
 }
 
 export interface WaveRecord {
@@ -137,6 +151,8 @@ export interface RunResult {
   /** Commands the policy sent that returned an error or had no observable effect. */
   noops: Record<string, number>;
   finalHash: number;
+  /** Ranks and Scrap the Quartermaster spent this climb (only when it ran). */
+  quartermaster?: { ranks: number; scrap: number };
   notes: string[];
 }
 

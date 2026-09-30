@@ -118,8 +118,8 @@ export class Climber {
     this.agent.setDoctrineOverrides(cfg.doctrineOverrides);
     if (cfg.forceAnomaly && cfg.forceAnomaly !== 'skip') this.agent.keepAnomaly = cfg.forceAnomaly;
     if (cfg.forceBoon || cfg.noBoons) this.agent.pickBoons = false;   // the runner answers offers (forceBoonOffer)
-    this.policy = policy ?? makePolicy(cfg.policy);
-    this.ctx = makeCtx(sim, new Prng(agentSeed(cfg.seed, cfg.agent)), cfg.policy);
+    this.policy = policy ?? makePolicy(cfg.policy, cfg);
+    this.ctx = makeCtx(sim, new Prng(agentSeed(cfg.seed, cfg.agent)), cfg.policy, !!cfg.quartermaster);
     this.acc = instrument(sim.world);
   }
 
@@ -229,6 +229,13 @@ export class Climber {
     if (err) { this.notes.push(`forced boon pick rejected: ${err}`); applyCommand(sim.machine, { type: 'decline_boon' }); }
   }
 
+  /** --quartermaster: switch it on once it unlocks (the agent then leaves the stat ranks it covers to it). */
+  private quartermasterOn(): void {
+    const err = applyCommand(this.sim.machine, { type: 'set_quartermaster', on: true, reserve: this.cfg.quartermasterReserve ?? 25 });
+    if (err) { this.notes.push(`set_quartermaster rejected: ${err}`); this.cfg.quartermaster = false; }
+    else this.notes.push(`quartermaster on (reserve ${this.cfg.quartermasterReserve ?? 25}%) at wave ${this.sim.world.run.wave}`);
+  }
+
   /** The recommendation is "Prestige now": the depth reached when it fires. */
   private peakWaveBefore(): number { return this.sim.world.run.deepestCleared; }
 
@@ -272,7 +279,13 @@ export class Climber {
         else run.pendingDraft = [cfg.forceAnomaly as AnomalyId];
       }
       if ((cfg.forceBoon || cfg.noBoons) && run.boonOffer && run.boonOffer.length > 0) this.forceBoonOffer();
+      if (cfg.quartermaster && w.meta.prestigeCount >= 1 && !w.meta.settings.quartermaster?.on) this.quartermasterOn();
+      // --quartermaster: the agent plays the player who makes the choices from the reserve and leaves the
+      // Quartermaster's allowance alone (else an instant-buying agent would spend it every tick before a pass).
+      const qmHold = cfg.quartermaster && w.meta.settings.quartermaster?.on ? Math.min(run.scrap, run.quartermaster?.allowance ?? 0) : 0;
+      if (qmHold > 0) run.scrap -= qmHold;
       agent.tick(ctx);
+      if (qmHold > 0) run.scrap += qmHold;
       policy.tick(sim);
       sim.step();
       this.playSeconds += 1 / (TICK_RATE * (w.run.speedMultiplier || 1));
@@ -313,6 +326,7 @@ export class Climber {
       casts: this.casts, tells: this.tells, counters: Math.max(this.counters, this.bossCounters), designations: policy.stats.designations,
       noops: { ...policy.stats.noops },
       finalHash: sim.events.hash(),
+      ...(w.run.quartermaster ? { quartermaster: { ranks: Object.values(w.run.quartermaster.bought).reduce((a, n) => a + (n ?? 0), 0), scrap: Math.round(w.run.quartermaster.spent) } } : {}),
       notes: this.notes,
     };
     this.result = result;
@@ -374,7 +388,7 @@ export function spendEchoes(sim: Sim): string[] {
 export function runPrestige(cfg: RunConfig, n: number): PrestigeChainResult {
   const sim = newSim(cfg);
   const agent = makeAgent(cfg.agent);
-  const policy = makePolicy(cfg.policy);
+  const policy = makePolicy(cfg.policy, cfg);
   const out: PrestigeChainResult = { name: cfg.name ?? `chain-${cfg.agent}-${cfg.policy}-s${cfg.seed}`, implemented: true, runs: [], notes: [] };
   for (let i = 0; i < n; i++) {
     agent.reset(); policy.reset();

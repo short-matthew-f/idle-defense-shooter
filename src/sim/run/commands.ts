@@ -156,6 +156,9 @@ function dispatch(m: RunMachine, cmd: Command): string | null {
     case 'cast':               // WP9: systems/abilities.ts (observe-only: every system sees it)
     case 'set_directives':     // WP9: directives/engine.ts
     case 'set_upgrade_queue':  // WP9: directives/engine.ts (rules run by directives/upgrade-queue.ts)
+    case 'tap_assist':         // Active edge: systems/active.ts (never an error: an empty tap is ignored)
+    case 'collect_salvage':
+    case 'overcharge':
       for (const s of w.systems) if (s.onCommand?.(w, cmd)) return null;
       return null;
     default: {

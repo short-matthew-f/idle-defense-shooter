@@ -157,7 +157,7 @@ export class OptimizerAgent extends BalancedAgent {
   private rollout(save: SaveState, seq: Action[], live: AgentCtx, draft?: AnomalyId[], pick?: AnomalyId): number {
     this.stats.rollouts++;
     const sim = new Sim(structuredClone(save));
-    const ctx = makeCtx(sim, new Prng(0x0b7), 'idle');
+    const ctx = makeCtx(sim, new Prng(0x0b7), 'idle', live.quartermaster);   // rollouts delegate to the Quartermaster like the live run
     if (draft && pick) {
       sim.world.run.pendingDraft = [...draft];
       if (sim.machine.pickAnomaly(pick, sim.world.build.anomalies.length >= sim.world.build.anomalySockets ? this.replaceIndex(ctx) : undefined)) return -Infinity;

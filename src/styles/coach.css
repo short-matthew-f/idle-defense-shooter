@@ -1,0 +1,13 @@
+/* Coach banners (src/ui/coach.ts): one sentence and "Got it", in the toast column; never blocks the arena. */
+.coach {
+  display: flex; align-items: center; gap: 10px; width: min(420px, calc(100vw - 32px)); margin: 0 auto 8px; padding: 8px 8px 8px 12px;
+  border-radius: 12px; background: var(--bg-1); border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line-2));
+  box-shadow: var(--shadow); color: var(--text); font-size: 14px; line-height: 19px; font-weight: 600; pointer-events: auto;
+}
+.coach.in { animation: coach-in 0.25s ease-out; }
+@keyframes coach-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.coach-ico { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); }
+.coach-ico .ico { width: 20px; height: 20px; }
+.coach-text { flex: 1; min-width: 0; }
+.btn.coach-ok { flex: none; }
+.toast-layer .coach { pointer-events: auto; }

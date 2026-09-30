@@ -12,6 +12,7 @@
  * Presentation-only state (which coach banners were read, which tabs were visited) lives in prefs; it
  * never decides what is visible.
  */
+import type { ElementId, HardpointId } from '@sim/core/ids';
 import type { ShopEntry, UiState } from '@sim/core/types';
 import { etaSeconds, nextPurchase } from './advice';
 
@@ -104,12 +105,20 @@ export interface ProgressState {
   activeTrial?: UiState['activeTrial'];
 }
 
-export type Features = Record<FeatureId, boolean> & { showEverything: boolean };
+/** `unlockAll` (alias `showEverything`): the master switch was on, so every feature is. */
+export type Features = Record<FeatureId, boolean> & { unlockAll: boolean; showEverything: boolean };
 
 export interface FeatureOpts {
-  /** Settings → Show everything (or ?showall=1): every feature on. */
+  /**
+   * The single global master switch: Settings → "Unlock everything (for experienced players)" (prefs.unlockAll,
+   * or ?showall=1 for a session). Every feature on, every content id offered.
+   */
+  unlockAll?: boolean;
+  /** Alias of unlockAll. */
   showEverything?: boolean;
 }
+
+const masterOn = (o: FeatureOpts): boolean => !!(o.unlockAll || o.showEverything);
 
 /** Best wave cleared, ever. */
 export function bestWave(s: ProgressState): number {
@@ -152,7 +161,7 @@ export function affordableRows(shop: readonly ShopEntry[], f: Pick<Features, 'ch
 
 /** Every feature on or off for this state. Monotone in the best wave and in prestigeCount. */
 export function features(s: ProgressState, opts: FeatureOpts = {}): Features {
-  const all = !!opts.showEverything;
+  const all = masterOn(opts);
   const best = bestWave(s);
   const pc = s.meta.prestigeCount | 0;
   const f = {} as Features;
@@ -160,6 +169,7 @@ export function features(s: ProgressState, opts: FeatureOpts = {}): Features {
     const u = UNLOCKS[id];
     f[id] = all || (u.wave !== null && best >= u.wave) || (u.prestige !== null && pc >= u.prestige);
   }
+  f.unlockAll = all;
   f.showEverything = all;
   if (all) return f;
 
@@ -197,7 +207,38 @@ export function features(s: ProgressState, opts: FeatureOpts = {}): Features {
 
 /** Every feature on (tests, and the default before the first UiState). */
 export function allFeatures(): Features {
-  return features({ run: { deepestCleared: 0 }, meta: { deepestEver: 0, prestigeCount: 0 } }, { showEverything: true });
+  return features({ run: { deepestCleared: 0 }, meta: { deepestEver: 0, prestigeCount: 0 } }, { unlockAll: true });
+}
+
+// ---------------------------------------------------------------- content pool
+
+/**
+ * Prestiges needed before an element / weapon system is OFFERED in a slot picker. Phase 1: everything at 0
+ * (all offered). Phase 2 plan: starter elements fire / lightning / poison and starter weapons ordnance / drones
+ * stay at 0, the rest move to 1+. Anything owned (attuned, mounted, run by the Frame or borrowed) is always offered.
+ */
+export const CONTENT_POOL: { readonly elements: Readonly<Record<ElementId, number>>; readonly hardpoints: Readonly<Record<HardpointId, number>> } = {
+  elements: { fire: 0, lightning: 0, poison: 0, frost: 0 },
+  hardpoints: { ordnance: 0, drones: 0, blade: 0, laser: 0, gravitics: 0 },
+};
+export const STARTER_ELEMENTS: readonly ElementId[] = ['fire', 'lightning', 'poison'];
+export const STARTER_HARDPOINTS: readonly HardpointId[] = ['ordnance', 'drones'];
+
+export interface ContentPool { elements: ElementId[]; hardpoints: HardpointId[] }
+
+/** Which element and hardpoint ids the slot pickers offer (data order). unlockAll offers everything. */
+export function contentPool(s: ProgressState, opts: FeatureOpts = {}): ContentPool {
+  const els = Object.keys(CONTENT_POOL.elements) as ElementId[];
+  const hps = Object.keys(CONTENT_POOL.hardpoints) as HardpointId[];
+  if (masterOn(opts)) return { elements: els, hardpoints: hps };
+  const pc = s.meta.prestigeCount | 0;
+  const b = s.build ?? {};
+  const ownedEl = new Set<string>((b.attunements ?? []).filter((x): x is ElementId => !!x));
+  const ownedHp = new Set<string>([...(b.hardpoints ?? []).filter((x): x is HardpointId => !!x), ...(s.extraSystems ?? []).map((x) => x.system)]);
+  return {
+    elements: els.filter((e) => ownedEl.has(e) || pc >= CONTENT_POOL.elements[e]),
+    hardpoints: hps.filter((h) => ownedHp.has(h) || pc >= CONTENT_POOL.hardpoints[h]),
+  };
 }
 
 // ---------------------------------------------------------------- stage 0: the Upgrade button

@@ -6,6 +6,7 @@ import type { RunMachine } from '../run/machine';
 import { buildShop } from '../economy/shop';
 import { shopTreeTotals } from '../economy/bulk';
 import { abilitySlotCount, abilityUi, secondDesignatorAllowed, trialActive } from '../systems/abilities';
+import { activeUi } from '../systems/active';   // Active edge
 import { bossDef, bossDefByIndex, frameDef } from './content';
 import { SECTORS, SYSTEM_ORDER_IDS, TREES } from '../data/index';
 import { computeForecast } from '../economy/forecast';   // WP8
@@ -80,6 +81,7 @@ export function buildUiState(w: WorldImpl, m: RunMachine): UiState {
     wallGaugeSeconds: forecast.wallGaugeSeconds,
     quartermaster: quartermasterUi(w),   // directives/quartermaster.ts
     recentEvents: w.events.recent(run.tick - 2 * TICK_RATE, 200, (ev) => ev.type !== Ev.Hit && ev.type !== Ev.Spawn && ev.type !== Ev.StatusTick),
+    active: activeUi(w),   // Active edge (systems/active.ts)
   };
 }
 

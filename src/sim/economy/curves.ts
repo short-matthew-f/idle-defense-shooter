@@ -10,7 +10,7 @@
  *   Echoes(D,T)     = floor(10 · 1.2^(D−20) · (1 + 0.1·T)), 0 when D < 20
  *   Stars(D,A)      = floor(4 · (1+A) · 1.1^(D−100))
  */
-import { growth } from '../math/lut';
+import { growth, log } from '../math/lut';
 import type { NodeDef } from '../data/schema';
 
 export const ENEMY_HP_BASE = 7;
@@ -69,6 +69,30 @@ export function nodeCost(def: NodeDef, rank: number): { cost: number; currency: 
   if ('cores' in c) return { cost: c.cores, currency: 'cores' };
   if ('flat' in c) return { cost: c.flat[Math.min(rank, c.flat.length - 1)] ?? 0, currency: 'scrap' };
   return { cost: statCost(c.base, c.growth, rank), currency: 'scrap' };
+}
+
+/**
+ * Stat-line depth (onboarding pass, docs/BALANCE.md). Every Scrap-priced stat node's rank cap is its data maxRank
+ * (authored × STAT_RANK_SCALE) × statDepth, rounded up. Depth grows with the Echoes the player has ever earned,
+ * read as the wave that pays them (`echoDepthWave`): a first Prestige's stat lines run out around wave 25–30, which
+ * is the first wall; each Prestige deepens every line, so the next wall sits ~10 waves further; from ~wave 60 of
+ * Prestige history the lines are at full depth (the tuned late game).
+ *   depth(D*) = min(1, STAT_DEPTH_FIRST + STAT_DEPTH_PER_WAVE · max(0, D* − STAT_DEPTH_REF)),  D* = echoDepthWave
+ */
+export const STAT_DEPTH_FIRST = 0.6;
+export const STAT_DEPTH_REF = 18;
+export const STAT_DEPTH_PER_WAVE = 0.016;
+
+/** The wave whose Prestige pays `echoes` (inverse of echoesFor at T = 0); 0 below one wave-20 payout. */
+export function echoDepthWave(echoes: number): number {
+  if (!(echoes >= 10)) return 0;
+  return 20 + log(echoes / 10) / log(1.2);
+}
+
+/** Fraction of each stat node's full rank cap that is open, given lifetime Echoes. */
+export function statDepthFor(lifetimeEchoes: number): number {
+  const d = echoDepthWave(lifetimeEchoes);
+  return Math.min(1, STAT_DEPTH_FIRST + STAT_DEPTH_PER_WAVE * Math.max(0, d - STAT_DEPTH_REF));
 }
 
 /** Echoes paid by a Prestige with deepest cleared wave D and Threat Dial T. */

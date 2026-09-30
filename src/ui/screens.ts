@@ -13,6 +13,7 @@ import type { ForecastPanel } from './forecast';
 import type { PrestigeShop } from './prestige-shop';
 import type { ConstellationPanel } from './constellation';
 import type { UiCtx } from './ctx';
+import type { Features, FeatureId } from './progression';
 
 const pr = (ui: UiState, id: string): number => ui.meta.prestigeRanks[`prestige.${id}`] | 0;
 
@@ -29,6 +30,8 @@ export class PrestigeScreen {
   readonly el: HTMLElement;
   private readonly seg = h('div', { class: 'seg-ctl', attrs: { role: 'tablist', 'aria-label': 'Prestige' } });
   private readonly body = h('div', { class: 'ps-body' });
+  /** Progressive reveal: before the first Prestige the tab opens as a teaser. */
+  private readonly teaser = h('p', { class: 'ps-teaser', text: 'Something is coming: Prestige starts a new, stronger machine. The Forecast says when it pays off.' });
   private readonly btns = new Map<PrestigeSeg, { b: HTMLButtonElement; lock: HTMLElement; dot: HTMLElement }>();
   private cur: PrestigeSeg = 'forecast';
   private shown = false;
@@ -42,7 +45,7 @@ export class PrestigeScreen {
       this.btns.set(s.id, { b, lock: lock as unknown as HTMLElement, dot });
       this.seg.appendChild(b);
     }
-    this.el = h('div', { class: 'prestige-screen' }, this.seg, this.body);
+    this.el = h('div', { class: 'prestige-screen' }, this.teaser, this.seg, this.body);
     this.render();
   }
 
@@ -76,6 +79,7 @@ export class PrestigeScreen {
 
   update(ui: UiState): void {
     if (!this.shown) return;
+    show(this.teaser, ui.meta.prestigeCount === 0);
     for (const s of PRESTIGE_SEGS) {
       const x = this.btns.get(s.id)!;
       const lock = s.lock(ui);
@@ -91,15 +95,15 @@ export class PrestigeScreen {
 // ---------------------------------------------------------------- More
 
 export type MoreSub = 'codex' | 'automation' | 'trials' | 'settings' | 'help';
-interface MoreItem { id: MoreSub | 'inspector'; label: string; icon: string; hint: string; lock?: (ui: UiState) => string | null }
+interface MoreItem { id: MoreSub | 'inspector'; label: string; icon: string; hint: string; lock?: (ui: UiState) => string | null; /** progressive reveal: listed once this is earned */ reveal?: FeatureId }
 
 export const MORE_ITEMS: MoreItem[] = [
-  { id: 'inspector', label: 'Kill-Chain Inspector', icon: 'inspector', hint: 'Pause the field and trace why things died' },
-  { id: 'codex', label: 'Chain Codex', icon: 'codex', hint: 'Discovered interactions and rumours' },
-  { id: 'automation', label: 'Automation', icon: 'directives', hint: 'Directives, Targeting, Upgrade Queue, Blueprints', lock: (ui) => (pr(ui, 'directives') || pr(ui, 'blueprint_slots') ? null : 'Prestige II') },
-  { id: 'trials', label: 'Trials', icon: 'trials', hint: 'Constraint runs with permanent rewards', lock: (ui) => (pr(ui, 'trials') ? null : 'Prestige II') },
-  { id: 'settings', label: 'Settings', icon: 'settings', hint: 'Clarity, bloom, saves, install' },
-  { id: 'help', label: 'Help & shortcuts', icon: 'info', hint: 'Gestures, keys, the intro again' },
+  { id: 'inspector', label: 'Kill-Chain Inspector', icon: 'inspector', hint: 'Pause the field and trace why things died', reveal: 'inspector' },
+  { id: 'codex', label: 'Chain Codex', icon: 'codex', hint: 'Discovered interactions and rumours', reveal: 'codex' },
+  { id: 'automation', label: 'Automation', icon: 'directives', hint: 'Directives, Targeting, Upgrade Queue, Blueprints', lock: (ui) => (pr(ui, 'directives') || pr(ui, 'blueprint_slots') ? null : 'Prestige II'), reveal: 'automation' },
+  { id: 'trials', label: 'Trials', icon: 'trials', hint: 'Constraint runs with permanent rewards', lock: (ui) => (pr(ui, 'trials') ? null : 'Prestige II'), reveal: 'trials' },
+  { id: 'settings', label: 'Settings', icon: 'settings', hint: 'Clarity, sound, saves, unlock everything, start over' },
+  { id: 'help', label: 'Help & shortcuts', icon: 'info', hint: 'Gestures, keys, the tips again' },
 ];
 
 export interface SubScreen { title: string; el: () => HTMLElement; onShow?: () => void; onHide?: () => void }
@@ -111,6 +115,7 @@ export class MoreScreen {
   private readonly subTitle = h('h2', { class: 'sub-title' });
   private readonly subBody = h('div', { class: 'sub-body' });
   private readonly locks = new Map<string, HTMLElement>();
+  private readonly rows = new Map<string, HTMLElement>();
   private current: MoreSub | null = null;
   private hidden = true;
   private lockKey = '';
@@ -123,11 +128,13 @@ export class MoreScreen {
     for (const it of MORE_ITEMS) {
       const lock = h('span', { class: 'mi-lock' });
       this.locks.set(it.id, lock);
-      this.list.appendChild(button([
+      const row = button([
         icon(it.icon, 'ico'),
         h('span', { class: 'mi-main' }, h('span', { class: 'mi-label', text: it.label }), h('span', { class: 'mi-hint', text: it.hint })),
         lock, icon('right', 'ico tiny chev'),
-      ], () => (it.id === 'inspector' ? nav.inspector() : nav.go(it.id)), { class: 'menu-item' }));
+      ], () => (it.id === 'inspector' ? nav.inspector() : nav.go(it.id)), { class: 'menu-item' });
+      this.rows.set(it.id, row);
+      this.list.appendChild(row);
     }
     const back = button([icon('left', 'ico'), 'More'], () => nav.back(), { class: 'btn ghost sub-back', label: 'Back to More' });
     this.sub.append(h('div', { class: 'sub-head' }, back, this.subTitle), this.subBody);
@@ -168,11 +175,15 @@ export class MoreScreen {
     if (this.current) this.subs[this.current].onHide?.();
   }
 
-  update(ui: UiState): void {
-    const key = MORE_ITEMS.map((it) => (it.lock ? it.lock(ui) ?? '' : '')).join('|');
+  update(ui: UiState, f?: Features): void {
+    // progressive reveal: an item not yet earned is not listed (a sub-screen open on it goes back to the list)
+    const shown = (it: MoreItem): boolean => !f || !it.reveal || f[it.reveal];
+    const key = MORE_ITEMS.map((it) => `${shown(it) ? 1 : 0}${it.lock ? it.lock(ui) ?? '' : ''}`).join('|');
     if (key === this.lockKey) return;
     this.lockKey = key;
+    if (this.current && !shown(MORE_ITEMS.find((x) => x.id === this.current)!)) this.show(null);
     for (const it of MORE_ITEMS) {
+      this.rows.get(it.id)!.hidden = !shown(it);
       const el = this.locks.get(it.id)!;
       const lock = it.lock ? it.lock(ui) : null;
       el.replaceChildren(...(lock ? [icon('lock', 'ico tiny'), lock] : []));

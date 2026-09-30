@@ -9,6 +9,7 @@ import { icon } from './icons';
 import { titleCase } from './format';
 import { boonName } from './boons';
 import type { ToastKind } from './ctx';
+import type { Features } from './progression';
 
 const ICON: Record<ToastKind, string> = { info: 'info', good: 'check', warn: 'info', core: 'cores', codex: 'codex' };
 
@@ -41,16 +42,17 @@ export class Feed {
     if (cores > 0) this.toast(`+${cores} Core${cores > 1 ? 's' : ''}`, 'core');
   }
 
-  /** State edges: draft ready, Prestige recommended. */
-  update(ui: UiState): void {
+  /** State edges: draft ready, Prestige recommended. Slot toasts wait for their category to be revealed (progression.ts). */
+  update(ui: UiState, f?: Pick<Features, 'elements' | 'hardpoints'>): void {
     const d = ui.run.pendingDraft ? ui.run.pendingDraft.join(',') : '';
     if (d && d !== this.lastDraft) this.toast('Anomaly draft ready', 'info');
     this.lastDraft = d;
     // A new slot is the biggest power step in the early game and nothing else announces it.
+    // Before its category is revealed the coach banner announces it instead (progression.ts, coach.ts).
     const hp = ui.run.hardpointSlotsOpen, at = ui.run.attunementSlotsOpen;
     if (this.lastSlots) {
-      if (at > this.lastSlots.at && ui.build.attunements.filter(Boolean).length < at) this.toast('Attunement slot open: attune an element (Build or Upgrades)', 'good', 6000);
-      if (hp > this.lastSlots.hp && ui.build.hardpoints.filter(Boolean).length < hp) this.toast('Hardpoint slot open: mount a weapon system (Build or Upgrades)', 'good', 6000);
+      if (at > this.lastSlots.at && (!f || f.elements) && ui.build.attunements.filter(Boolean).length < at) this.toast('Attunement slot open: attune an element (Build or Upgrades)', 'good', 6000);
+      if (hp > this.lastSlots.hp && (!f || f.hardpoints) && ui.build.hardpoints.filter(Boolean).length < hp) this.toast('Hardpoint slot open: mount a weapon system (Build or Upgrades)', 'good', 6000);
     }
     this.lastSlots = { hp, at };
     const rec = !!ui.forecast?.recommended;

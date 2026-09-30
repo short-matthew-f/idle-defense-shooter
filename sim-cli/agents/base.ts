@@ -20,6 +20,7 @@ import { applyCommand } from '../../src/sim/run/commands';
 import { buildShop, spendKey } from '../../src/sim/economy/shop';
 import { anomalyDef, boonDef, nodeInfo, treeDef } from '../../src/sim/core/content';
 import { boonNeedsMet } from '../../src/sim/run/boons';
+import { quartermasterNode, quartermasterUnlocked } from '../../src/sim/directives/quartermaster';
 import type { PolicyId } from '../types';
 
 export const ALL_HARDPOINTS: HardpointId[] = ['ordnance', 'drones', 'blade', 'laser', 'gravitics'];
@@ -32,17 +33,30 @@ export interface AgentCtx {
   policy: PolicyId;
   /** Apply a command now (between ticks). Returns the sim's error string or null. */
   apply(cmd: Command): string | null;
-  /** Current shop (cached per build version). Do not mutate. */
+  /**
+   * Current shop (cached per build version). Do not mutate. While the Quartermaster is delegated to (`quartermaster`
+   * and it is unlocked and on) the stat entries it buys are left out, so the agent makes only the choices.
+   */
   shop(): ShopEntry[];
   purchases: number;
+  /** The run hands stat ramps to the Quartermaster once it unlocks (RunConfig.quartermaster). */
+  quartermaster: boolean;
 }
 
-export function makeCtx(sim: Sim, rng: Prng, policy: PolicyId): AgentCtx {
+/** Is the Quartermaster buying this entry for the agent right now? */
+export function delegatedToQuartermaster(w: WorldImpl, e: ShopEntry): boolean {
+  const s = w.meta.settings.quartermaster;
+  if (!s || !s.on || !quartermasterUnlocked(w.meta)) return false;
+  return quartermasterNode(nodeInfo(e.node)) && s.trees[e.tree as TreeId] !== false;
+}
+
+export function makeCtx(sim: Sim, rng: Prng, policy: PolicyId, quartermaster = false): AgentCtx {
   let cache: ShopEntry[] | null = null;
   let cacheVer = -1;
   let cacheBuild: unknown = null;
+  let cacheQm = false;
   const ctx: AgentCtx = {
-    sim, rng, policy, purchases: 0,
+    sim, rng, policy, purchases: 0, quartermaster,
     get w() { return sim.world; },
     apply(cmd: Command) {
       const err = applyCommand(sim.machine, cmd);
@@ -51,7 +65,12 @@ export function makeCtx(sim: Sim, rng: Prng, policy: PolicyId): AgentCtx {
     },
     shop() {
       const w = sim.world;
-      if (!cache || cacheVer !== w.stats.version || cacheBuild !== w.build) { cache = buildShop(w); cacheVer = w.stats.version; cacheBuild = w.build; }
+      const qm = ctx.quartermaster && !!w.meta.settings.quartermaster?.on && quartermasterUnlocked(w.meta);
+      if (!cache || cacheVer !== w.stats.version || cacheBuild !== w.build || cacheQm !== qm) {
+        cache = buildShop(w);
+        if (qm) cache = cache.filter((e) => !delegatedToQuartermaster(w, e));
+        cacheVer = w.stats.version; cacheBuild = w.build; cacheQm = qm;
+      }
       return cache;
     },
   };

@@ -161,6 +161,8 @@ const NOUNS: Record<string, string> = {
   gravitics: 'gravity well', fire: 'fire', burn: 'fire', lightning: 'lightning', static: 'lightning', poison: 'poison',
   frost: 'frost', chill: 'frost', frozen: 'frost', bleed: 'bleeding', bastion: 'tower', tower: 'tower', retaliation: 'tower',
   reactor: 'reactor', enemy: 'enemy', hazard: 'hazard', status: 'status',
+  // Active edge (systems/active.ts)
+  assist: 'assist shot', overcharge: 'overcharge', salvage: 'salvage', 'salvage.tap': 'salvage', 'salvage.passive': 'salvage collector',
 };
 
 /** Human noun for an event src tag. */
@@ -244,6 +246,10 @@ function clause(e: SimEvent): { verb: Verb; obj: string; launch?: boolean } {
     case Ev.Cast: return { verb: ['fired', 'fire'], obj: '' };
     case Ev.TowerHit: return { verb: ['hit', 'hit'], obj: 'the tower' };
     case Ev.CoreDrop: return { verb: ['dropped', 'drop'], obj: 'a Core' };
+    // Active edge: "The gun killed the Brute, which dropped a salvage crate, which paid 120 Scrap."
+    case Ev.Assist: case Ev.Overcharge: return { verb: ['fired', 'fire'], obj: '' };
+    case Ev.SalvageDrop: return { verb: ['dropped', 'drop'], obj: 'a salvage crate' };
+    case Ev.SalvageCollect: return { verb: ['paid', 'pay'], obj: `${Math.round(e.a)} Scrap` };
     case Ev.BarrierBreak: return { verb: ['broke', 'break'], obj: 'the barrier' };
     case Ev.BossCounter: case Ev.CounterScored: return { verb: ['countered', 'counter'], obj: 'the boss' };
     default: return { verb: ['triggered', 'trigger'], obj: '' };
@@ -275,6 +281,7 @@ export function chainSentence(chain: readonly SimEvent[]): string {
     let part: string;
     if (launch) part = i === 0 ? `The ${noun} launched` : `which launched the ${noun}`;
     else if (isTrigger(e.type)) part = i === 0 ? `The ${noun} triggered` : `which triggered the ${noun}`;
+    else if (e.type === Ev.SalvageDrop) part = i === 0 ? 'A salvage crate dropped' : 'which dropped a salvage crate';   // Active edge
     else if (i === 0) part = `The ${noun} ${verb[0]}${tail}`;
     else if (noun === prevNoun) part = `which ${verb[0]}${tail}`;
     else part = `which caused the ${noun} to ${verb[1]}${tail}`;

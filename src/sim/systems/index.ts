@@ -21,6 +21,7 @@ import { BoonsSystem } from './boons';           // Boons (attempt-scoped reward
 import { ProgressionSystem } from '../run/prestige';   // WP8
 import { BastionSystem } from './bastion';       // WP2
 import { ReactorSystem } from './reactor';       // WP2
+import { ActiveSystem } from './active';         // Active edge: tap-to-assist, salvage, Overcharge (docs/ACTIVE.md)
 import { AbilitiesSystem } from './abilities';
 import { DirectivesSystem } from '../directives/engine';
 
@@ -42,6 +43,7 @@ export const SYSTEM_ORDER: (() => System)[] = [
   () => new ProgressionSystem(),                // WP8: Codex, Forecast, Trials, blueprints, checkpoint bookkeeping
   () => new BastionSystem(),                    // WP2: Bastion doctrines
   () => new ReactorSystem(),                    // WP2: Reactor doctrines and exotic
+  () => new ActiveSystem(),                     // Active edge: resolves player taps / Overcharge after every weapon moved
   // WP9: keep these two LAST (after bastion/reactor): abilities/CE, then Directives/Autocast/Upgrade Queue
   () => new AbilitiesSystem(),
   () => new DirectivesSystem(),

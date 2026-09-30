@@ -36,7 +36,7 @@ export const STAT_GROWTH_MAX = 1.22;
  * per-rank value instead of losing half the maximum.
  */
 export const STAT_RANK_SCALE = 0.5;
-export const STAT_BASE_MUL = 3;
+export const STAT_BASE_MUL = 1.5;
 
 export interface NodeOpts {
   requires?: string[];

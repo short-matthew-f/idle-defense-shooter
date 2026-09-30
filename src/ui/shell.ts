@@ -15,7 +15,7 @@
  *
  * Progressive reveal (progression.ts): tabs not yet earned are not rendered (`hidden`), and with no tab but
  * Battle the bar itself goes (body.no-tabbar). More stays reachable (Settings, Help) from a Battle chip.
- * A tab that stops being available while on screen (Show everything switched off) falls back to Battle.
+ * A tab that stops being available while on screen (Unlock everything switched off) falls back to Battle.
  * A newly revealed tab carries a "New" badge until it is first opened (prefs.tabsVisited).
  */
 import '../styles/shell.css';
@@ -68,7 +68,7 @@ export class Shell {
   panelOpen: boolean;
   private badgeKey = '';
   /** What the unlock ladder reveals (GameUi sets it from every UiState; stage 0 until then). */
-  private feats: Features = featuresOf({ run: { deepestCleared: 0 }, meta: { deepestEver: 0, prestigeCount: 0 } }, { showEverything: prefs().showEverything });
+  private feats: Features = featuresOf({ run: { deepestCleared: 0 }, meta: { deepestEver: 0, prestigeCount: 0 } }, { unlockAll: prefs().unlockAll });
   private shownKey = '';
   /** Called after the layout or insets changed. */
   onLayout: (() => void) | null = null;
@@ -205,7 +205,7 @@ export class Shell {
     if (key === this.shownKey) return;
     this.shownKey = key;
     this.applyShown();
-    // on a tab that is no longer available (Show everything switched off): back to Battle
+    // on a tab that is no longer available (Unlock everything switched off): back to Battle
     if (!this.reachable(this.view.tab)) this.go('battle');
     if (!this.reachable(this.panel.tab)) {
       const first = TABS.find((t) => t.id !== 'battle' && shown[t.id]);

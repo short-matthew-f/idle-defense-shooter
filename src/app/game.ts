@@ -11,7 +11,9 @@ import { Ev, type RenderSnapshot, type SaveState, type UiState } from '@sim/core
 import { sectorIndexForWave } from '@sim/data/sectors';
 import { SimClient } from './sim-client';
 import { TickPacer, offlineSecondsOnReturn, HIDDEN_OFFLINE_AFTER_S } from './pacing';
-import { nearestEnemy, tapReach } from './pick';
+import { CRATE_REACH_PX, nearestCrate, nearestEnemy, tapReach } from './pick';
+import { TapRouter, holdOnTower } from './active-tap';
+import { TOWER_RADIUS } from '@sim/core/types';
 import { FieldOverlay } from './overlay';
 import { parseCal } from './touch-cal';
 import type { Command } from '@sim/core/types';
@@ -275,6 +277,7 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
 
   // ---------------------------------------------------------------- input
   let aiming = false, aimAngle = 0, lastAimAt = 0, aimTimer = 0;
+  const taps = new TapRouter();
   const sendAim = (): void => { aimTimer = 0; lastAimAt = performance.now(); client.send({ type: 'manual_aim', active: true, angle: aimAngle }); };
   function endAim(): void {
     aiming = false;
@@ -288,9 +291,38 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
     // (was an enemy near?) and snaps ability casts onto the tapped enemy (aim assist).
     // Reach is at least ~22 CSS px (a thumb), not 24 world units (under 8 px on a phone).
     const snap = app.snapshot;
-    const hit = snap && snap.instances.buffer.byteLength > 0 ? nearestEnemy(snap.instances, snap.instanceCount, x, y, tapReach(app.camera.scale)) : null;
+    const live = snap && snap.instances.buffer.byteLength > 0 ? snap : null;
+    const hit = live ? nearestEnemy(live.instances, live.instanceCount, x, y, tapReach(app.camera.scale)) : null;
+    // Active edge (docs/ACTIVE.md, app/active-tap.ts): crates first; an enemy tap is an assist shot and a designation
+    if (!paused) {
+      const crate = live ? nearestCrate(live.instances, live.instanceCount, x, y, tapReach(app.camera.scale, CRATE_REACH_PX)) : null;
+      const route = taps.route(crate, hit, ui.abilities.arming.armed, app.camera.scale, performance.now());
+      if (route.kind === 'collect') {
+        client.send({ type: 'collect_salvage', x: route.x, y: route.y });
+        overlay.tap(route.x, route.y, true, performance.now() / 1000);
+        return;
+      }
+      if (route.kind === 'enemy' && route.assist) client.send({ type: 'tap_assist', x: route.x, y: route.y });
+      if (route.kind === 'enemy' && !route.designate) { overlay.tap(route.x, route.y, true, performance.now() / 1000); return; }
+    }
     if (!paused) overlay.tap(hit ? hit.x : x, hit ? hit.y : y, !!hit, performance.now() / 1000);
     ui.tapField(x, y, hit ? { x: hit.x, y: hit.y } : null);
+  };
+  // Active edge: hold on the tower while Overcharge is ready charges it; lifting fires (the sim times the window)
+  let charging = false;
+  app.input.onHoldStart = (x, y) => {
+    if (!ready || paused || !latestUi?.active?.overcharge.ready || ui.abilities.arming.armed) return false;
+    if (!holdOnTower(x, y, TOWER_RADIUS, app.camera.scale)) return false;
+    charging = true;
+    client.send({ type: 'overcharge', action: 'charge' });
+    ui.active.hold(true);
+    return true;
+  };
+  app.input.onHoldEnd = (cancelled) => {
+    if (!charging) return;
+    charging = false;
+    client.send({ type: 'overcharge', action: cancelled ? 'cancel' : 'release' });
+    ui.active.hold(false);
   };
   app.input.onAimStart = (a) => {
     if (!ready || paused) return;

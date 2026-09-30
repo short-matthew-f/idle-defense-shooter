@@ -13,6 +13,7 @@ import { fmtDuration, fmtNum } from './format';
 import { damageSourceName, deathHeadline, killerName, suggestPurchases, topDamageSource, type Category, type Suggestion } from './advice';
 import { BOSS_BY_ID, TREE_LABEL } from './content';
 import type { UiCtx } from './ctx';
+import { STARTER_IDS } from './progression';
 
 export class DeathCard {
   readonly el: HTMLElement;
@@ -63,15 +64,19 @@ export class DeathCard {
   update(ui: UiState): void {
     if (this.el.hidden) return;
     if (ui.run.phase === 'dead') this.showCause(ui);   // the ledger resets when the next attempt starts
-    const sugg = suggestPurchases(ui, this.rate(), 3);
+    // progressive reveal: suggest only what the player can see (stage 0: the three starter stats; no slot before its category)
+    const f = this.ctx.features();
+    const seen = { ...ui, shop: f.chassisAll ? ui.shop : ui.shop.filter((e) => STARTER_IDS.has(e.node)),
+      run: { ...ui.run, attunementSlotsOpen: f.elements ? ui.run.attunementSlotsOpen : 0, hardpointSlotsOpen: f.hardpoints ? ui.run.hardpointSlotsOpen : 0 } };
+    const sugg = suggestPurchases(seen, this.rate(), 3);
     text(this.lead, sugg.length ? `You have ${fmtNum(ui.run.scrap)} Scrap. These could help:` : `You have ${fmtNum(ui.run.scrap)} Scrap.`);
     // Rebuild only when the suggestions change (never under a finger at 10 Hz); ETAs refresh with them.
-    const key = sugg.map((s) => s.kind === 'slot' ? `slot:${s.cat}` : `${s.entry.node}:${s.entry.rank}:${s.entry.affordable}:${s.kind === 'buy' && s.eta !== null ? Math.ceil(s.eta / 5) : ''}`).join(',');
+    const key = `${f.upgradesTab}|` + sugg.map((s) => s.kind === 'slot' ? `slot:${s.cat}` : `${s.entry.node}:${s.entry.rank}:${s.entry.affordable}:${s.kind === 'buy' && s.eta !== null ? Math.ceil(s.eta / 5) : ''}`).join(',');
     if (key === this.key) return;
     this.key = key;
     clear(this.list);
     for (const s of sugg) this.list.appendChild(this.row(s));
-    this.list.appendChild(button('Open upgrades', () => this.reveal('chassis'), { class: 'btn ghost small dc-more' }));
+    if (f.upgradesTab) this.list.appendChild(button('Open upgrades', () => this.reveal('chassis'), { class: 'btn ghost small dc-more' }));
   }
 
   private row(s: Suggestion): HTMLElement {

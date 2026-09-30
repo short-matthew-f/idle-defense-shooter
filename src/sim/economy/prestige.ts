@@ -20,7 +20,7 @@ import type { FrameId, TrialId } from '../core/ids';
 import type { NodeInfo } from '../core/content';
 import { Ev } from '../core/types';
 import { nodeInfo } from '../core/content';
-import { echoesFor, nodeCost } from './curves';
+import { echoesFor, nodeCost, statDepthFor } from './curves';
 import { codexMultiplier } from './codex';
 
 /** Deepest-ever wave that opens each Prestige layer (index = layer − 1). */
@@ -177,8 +177,46 @@ export function progressionCostMul(w: WorldImpl, info: NodeInfo, currency: 'scra
   return 1;
 }
 
-/** Rank cap including Fusion Apex (+1 on Fusions from Ascension II). */
+/** Echoes ever earned: the bank plus everything spent on Prestige nodes (spending never lowers it). */
+export function lifetimeEchoes(meta: MetaState): number {
+  let total = Math.max(0, meta.echoes);
+  const ranks = meta.prestigeRanks;
+  for (const id in ranks) {
+    const info = nodeInfo(id);
+    if (!info || info.group !== 'prestige') continue;
+    const r = ranks[id] | 0;
+    for (let k = 0; k < r; k++) total += nodeCost(info.def, k).cost;
+  }
+  return total;
+}
+
+// Memo for statDepth (shop evaluation calls it once per entry). Keyed by the MetaState object and checked
+// against the only inputs that can change lifetime Echoes, so it is a pure cache (never iterated).
+interface DepthMemo { echoes: number; count: number; rankSum: number; depth: number }
+const depthMemo = new WeakMap<MetaState, DepthMemo>();
+
+/**
+ * Open fraction of every stat node's rank cap (economy/curves.ts statDepthFor): shallow on the first Prestige
+ * (the first wall), deeper with every Echo earned. The UI reads the result through ShopEntry.maxRank.
+ */
+export function statDepth(meta: MetaState): number {
+  let rankSum = 0;
+  for (const id in meta.prestigeRanks) rankSum += meta.prestigeRanks[id] | 0;
+  const m = depthMemo.get(meta);
+  if (m && m.echoes === meta.echoes && m.count === meta.prestigeCount && m.rankSum === rankSum) return m.depth;
+  const depth = statDepthFor(lifetimeEchoes(meta));
+  depthMemo.set(meta, { echoes: meta.echoes, count: meta.prestigeCount, rankSum, depth });
+  return depth;
+}
+
+/** A stat node's rank cap at a given depth (data maxRank × depth, rounded up, at least 1). */
+export function statRankCap(maxRank: number, depth: number): number {
+  return Math.max(1, Math.ceil(maxRank * depth - 1e-9));
+}
+
+/** Rank cap including stat-line depth (tree stat nodes) and Fusion Apex (+1 on Fusions from Ascension II). */
 export function effectiveMaxRank(w: WorldImpl, info: NodeInfo): number {
+  if (info.group === 'tree' && info.def.kind === 'stat') return statRankCap(info.def.maxRank, statDepth(w.meta));
   return info.def.maxRank + (info.group === 'fusion' && w.meta.ascension >= 2 ? 1 : 0);
 }
 
