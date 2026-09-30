@@ -12,7 +12,7 @@ export const ACTIVE = {
     cooldown: 0.6,
     /**
      * The assist never out-fires the gun early: its cooldown is at least 1 / (maxPrimaryShare × the primary's shots/s), so
-     * it adds at most this share of the primary's shots (0.15 → 3.3 s at the base 2 shots/s; the 0.6 s floor from ~11/s).
+     * it adds at most this share of the primary's shots (0.06 → 8.3 s at the base 2 shots/s; the 0.6 s floor from ~28/s).
      */
     maxPrimaryShare: 0.06,
     /** Damage per assist shot as a multiple of the primary's current shot damage (ballistics.damage). */
