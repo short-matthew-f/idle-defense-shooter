@@ -233,7 +233,7 @@ export class ActivePolicy extends Policy {
       return;
     }
     // assist tap when off cooldown (in combat)
-    if (!this.pieces.has('assist') || run.phase !== 'combat' || s.uiState(w).assistCooldown > 0) return;
+    if (!this.pieces.has('assist') || run.phase !== 'combat' || s.assistCooldownLeft > 0) return;
     const e = w.enemies, t = w.tower;
     let i = sim.machine.boss();
     if (i < 0 && t.designated >= 0 && w.alive(t.designated) && e.gen[t.designated] === t.designatedGen) i = t.designated;

@@ -34,7 +34,7 @@ const e = (stat: string, op: StatEffect['op'], perRank: number): StatEffect => (
 
 export const PRESTIGE_NODES: PrestigeNodeDef[] = [
   // --- Prestige I — Inheritance (wave 20): compress mastered content -------
-  node(1, 'seed_capital', 'Seed Capital', 'Start each Prestige with 150 Scrap per rank.', 10, 20, [e('economy.start_scrap', 'add', 150)]),
+  node(1, 'seed_capital', 'Seed Capital', 'Start each Prestige with 400 Scrap per rank.', 10, 20, [e('economy.start_scrap', 'add', 400)]),
   node(1, 'memory_of_steel', 'Memory of Steel', 'Start each Prestige with 1 free rank of Caliber (primary damage) per rank.', 16, 10, [e('prestige.memory_of_steel', 'add', 1)]),
   node(1, 'memory_of_motion', 'Memory of Motion', 'Start each Prestige with 1 free rank of Autoloader (primary attack speed) per rank.', 16, 10, [e('prestige.memory_of_motion', 'add', 1)]),
   // Onboarding pass: a flat ladder, not ×1.5. Rank 1 (×2) is a first-Prestige pick; ×4 / ×8 on solved waves would make

@@ -138,7 +138,7 @@ async function desktop() {
   if (e) { await page.mouse.click(e.sx, e.sy); await page.waitForTimeout(350); }
   const designated = await page.evaluate(() => {
     const s = window.__citadel.app.snapshot; const F = 12; let n = 0;
-    for (let i = 0; i < s.instanceCount; i++) { const o = i * F; if ((s.instances[o + 9] === 5 && s.instances[o + 5] === 1 && Math.abs(s.instances[o + 6] - 0.3) < 1e-3) || (s.instances[o + 9] === 7 && s.instances[o + 11] !== 0)) n++; }
+    for (let i = 0; i < s.instanceCount; i++) { const o = i * F; if ((s.instances[o + 9] === 5 && s.instances[o + 5] === 1 && Math.abs(s.instances[o + 6] - 0.3) < 1e-3) || (s.instances[o + 9] === 7 && s.instances[o + 11] === 1)) n++; }
     return n;
   });
   const cmdAfterTap = await page.evaluate(() => window.__citadel.game.cmdErrors.slice());
@@ -495,7 +495,7 @@ async function reach() {
   await page.waitForTimeout(400);
   const r4 = await rs();
   const chip = ((await page.locator('.desig-chip').textContent()) ?? '').trim();
-  const reticles = await page.evaluate(() => { const s = window.__citadel.app.snapshot; let k = 0; for (let i = 0; i < s.instanceCount; i++) { const o = i * 12; if (s.instances[o + 9] === 7 && s.instances[o + 11] !== 0) k++; } return k; });
+  const reticles = await page.evaluate(() => { const s = window.__citadel.app.snapshot; let k = 0; for (let i = 0; i < s.instanceCount; i++) { const o = i * 12; if (s.instances[o + 9] === 7 && s.instances[o + 11] === 1) k++; } return k; });
   await page.screenshot({ path: `${OUT}/phone-reach-two-designators.png` });
   const cmdErrs = await page.evaluate((n0) => window.__citadel.game.cmdErrors.slice(n0), cmdBefore);
   check('reach: two taps designate two enemies (both reticles, HUD shows 2 designators)', two.length >= 2 && r4.des?.slots === 2 && r4.des?.live === 2 && reticles >= 2 && /2\/2/.test(chip) && cmdErrs.length === 0, { taps: two.length, des: r4.des, reticles, chip, cmdErrs });
@@ -503,10 +503,11 @@ async function reach() {
   const again = await page.evaluate((t) => {
     const c = window.__citadel, s = c.app.snapshot, r = c.app.canvas.getBoundingClientRect();
     let best = null;
-    for (let i = 0; i < s.instanceCount; i++) { const o = i * 12; if (s.instances[o + 9] !== 7 || s.instances[o + 11] === 0) continue; const p = c.app.camera.toScreen(s.instances[o], s.instances[o + 1]); const d = Math.hypot(r.left + p.x - t.sx, r.top + p.y - t.sy); if (!best || d < best.d) best = { d, sx: r.left + p.x, sy: r.top + p.y }; }
+    for (let i = 0; i < s.instanceCount; i++) { const o = i * 12; if (s.instances[o + 9] !== 7 || s.instances[o + 11] !== 1) continue; const p = c.app.camera.toScreen(s.instances[o], s.instances[o + 1]); const d = Math.hypot(r.left + p.x - t.sx, r.top + p.y - t.sy); if (!best || d < best.d) best = { d, sx: r.left + p.x, sy: r.top + p.y }; }
     return best;
   }, two[1]);
   const before = await rs();
+  await page.waitForTimeout(1000);   // a lone re-tap (rapid re-taps are assist taps that keep the designation: app/active-tap.ts)
   if (again) await page.touchscreen.tap(again.sx, again.sy);
   await page.waitForTimeout(300);
   const r5 = await rs();
@@ -516,7 +517,7 @@ async function reach() {
     const c = window.__citadel, s = c.app.snapshot, r = c.app.canvas.getBoundingClientRect();
     const w = c.app.camera.toWorld((t.sx - r.left) * c.app.camera.viewW / r.width, (t.sy - r.top) * c.app.camera.viewH / r.height, { x: 0, y: 0 });
     let n = 0;
-    for (let i = 0; i < s.instanceCount; i++) { const o = i * 12; if (s.instances[o + 9] === 7 && s.instances[o + 11] !== 0 && Math.hypot(s.instances[o] - w.x, s.instances[o + 1] - w.y) < 24) n++; }
+    for (let i = 0; i < s.instanceCount; i++) { const o = i * 12; if (s.instances[o + 9] === 7 && s.instances[o + 11] === 1 && Math.hypot(s.instances[o] - w.x, s.instances[o + 1] - w.y) < 24) n++; }
     return n;
   }, again) : -1;
   check('reach: tapping a designated enemy clears it', !!again && before.des?.live >= 1 && r5.des?.live <= before.des.live - 1 && leftOnTapped === 0, { before: before.des, after: r5.des, leftOnTapped });

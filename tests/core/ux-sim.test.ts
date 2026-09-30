@@ -146,6 +146,7 @@ describe('M2: the wave-100 gate (Deep Waves open at Ascension V)', () => {
   /** Put the run on wave 100 (checkpoint 95) and clear it without fighting. */
   function clearWave100(sim: Sim): void {
     const w = sim.world, run = w.run, m = sim.machine;
+    w.meta.echoes = 1e12;   // an experienced player: the onboarding Frontier (economy/curves.ts) sits past wave 100
     run.checkpoint = 95; run.deepestCleared = 99;
     m.startAttempt(false);
     run.wave = 100;

@@ -490,7 +490,12 @@ export type Command =
    */
   | { type: 'tap_assist'; x: number; y: number }
   | { type: 'collect_salvage'; x: number; y: number }
-  | { type: 'overcharge'; action: 'charge' | 'release' | 'cancel' };
+  | { type: 'overcharge'; action: 'charge' | 'release' | 'cancel';
+      /**
+       * release only: the hold (s) the player saw when letting go (the UI's arc). The sim uses it when it lies within
+       * ACTIVE.overcharge.releaseLatency below its own hold (input / UiState latency), else its own hold; never longer.
+       */
+      hold?: number };
 
 // ---------------------------------------------------------------------------
 // Events (sim → everyone). Every event carries a cause for the kill chain.
@@ -720,6 +725,8 @@ export interface Forecast {
   wallGaugeSeconds: number | null;
   recommended: boolean;
   curve: { seconds: number; rate: number }[];
+  /** Onboarding pass: the Frontier (waves past it are hardened, economy/curves.ts) and where a Prestige now would move it. */
+  frontier?: number; nextFrontier?: number;
 }
 
 export interface DamageShare { bySource: Record<string, number>; total: number; windowSeconds: number }

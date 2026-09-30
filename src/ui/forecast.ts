@@ -27,7 +27,8 @@ function readout(label: string, hint: string): Readout {
 export class ForecastPanel {
   /** Set by the shell while the Prestige screen shows the Forecast. */
   shown = false;
-  private readonly banner = h('div', { class: 'recommend', attrs: { role: 'status' } }, icon('prestige', 'ico'), h('span', { text: 'Prestige recommended: your Echo rate has passed its peak.' }));
+  private readonly bannerText = h('span', { text: 'Prestige recommended: your Echo rate has passed its peak.' });
+  private readonly banner = h('div', { class: 'recommend', attrs: { role: 'status' } }, icon('prestige', 'ico'), this.bannerText);
   private readonly locked = h('p', { class: 'note' });
   private readonly echoesNow = readout('Echoes now', 'Echoes if you Prestige this second');
   private readonly rate = readout('Echo rate', 'Echoes now ÷ hours since this Prestige began');
@@ -69,13 +70,17 @@ export class ForecastPanel {
     if (!this.isOpen) return;
     const f = ui.forecast;
     show(this.banner, !!f?.recommended);
+    // Onboarding pass (docs/BALANCE.md): name the wall. Past the Frontier enemies harden fast; a Prestige moves it.
+    text(this.bannerText, f?.frontier !== undefined && f.nextFrontier !== undefined && ui.run.deepestCleared >= f.frontier - 2
+      ? `Prestige recommended: past wave ${f.frontier} (the Frontier) enemies harden fast. Prestige for ${fmtNum(f.echoesNow)} Echoes and the Frontier moves to wave ${f.nextFrontier}.`
+      : 'Prestige recommended: your Echo rate has passed its peak.');
     const early = ui.run.deepestCleared < 20;
     show(this.locked, !f || early);
     show(this.chartWrap, !!f && f.curve.length > 1);
     const est = echoesFor(ui.run.deepestCleared, ui.run.threatDial);
     text(this.locked, early ? `Echoes are paid from wave 20 on: the Forecast becomes meaningful once you clear wave 20 (deepest this Prestige: ${ui.run.deepestCleared}).` : 'Forecast data is not available yet.');
     text(this.echoesNow.val, fmtNum(f?.echoesNow ?? est));
-    text(this.echoesNow.sub, `Deepest cleared: wave ${ui.run.deepestCleared}`);
+    text(this.echoesNow.sub, `Deepest cleared: wave ${ui.run.deepestCleared}${f?.frontier !== undefined && f.frontier <= 100 ? ` · Frontier: wave ${f.frontier}` : ''}`);
     text(this.rate.val, f ? `${fmtNum(f.echoRate)}/h` : '—');
     text(this.rate.sub, f ? `Peak ${fmtNum(f.peakRate)}/h` : '');
     text(this.next.val, f ? `+${fmtNum(Math.max(0, f.nextBossEchoes - f.echoesNow))}` : '—');

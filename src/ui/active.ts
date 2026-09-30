@@ -7,8 +7,8 @@
  *    itself does the same (app/game.ts → hold()). Hidden until Overcharge unlocks.
  *  - Salvage floaters: "+Scrap" rising from a collected crate (×chain on chains). No toasts.
  *
- * The charge arc animates locally from the press time (the sim counts the hold in real seconds, so the two agree);
- * UiState (≤ 10 Hz) only says whether the meter is ready and how full it is.
+ * The charge arc follows the sim's hold (UiState, ≤ 10 Hz, extrapolated between updates by at most 0.15 s), so on a
+ * slow device where the sim lags the wall clock the button and the in-world ring still agree with what the sim times.
  */
 import '../styles/active.css';
 import { ACTIVE } from '@sim/data/active';
@@ -68,6 +68,9 @@ export class ActiveWidget {
   private raf = 0;
   private ready = false;
   private unlocked = false;
+  /** The sim's hold (s) at the last UiState while charging, and when it arrived: the arc follows the sim, not the wall clock. */
+  private simHold = -1;
+  private simHoldAt = 0;
 
   constructor(private readonly ctx: UiCtx) {
     const s = svg('svg', { viewBox: '0 0 64 64', class: 'oc-ring', 'aria-hidden': 'true' });
@@ -114,7 +117,14 @@ export class ActiveWidget {
     attr(this.btn, 'aria-disabled', oc.ready || this.charging ? 'false' : 'true');
     if (!this.charging) text(this.label, oc.ready ? 'HOLD' : `${Math.floor(f * 100)}%`);
     // the sim may end a charge on its own (auto-release after maxHold, wave end): follow it
+    if (this.charging && oc.charging) { this.simHold = oc.hold; this.simHoldAt = performance.now(); }
     if (this.charging && !oc.charging && performance.now() - this.chargeStart > 400) this.stopAnim();
+  }
+
+  /** The hold (s) the arc shows now: what the player sees when letting go (sent with the release). */
+  heldSeconds(): number {
+    const now = performance.now();
+    return this.simHold >= 0 ? this.simHold + Math.min(0.15, (now - this.simHoldAt) / 1000) : (now - this.chargeStart) / 1000;
   }
 
   /** The tower hold started (true) or ended (false) a charge (app/game.ts sends the commands). */
@@ -128,18 +138,21 @@ export class ActiveWidget {
 
   private end(cancelled: boolean): void {
     if (!this.charging) return;
-    this.ctx.host.send({ type: 'overcharge', action: cancelled ? 'cancel' : 'release' });
+    this.ctx.host.send(cancelled ? { type: 'overcharge', action: 'cancel' } : { type: 'overcharge', action: 'release', hold: this.heldSeconds() });
     this.stopAnim();
   }
 
   private begin(): void {
     this.charging = true;
     this.chargeStart = performance.now();
+    this.simHold = -1;
     this.btn.classList.add('charging');
     arc(this.meter, 0, 1);
     const tick = (): void => {
       if (!this.charging) return;
-      const secs = (performance.now() - this.chargeStart) / 1000;
+      // the sim's hold (UiState, 10 Hz) extrapolated by at most 0.15 s, so a slow device's lagging sim and the arc agree;
+      // before the first UiState of this charge, the time since the press
+      const secs = this.heldSeconds();
       arc(this.charge, 0, secs / O.maxHoldSeconds);
       const zone = holdZone(secs);
       this.btn.dataset.zone = zone;

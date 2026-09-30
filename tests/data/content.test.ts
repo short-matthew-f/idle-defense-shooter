@@ -150,7 +150,7 @@ describe('stats', () => {
       'ballistics.multishot.count': 1, 'ballistics.multishot.penalty': 0.35, 'ballistics.piercing.count': 0,
       'ballistics.piercing.retention': 0.5, 'ballistics.piercing.velocity': 0, 'ballistics.ricochet.bounces': 0,
       'ballistics.ricochet.range': 120, 'ballistics.heavy.size': 1, 'ballistics.heavy.knockback': 0, 'ballistics.heavy.damage': 1,
-      'bastion.max_hp': 100, 'bastion.armor': 0, 'bastion.shield_capacity': 0, 'bastion.shield_recharge': 0,
+      'bastion.max_hp': 150, 'bastion.armor': 0, 'bastion.shield_capacity': 0, 'bastion.shield_recharge': 0,
       'bastion.regeneration': 0, 'bastion.resistance': 0, 'reactor.global_attack_speed': 1, 'reactor.cooldown_reduction': 0,
       'reactor.energy_recycling': 0, 'economy.scrap_mul': 1, 'economy.ce_cap': 100, 'economy.core_drop_chance': 0.02,
       'fire.burn_chance': 0.15, 'lightning.arc_targets': 2, 'ordnance.launchers': 1, 'drones.count': 1, 'blade.length': 140,
@@ -197,8 +197,16 @@ describe('pricing', () => {
     }
   });
 
-  it('Prestige nodes cost Echoes rising ×1.5 per rank', () => {
-    for (const p of PRESTIGE_NODES) expect(p.cost).toMatchObject({ growth: 1.5 });
+  it('Prestige nodes cost Echoes rising ×1.5 per rank (Accelerated Clearing: a rising flat ladder)', () => {
+    for (const p of PRESTIGE_NODES) {
+      // onboarding pass: ×2 is a first-Prestige pick, ×4 / ×8 are late sinks (docs/BALANCE.md)
+      if (p.id === 'prestige.accelerated_clearing') {
+        expect('flat' in p.cost && p.cost.flat.length).toBe(p.maxRank);
+        if ('flat' in p.cost) for (let k = 1; k < p.cost.flat.length; k++) expect(p.cost.flat[k]).toBeGreaterThan(p.cost.flat[k - 1] * 1.5);
+        continue;
+      }
+      expect(p.cost).toMatchObject({ growth: 1.5 });
+    }
   });
 
   it('mechanic flat costs rise ≈×8 per tier within each tree', () => {

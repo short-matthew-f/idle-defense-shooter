@@ -38,6 +38,7 @@ function bossSim(id: BossId, wave: number, seed = 7, hitsToKill = 200): Sim {
   s.override('ballistics.piercing.retention', 1);
   w.rebuildStats();
   w.tower.hp = w.tower.maxHp;
+  w.meta.echoes = 1e12;   // an experienced player: the onboarding Frontier (economy/curves.ts) sits past wave 100
   w.run.wave = wave;
   sim.machine.startWave();
   return sim;

@@ -201,3 +201,101 @@ First-session pacing (Generalist idle, seeds 1–3): 52–56 purchases in the fi
 9. The acceptance chain and Forecast rows are knife-edge: small data changes move run 1's wall by one
    boss and flip Forecast/Push. Single-seed rows (chain, Build health, probes) need more seeds before
    they can gate.
+
+## Onboarding pass (first Prestige at wave ~28) — 2026-09-30
+
+Goal (owner-approved): layer features in progressively and land the **first Prestige at wave ~25–30 after
+~25–40 minutes** of engaged idle play (it was recommended at wave 53–64, and in the build this pass started
+from, at 69 after 2+ hours or never). Early bosses should not take more than ~3 attempts, and stage 0 of the UI
+unlock ladder (`src/ui/progression.ts`: only Damage, Fire Rate and Hull until the wave-5 boss) should give a
+purchase every 20–40 s instead of a flood of tiny buys.
+
+Measured with scratch probes (idle Generalist / Greedy, seeds 1–3, 1.5 sim-h each; a stage-0 agent that only buys
+the three starter lines; a Prestige chain probe using `sim-cli/runner.ts runPrestige`) and the full
+`npm run sim:accept`. "Before" is the build this pass started from (HEAD `54610e4` + other agents' WIP), not the
+first balance pass above: boons and other features had already moved it (Generalist walls 69–79).
+
+### Why a Frontier, not shallower stat lines
+
+The first attempt followed open issue 1 above: stat-rank depth scaled by Prestige progress (P0 lines at 15–25% of
+their authored depth, deepening with lifetime Echoes). It does not give a clean first wall:
+
+- the approach to the wall is gradual (lines exhaust one by one; mechanics, fusions, linkages and infusions keep
+  absorbing Scrap), so waves 20–30 crawl and the Echo-rate peak drifts: depth 0.3 → recommended 24–34 at 57–88 min,
+  depth 0.45 → 34–44 walls, with 7–17 attempts on single bosses;
+- at the depths that wall near 28, the three stage-0 lines hit "Max rank" around wave 8–10 — exactly the wrong
+  lesson for a new player;
+- enemy HP is not what bounds a wave-28 build: waves 29–31 at ×1.35, ×1.8 and even ×2.5 HP per wave were still
+  cleared (percent-of-max-HP effects: Flashpoint caps, burn, Toxic Combustion), so gentler cliffs leak.
+
+So the wall is explicit: **the Frontier**. Enemies on waves past it get `FRONTIER_GROWTH`× HP per wave beyond it
+(every spawn of the wave, boss included; applied by the wave generator's `hpScale`, so Clumps inherit it). It sits at
+wave 28 until the player has earned Echoes, then 10 waves past the depth their **lifetime Echoes** (bank + spent on
+Prestige nodes) are worth: `frontier = max(28, round(20 + log1.2(E/10)) + 10)`. A first Prestige from 28 (42
+Echoes) moves it to 38, a second from 39 to ~49, a third to ~61. Lifetime Echoes only change at a Prestige, so it is
+fixed within a run; spending never moves it; Prestiging early (wave 20: 10 Echoes) only moves it to 30. Trials have
+no Frontier. Waves at or before the Frontier are the tuned game, unchanged.
+
+The Forecast now carries `frontier` / `nextFrontier`, and its banner names the wall at the Frontier: "Prestige
+recommended: past wave 28 (the Frontier) enemies harden fast. Prestige for 42 Echoes and the Frontier moves to
+wave 38." (`src/ui/forecast.ts`, a small change in a UI file.)
+
+### Knobs
+
+| Knob | Before | After | Why | Measured |
+| --- | --- | --- | --- | --- |
+| Frontier (new; `economy/curves.ts` `FRONTIER_FIRST/STEP/GROWTH`, `economy/prestige.ts frontierWave`, `enemies/generator.ts` option `frontier`, passed by `run/machine.ts startWave`) | none | wave 28, +10 past the lifetime-Echo depth, ×3.5 HP per wave past it | a hard, explainable first wall at 28–30 that moves ~10 waves per Prestige (design §3: push 8–15) | ×1.35 / ×1.8 / ×2.5 leaked to 32–37; ×3.5: every Generalist/Greedy run is recommended at 28 (a few clear the ×12 boss at 30 after 13–21 attempts, never enough to move the Echo-rate peak) |
+| `ENEMY_HP_BASE` | 7 | 6 | ~1.2 waves of headroom everywhere; fewer early deaths | with the rows below: wave 20 at 15–17 min (was 40–44) |
+| Tower base max HP (`data/base-stats.ts`) | 100 | 150 | the wave-5 Breaker cost 1–4 attempts with three starter lines; a new player's first boss should be first-try | Breaker 1 attempt on every Generalist/Greedy/stage-0 seed |
+| Caliber / Autoloader / Hull Plating (`data/chassis.ts`) | +8% / +5% / +15 per rank, base 10 / 12 / 10, growth 1.17 / 1.17 / 1.16, authored max 60 | +16% / +10% / +30 per rank, base 20 / 24 / 20, growth 1.19, authored max 30 | "fewer, bigger buys" for stage 0: half the purchases for the same power; the maxed line is unchanged (+240% / +150% / +450 at 15 ranks) | stage 0 (three lines, wave 1 → first boss at ~2 min): buys at 23, 42, 61, 74, 88 s (was 15, 23, 35, 45, 60, 66, 73, 91, 97 s); waves 1–4 need nothing, the three lines alone clear the wave-10 Broodheart at 4.3–4.8 min. Base 30–40 hit 10–12 buys in 5 min but starved the Generalist (it buys the cheapest rank per tree: Caliber 2 at wave 10, Broodheart 11–13 attempts) |
+| Memory of Steel / Motion | 2 free ranks per rank | 1 | ranks are twice as big | — |
+| Breaker hpMul (wave 5) | 1.0 | 0.8 | first boss | 1 attempt, 2.0–2.1 min |
+| Broodheart (wave 10) hpMul / speed | 0.75 / 12 | 0.45 / 8 | deaths came from the boss reaching the tower while the primary shot hatchlings (boss contact 66–79% of tower damage, boss at 100% HP on several deaths); slower approach + less HP | Generalist 3–4 attempts (incl. deaths on waves 6–9), 8–10 min; Greedy 1–4 |
+| Warden (wave 15) hpMul | 2.1 | 0.5 | keep the finale ≥ 1.2× the boss before it (`tests/enemies/data.test.ts`) after the Siege Engine drop | 1 attempt |
+| Siege Engine (wave 20) hpMul / kamikaze adds per phase | 2.7 / 6 | 0.6 / 3 | the tower died 10–25 s into the fight (ram 128 + volleys + a kamikaze burst at the phase change) with the boss at 50–60%; 6–16 attempts. HP 1.6 and 1.0 barely helped; 0.6 halves the fight | Generalist 1–2 attempts, Greedy 1–8 |
+| Iron Maw (wave 25) hpMul | 4.2 | 2.2 | 20→25 took 12–16 min and fired the recommendation at 23–24 | 1 attempt, 2–3 min |
+| Accelerated Clearing prices (`data/prestige.ts AC_PRICES`) | 1,500 × 1.5^rank | flat 10 / 1,500 / 60,000 | ×2 is the first Prestige's headline pick (it is what makes the 25–40% reclimb reachable), ×4 / ×8 are late sinks (each would cut a reclimb to a few % of the run) | reclimb P2 28–36%, P3 26–31% (seeds 1–3) |
+| Seed Capital | 150 Scrap per rank | 400 | a visible head start (a ×2-size Caliber rank costs 30) | — |
+| Seed Capital / Memory timing (`economy/prestige.ts buyPrestige`) | applied at the next Prestige start | also applied at once if bought before the current run has cleared a wave (not in Trials) | Echoes arrive at a Prestige, so the first picks used to do nothing until the Prestige after | chain runs start with them |
+| Layer-I stat prices (Seed Capital 10, Memory 16, Boss Bounty 12, Dividend 20, Resonance 10, Hardened Core 10), Echo formula | — | unchanged | 42 Echoes at D 28 buy 4 picks (Scrap Resonance, Hardened Core, Accelerated Clearing, Seed Capital) | first shop: 4 picks, 2 Echoes left |
+
+Unchanged on purpose: `ENEMY_HP_GROWTH` 1.14, `SCRAP_GROWTH`, `STAT_RANK_SCALE` 0.5, `STAT_BASE_MUL` 1.5 (×2 made
+Warden and Siege Engine 5–7-attempt walls again and pushed the recommendation to 63–80 min), the Echo formula
+(10 · 1.2^(D−20) pays 42 at D 28), first clears ×3, checkpoints, seeded PRNGs and cause ids.
+
+### Early pacing (idle, first Prestige; minutes of play to first clear)
+
+| run | 5 | 10 | 15 | 20 | 25 | 30 | first recommendation | purchases, first 5 min |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Generalist s1 before | 2.0 | 9.3 | 20.0 | 43.8 | 46.5 | 54.2 | wave 69 at 128 min | 36 |
+| Generalist s2 before | 2.1 | 10.1 | 21.0 | 41.3 | 43.9 | 57.6 | never (wall 79) | 38 |
+| Generalist s3 before | 4.3 | 12.1 | 20.3 | 40.2 | 43.1 | 63.1 | wave 69 at 138 min | 29 |
+| Generalist s1 after | 2.0 | 10.4 | 12.6 | 15.1 | 17.6 | 45.7 | **wave 28 at 30 min** | 41 |
+| Generalist s2 after | 2.1 | 10.3 | 12.7 | 17.3 | 19.7 | 50.9 | **wave 28 at 32 min** | 43 |
+| Generalist s3 after | 2.1 | 10.5 | 13.0 | 16.6 | 19.6 | — (wall) | **wave 28 at 35 min** | 42 |
+| Greedy s1–s3 before | 5.8 / 4.1 / 8.2 | 14.1 / 11.5 / 31.4 | 28.1 / 26.8 / 36.0 | 53.2 / 45.7 / 59.4 | 63.7 / 59.6 / 71.1 | 75.6 / 69.8 / 86.5 | 34 at 105 min / 69 / 69 | 18 / 24 / 15 |
+| Greedy s1–s3 after | 2.0 / 2.1 / 2.1 | 9.1 / 4.6 / 10.1 | 11.1 / 6.9 / 12.3 | 13.4 / 16.6 / 27.7 | 15.5 / 20.7 / 29.7 | — | **28 at 29 / 34 / 43 min** | 32 / 50 / 33 |
+
+Attempts per checkpoint after (Generalist s1–s3): 5: 1/1/1 · 10: 4/3/4 (includes deaths on waves 6–9) · 15: 1/1/1 ·
+20: 1/2/2 · 25: 1/1/1; then 13–21 attempts at the Frontier. Greedy: 10: 3/1/4, 20: 1/5/8.
+
+Purchase cadence: the Generalist still buys 41–43 times in 5 min (median gap ~6 s): it buys the cheapest rank in
+every open tree and all Chassis lines open at wave 5. The stage-0 player (three lines) buys 5 times before the
+first boss (~2 min, 19–20 s apart), then 11–14 more in the 3 minutes after it (the first boss pays ×3 first-clear
+Scrap plus its bounty): 16–19 in the first 5 min, median gap 11–17 s. That is the "~8 decisions" target only for
+stage 0; see the follow-ups.
+
+Wave 5 now falls at ~2 min, below the 3–5 min target: waves 1–4 last ~25 s each and nothing kills the tower
+before the first boss. Slowing it would take longer early waves (generator) rather than weaker purchases.
+
+### First Prestige and the chain (idle Generalist, `runPrestige`, Echoes spent cheapest-first)
+
+| seed | P1 | P2 | P3 | P4 |
+| --- | --- | --- | --- | --- |
+| 1 | 28, rec at 30 min, 42 Echoes → 4 picks | 39 (+11), reclimb 33.1% | 51 (+12), reclimb 31.2% | 63 (+12), reclimb 48.6% |
+| 2 | 28 at 42 min | 39 (+11), 28.1% | 51 (+12), 26.0% | 64 (+13), 44.5% |
+| 3 | 28 at 35 min | 39 (+11), 36.1% | 52 (+13), 28.1% | 64 (+12), 42.0% |
+
+Before (first balance pass, `sim-out/tuned`): 53 → 64 → 79, reclimb 29% / 25.3%, 3,400+ Echoes at the first
+Prestige. The P4 reclimb (42–49%) is outside the §3 band but outside the harness (a 3-Prestige chain); it comes from
+P3 walling sharply after ~25 min, so the ratio's denominator is short.

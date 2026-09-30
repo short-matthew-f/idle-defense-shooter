@@ -84,9 +84,9 @@ describe('Prestige', () => {
     expect(cmd(sim, { type: 'buy_prestige', node: 'prestige.memory_of_steel' })).toBeNull();
     expect(cmd(sim, { type: 'buy_prestige', node: 'prestige.frames' })).toMatch(/wave 40/);
     cmd(sim, { type: 'prestige', frame: 'standard' });
-    expect(w.run.scrap).toBe(450);
-    expect(w.build.ranks['ballistics.damage']).toBe(2);
-    expect(w.stats.rank('ballistics.damage')).toBe(2);
+    expect(w.run.scrap).toBe(1200);   // onboarding pass: 400 Scrap per rank; Memory of Steel 1 (chunkier) Caliber rank per rank
+    expect(w.build.ranks['ballistics.damage']).toBe(1);
+    expect(w.stats.rank('ballistics.damage')).toBe(1);
     meta.echoes = 0;
     expect(cmd(sim, { type: 'buy_prestige', node: 'prestige.boss_bounty' })).toMatch(/Echoes/);
   });

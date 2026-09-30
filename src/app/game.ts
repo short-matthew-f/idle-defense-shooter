@@ -321,7 +321,7 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
   app.input.onHoldEnd = (cancelled) => {
     if (!charging) return;
     charging = false;
-    client.send({ type: 'overcharge', action: cancelled ? 'cancel' : 'release' });
+    client.send(cancelled ? { type: 'overcharge', action: 'cancel' } : { type: 'overcharge', action: 'release', hold: ui.active.heldSeconds() });
     ui.active.hold(false);
   };
   app.input.onAimStart = (a) => {

@@ -20,8 +20,8 @@ const DOC_G = 1.18;
 export const BALLISTICS: TreeDef = {
   id: 'ballistics', name: 'Ballistics', category: 'chassis', forkRequirement: 4,
   shared: [
-    stat('ballistics.damage', 'Caliber', '+16% primary damage per rank (base 10 per shot).', 'mul', 0.16, 30, 1.19, 30, 0, { tags: ['damage'] }),
-    stat('ballistics.attack_speed', 'Autoloader', '+10% primary attack speed per rank (base 2 shots/s).', 'mul', 0.1, 36, 1.19, 30, 0, { tags: ['speed'] }),
+    stat('ballistics.damage', 'Caliber', '+16% primary damage per rank (base 10 per shot).', 'mul', 0.16, 20, 1.19, 30, 0, { tags: ['damage'] }),
+    stat('ballistics.attack_speed', 'Autoloader', '+10% primary attack speed per rank (base 2 shots/s).', 'mul', 0.1, 24, 1.19, 30, 0, { tags: ['speed'] }),
     stat('ballistics.range', 'Long Barrel', '+10 primary range per rank (base 300).', 'add', 10, 15, 1.18, 25, 0, { tags: ['range'] }),
     stat('ballistics.projectile_speed', 'Muzzle Velocity', '+6% projectile speed per rank, so shots land before fast targets slip away.', 'mul', 0.06, 8, 1.16, 25),
     stat('ballistics.crit_chance', 'Fire Control', '+1% critical hit chance per rank (base 5%).', 'add', 0.01, 20, 1.19, 35, 0, { tags: ['damage'] }),
@@ -94,7 +94,7 @@ export const BALLISTICS: TreeDef = {
 export const BASTION: TreeDef = {
   id: 'bastion', name: 'Bastion', category: 'chassis', forkRequirement: 3,
   shared: [
-    stat('bastion.max_hp', 'Hull Plating', '+30 max HP per rank (base 150).', 'add', 30, 30, 1.19, 30, 0, { tags: ['defense'] }),
+    stat('bastion.max_hp', 'Hull Plating', '+30 max HP per rank (base 150).', 'add', 30, 20, 1.19, 30, 0, { tags: ['defense'] }),
     stat('bastion.armor', 'Composite Armor', '+2 armor per rank. Each hit is reduced by armor / (100 + armor).', 'add', 2, 15, 1.17, 35, 0, { tags: ['defense'] }),
     stat('bastion.shield_capacity', 'Shield Emitter', '+10 shield capacity per rank. Shields absorb damage before HP.', 'add', 10, 20, 1.17, 35, 0, { tags: ['defense'] }),
     stat('bastion.shield_recharge', 'Capacitor Bank', 'Shields recharge 1 point per second per rank after 3 s without taking damage.', 'add', 1, 20, 1.18, 30, 0, { tags: ['defense'] }),

@@ -10,6 +10,7 @@
  *  reclimbSeconds   0.3 × the previous Prestige's time to reach this checkpoint, else 0.35 × this run's time
  *  wallGaugeSeconds seconds until the cheapest not-yet-owned behavior-changing Scrap unlock is
  *                   affordable at the Scrap income of the last 60 s (null: nothing left / no income)
+ *  frontier         waves past it are hardened (onboarding pass); nextFrontier: where Prestiging now moves it
  *  recommended      the rate has sat ≥15% below its peak for one full checkpoint cycle of PLAY TIME
  *                   (the median time this run's checkpoints took, at least RECOMMEND_MIN_CYCLE s)
  *                   and at least wave 20 is cleared. Measured in time, not cleared waves: at a real
@@ -21,8 +22,8 @@
 import type { Forecast, RunState } from '../core/types';
 import type { WorldImpl } from '../core/world-impl';
 import { TICK_RATE } from '../core/types';
-import { echoesFor } from './curves';
-import { prestigeEchoes } from './prestige';
+import { echoesFor, frontierFor } from './curves';
+import { frontierWave, lifetimeEchoes, prestigeEchoes } from './prestige';
 import { codexMultiplier } from './codex';
 import { buildShop } from './shop';
 
@@ -173,6 +174,8 @@ export function computeForecast(w: WorldImpl): Forecast {
     wallGaugeSeconds: wallGaugeSeconds(w),
     recommended: isRecommended(hist, run.deepestCleared, checkpointCycleSeconds(run)),
     curve,
+    frontier: w.trial ? undefined : frontierWave(meta),
+    nextFrontier: w.trial ? undefined : frontierFor(lifetimeEchoes(meta) + echoesNow),
   };
 }
 

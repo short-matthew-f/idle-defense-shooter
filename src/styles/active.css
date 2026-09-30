@@ -41,9 +41,10 @@ body.shell-rail .oc-wrap { bottom: calc(12px + var(--safe-bottom, 0px)); }
 .btn.oc-btn[aria-disabled="true"] { cursor: default; }
 
 /* salvage floaters: "+1.2K ×2" rising from a collected crate (client px from the camera) */
-.salvage-floaters { position: fixed; inset: 0; pointer-events: none; z-index: 30; overflow: hidden; }
+/* a zero-size anchor (never a full-screen layer: #ui's own rules could give it pointer events and eat taps) */
+.salvage-floaters { position: fixed; left: 0; top: 0; width: 0; height: 0; overflow: visible; pointer-events: none !important; z-index: 30; }
 .salvage-floater {
-  position: absolute; transform: translate(-50%, -100%); white-space: nowrap;
+  position: absolute; pointer-events: none; transform: translate(-50%, -100%); white-space: nowrap;
   font: 800 15px/1 var(--font, system-ui); color: var(--scrap); font-variant-numeric: tabular-nums;
   text-shadow: 0 1px 0 #000, 0 0 6px rgba(0, 0, 0, 0.9);
   animation: salvage-rise 0.95s ease-out forwards;

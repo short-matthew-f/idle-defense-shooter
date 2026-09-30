@@ -2,7 +2,8 @@
  * Economy curves (design §17, ARCHITECTURE "Economy constants"). Every power goes through
  * `growth(g, n)` so results are bit-identical across engines.
  *
- *   EnemyHP(w)      = 7 · 1.14^w · k · 1.6^A · (1 + 0.12·T)   (design start: 10 · 1.13^w; balance pass, docs/BALANCE.md)
+ *   EnemyHP(w)      = 6 · 1.14^w · k · 1.6^A · (1 + 0.12·T)   (design start: 10 · 1.13^w; balance + onboarding passes, docs/BALANCE.md)
+ *                     × FRONTIER_GROWTH^(w − Frontier) past the Frontier (applied by the wave generator, see below)
  *   BossHP(w)       = 12 · EnemyHP(w) · boss.hpMul         (hpMul now rises with the wave, data/bosses.ts)
  *   ScrapPerKill(w) = 1.10^w · k                       (design start 1.11^w; first clear ×3; Strip Mine ×4; Poverty reward ×5)
  *   StatCost(r)     = base · g^r
@@ -75,8 +76,9 @@ export function nodeCost(def: NodeDef, rank: number): { cost: number; currency: 
  * The Frontier (onboarding pass, docs/BALANCE.md): the first Prestige's wall. Enemies on waves past the Frontier get
  * FRONTIER_GROWTH× more HP per wave beyond it (bosses and escorts included), so a run hits a real wall a wave or two
  * past it. The Frontier sits at FRONTIER_FIRST until the player has earned Echoes, then at STEP waves past the depth
- * those lifetime Echoes are worth (`echoDepthWave`): Prestiging from wave 28 moves it to 38, from 38 to 48, and so
- * on. Once it passes the depth a build can reach anyway (~70+) it no longer matters, so the late game is unchanged.
+ * those lifetime Echoes are worth (`echoDepthWave`): Prestiging from wave 28 moves it to 38, from 38 to ~49, and so
+ * on, so every Prestige pushes ~10–13 waves (design §3: 8–15). Waves at or before it are the tuned game, unchanged;
+ * lifetime Echoes (bank + spent) only grow at a Prestige, so the Frontier is fixed within a run.
  */
 export const FRONTIER_FIRST = 28;
 export const FRONTIER_STEP = 10;

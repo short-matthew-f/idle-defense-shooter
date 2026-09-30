@@ -140,8 +140,9 @@ designation toggle); a hold claimed on the tower (`Input.onHoldStart`) charges O
 
 ## Economy constants (design §17) — implement in `economy/curves.ts`
 
-These are the design's starting shapes. The tuned constants (e.g. EnemyHP base 7 and growth 1.14, Scrap
-growth 1.10, 1 CE per ordinary kill) live in `economy/curves.ts` / `world-impl.ts`; `docs/BALANCE.md`
+These are the design's starting shapes. The tuned constants (e.g. EnemyHP base 6 and growth 1.14, Scrap
+growth 1.10, 1 CE per ordinary kill, the Frontier: waves past wave 28 — then ~10 past the depth of the player's
+lifetime Echoes — get ×3.5 HP per wave) live in `economy/curves.ts` / `world-impl.ts`; `docs/BALANCE.md`
 records every change from the values below.
 
 ```

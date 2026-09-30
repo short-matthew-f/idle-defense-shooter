@@ -16,7 +16,7 @@ describe('stat resolver', () => {
     const s = new StatResolver(newBuild(), newMeta());
     expect(s.get('ballistics.damage')).toBe(10);
     expect(s.get('ballistics.attack_speed')).toBe(2);
-    expect(s.get('bastion.max_hp')).toBe(100);
+    expect(s.get('bastion.max_hp')).toBe(150);   // onboarding pass: tower base HP 100 → 150 (docs/BALANCE.md)
     expect(s.get('economy.scrap_mul')).toBe(1);
     expect(s.get('no.such.key')).toBe(0);
   });

@@ -4,7 +4,8 @@
  *
  *  Tap-to-assist   `tap_assist {x, y}` → the next tick, the live enemy nearest (x, y) (reach max(assist.reach,
  *                  radius + assist.pad)) takes a free bonus shot from the tower: damageMul × ballistics.damage, crit
- *                  at ballistics.crit_chance + critBonus (this system's own PRNG). One per `cooldown` s: taps inside
+ *                  at ballistics.crit_chance + critBonus (this system's own PRNG). One per max(`cooldown`, 1 / (maxPrimaryShare ×
+ *                  the primary's shots/s)) s: taps inside
  *                  the cooldown do nothing (no queue, no error). Combat only; not in the Blackout Trial.
  *                  Ev.Assist (src 'assist') is the cause of the Hit (srcTag 'assist', source 'ability').
  *  Salvage         from wave `fromWave`, a kill drops a crate with chance `chance` / `eliteChance` / `bossChance`
@@ -24,7 +25,8 @@
  *                  Energy. `overcharge charge` (meter full, combat) starts a hold; `release` fires a beam along the
  *                  designated enemy (else the nearest, else the aim): every enemy within beamHalfWidth + radius of the
  *                  line takes perfectMul primary shots and staggerSeconds of stagger when the hold is inside
- *                  [perfectFrom, perfectTo] s, else weakMul and weakStaggerSeconds (never a fail state). Hold time is
+ *                  [perfectFrom, perfectTo] s (a release may report the hold the player saw, accepted within releaseLatency
+ *                  below the sim's own hold), else weakMul and weakStaggerSeconds (never a fail state). Hold time is
  *                  counted in real seconds (ticks ÷ speed multiplier). Holding past maxHoldSeconds releases weak;
  *                  `cancel` (or leaving combat) aborts and keeps the meter. Ev.Overcharge is the cause of the Hits.
  *
@@ -71,6 +73,8 @@ export class ActiveSystem implements System {
 
   // assist
   private assistCd = 0;
+  /** Ticks until the next assist shot may fire (0 = ready). */
+  get assistCooldownLeft(): number { return this.assistCd; }
   private tapN = 0; private readonly tapX = new Float64Array(MAX_TAPS); private readonly tapY = new Float64Array(MAX_TAPS);
   private tracerTick = -1_000_000; private tracerX = 0; private tracerY = 0;
 
@@ -95,6 +99,8 @@ export class ActiveSystem implements System {
   /** Hold so far in real-time ticks (sim ticks ÷ speed multiplier). */
   hold = 0;
   private release = false; private cancel = false;
+  /** The hold (s) a release command reported (the player's view), or -1. */
+  private releaseHold = -1;
   private beamTick = -1_000_000; private beamAngle = 0; private beamPerfect = false;
 
   init(w: World): void { this.reset(w); }
@@ -126,8 +132,8 @@ export class ActiveSystem implements System {
         return true;
       case 'overcharge':
         if (cmd.action === 'charge') {
-          if (!this.charging && this.canCharge(w)) { this.charging = true; this.hold = 0; this.release = false; this.cancel = false; }
-        } else if (cmd.action === 'release') { if (this.charging) this.release = true; }
+          if (!this.charging && this.canCharge(w)) { this.charging = true; this.hold = 0; this.release = false; this.cancel = false; this.releaseHold = -1; }
+        } else if (cmd.action === 'release') { if (this.charging) { this.release = true; this.releaseHold = cmd.hold ?? -1; } }
         else if (this.charging) this.cancel = true;
         return true;
       default: return false;
@@ -182,6 +188,13 @@ export class ActiveSystem implements System {
     return best;
   }
 
+  /** Assist cooldown (ticks): the cooldown, or longer while the primary fires slowly (ACTIVE.assist.maxPrimaryShare). */
+  assistCooldownTicks(w: World): number {
+    const s = w.stats;
+    const rate = Math.max(0.01, s.get('ballistics.attack_speed') * s.get('reactor.global_attack_speed'));
+    return Math.max(ASSIST_CD_TICKS, Math.round(TICK_RATE / (A.maxPrimaryShare * rate)));
+  }
+
   private assist(w: World, x: number, y: number): boolean {
     const i = this.enemyNear(w, x, y);
     if (i < 0) return false;
@@ -192,7 +205,7 @@ export class ActiveSystem implements System {
     const cause = w.emit(Ev.Assist, 'assist', i, dmg, ex, ey, -1);
     const h = w.damage(i, dmg, { source: 'ability', srcTag: 'assist', crit, cause, x: ex, y: ey });
     if (h.damage > 0) this.gainMeter(w, A.meterPerTap);
-    this.assistCd = ASSIST_CD_TICKS;
+    this.assistCd = this.assistCooldownTicks(w);
     this.tracerTick = w.tick; this.tracerX = ex; this.tracerY = ey;
     return true;
   }
@@ -285,7 +298,10 @@ export class ActiveSystem implements System {
   }
 
   private fireOvercharge(w: World): void {
-    const seconds = this.hold / TICK_RATE;
+    let seconds = this.hold / TICK_RATE;
+    // the player's view (the UI arc), when it is within the latency allowance below the sim's own hold
+    if (this.release && this.releaseHold >= 0 && this.releaseHold <= seconds && this.releaseHold >= seconds - O.releaseLatency) seconds = this.releaseHold;
+    this.releaseHold = -1;
     const { perfect, mul } = overchargePower(seconds);
     this.charging = false; this.release = false; this.hold = 0; this.meter = 0;
     const e = w.enemies, t = w.tower, s = w.stats;
@@ -295,7 +311,7 @@ export class ActiveSystem implements System {
     const ang = tgt >= 0 ? atan2(e.y[tgt], e.x[tgt]) : t.aimAngle;
     const c = cos(ang), sn = sin(ang);
     const dmg = mul * s.get('ballistics.damage');
-    const cause = w.emit(Ev.Overcharge, 'overcharge', perfect ? 1 : 0, dmg, c * O.beamLength, sn * O.beamLength, -1);
+    const cause = w.emit(Ev.Overcharge, 'overcharge', perfect ? 1 : 0, dmg, c * O.beamLength, sn * O.beamLength, -1, { hold: Math.round(seconds * 100) / 100 });
     const stag = Math.round((perfect ? O.staggerSeconds : O.weakStaggerSeconds) * TICK_RATE);
     for (let i = 0; i < e.count; i++) {
       if (e.flags[i] & INTANGIBLE) continue;
@@ -314,7 +330,7 @@ export class ActiveSystem implements System {
   // -------------------------------------------------------------------------
   uiState(w: World): ActiveUi {
     return {
-      assistCooldown: this.assistCd / TICK_RATE, assistCooldownMax: A.cooldown,
+      assistCooldown: this.assistCd / TICK_RATE, assistCooldownMax: this.assistCooldownTicks(w) / TICK_RATE,
       crates: this.liveCrates(), chain: this.chain, chainMul: chainMultiplier(this.chain > 0 ? this.chain + 1 : 1),
       overcharge: {
         unlocked: overchargeUnlocked(w), meter: this.meter, meterMax: O.meterMax, ready: this.canCharge(w),

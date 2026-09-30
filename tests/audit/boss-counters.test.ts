@@ -21,6 +21,7 @@ function bossSim(id: BossId, wave: number, seed = 13): Sim {
   s.override('bastion.max_hp', 1e12);
   w.rebuildStats();
   w.tower.hp = w.tower.maxHp;
+  w.meta.echoes = 1e12;   // an experienced player: the onboarding Frontier (economy/curves.ts) sits past wave 100
   w.run.wave = wave;
   sim.machine.startWave();
   return sim;

@@ -67,8 +67,32 @@ export function buyPrestige(w: WorldImpl, id: string): string | null {
   if (id === 'prestige.frames') unlockFrames(meta, ['arsenal', 'conductor']);
   w.emit(Ev.Purchase, id, rank + 1, cost, 0, 0, -1);
   w.build.anomalySockets = Math.max(w.build.anomalySockets, socketCount(meta));
+  const start = startBonus(w);
   w.rebuildStats();   // run/prestige.ts reopens slots (Weapon Seed etc.) after this
+  grantStartBonus(w, start);
   return null;
+}
+
+/** The Prestige-start bonuses (run/prestige.ts applyRunStart) as the current stats resolve them. */
+function startBonus(w: WorldImpl): { scrap: number; steel: number; motion: number } {
+  const s = w.stats;
+  return { scrap: Math.max(0, Math.floor(s.get('economy.start_scrap'))), steel: Math.floor(s.get('prestige.memory_of_steel') + 1e-9),
+    motion: Math.floor(s.get('prestige.memory_of_motion') + 1e-9) };
+}
+
+/**
+ * Onboarding pass: Echoes are spent right after a Prestige, so Seed Capital and Memory of Steel / Motion bought
+ * before this run has cleared its first wave also apply to it (the difference, once); later they wait for the
+ * next Prestige start as before. Trials never get them.
+ */
+function grantStartBonus(w: WorldImpl, before: { scrap: number; steel: number; motion: number }): void {
+  if (w.trial || w.run.deepestCleared > 0) return;
+  const after = startBonus(w), b = w.build;
+  if (after.scrap > before.scrap) w.run.scrap += after.scrap - before.scrap;
+  let changed = false;
+  if (after.steel > before.steel && (b.ranks['ballistics.damage'] | 0) < after.steel) { b.ranks['ballistics.damage'] = after.steel; changed = true; }
+  if (after.motion > before.motion && (b.ranks['ballistics.attack_speed'] | 0) < after.motion) { b.ranks['ballistics.attack_speed'] = after.motion; changed = true; }
+  if (changed) w.rebuildStats();
 }
 
 export function unlockFrames(meta: MetaState, frames: FrameId[]): void {

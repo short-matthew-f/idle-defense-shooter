@@ -57,13 +57,23 @@ describe('tap-to-assist', () => {
   });
   it('cooldown: spamming inside it gives nothing extra', () => {
     const sim = assistArena();
+    // a fast primary (silenced by range 0): the plain cooldown applies
+    sim.world.stats.override('ballistics.attack_speed', 40); sim.world.stats.override('ballistics.range', 0); sim.world.rebuildStats();
     dummy(sim, 150, 0);
     const cdTicks = Math.round(A.cooldown * TICK_RATE);
+    expect(act(sim).assistCooldownTicks(sim.world)).toBe(cdTicks);
     for (let t = 0; t < cdTicks * 3; t++) { cmd(sim, { type: 'tap_assist', x: 150, y: 0 }); tick(sim); }   // 60 taps/s
     expect(events(sim, Ev.Assist)).toHaveLength(3);
     const ticks = events(sim, Ev.Assist).map((e) => e.tick);
     expect(ticks[1] - ticks[0]).toBe(cdTicks);
     expect(act(sim).uiState(sim.world).assistCooldown).toBeGreaterThan(0);
+  });
+  it('the assist never out-fires a slow primary: cooldown ≥ 1 / (maxPrimaryShare × shots/s)', () => {
+    const sim = assistArena();
+    sim.world.stats.override('ballistics.attack_speed', 2); sim.world.stats.override('ballistics.range', 0); sim.world.rebuildStats();
+    const t = act(sim).assistCooldownTicks(sim.world);
+    expect(t).toBe(Math.round(TICK_RATE / (A.maxPrimaryShare * 2)));
+    expect(t).toBeGreaterThan(Math.round(A.cooldown * TICK_RATE));
   });
   it('only in combat, never under Blackout', () => {
     const sim = assistArena();
@@ -96,7 +106,7 @@ describe('salvage', () => {
   it('drops come from the system\'s own seeded stream: same seed same drops, the combat PRNG untouched', () => {
     const run = (seed: number): Sim => {
       const sim = arena(seed); sim.world.run.wave = 4;
-      for (let r = 0; r < 12; r++) { killMany(sim, 20); tick(sim, S.lifeSeconds * TICK_RATE + 1); }
+      for (let r = 0; r < 40; r++) { killMany(sim, 20); tick(sim, S.lifeSeconds * TICK_RATE + 1); }
       return sim;
     };
     const a = run(5), b = run(5), c = run(6);
@@ -112,7 +122,7 @@ describe('salvage', () => {
   });
   it('a crate is worth valueMin..valueMax × its kill\'s Scrap; the drop names the Kill as its cause', () => {
     const sim = arena(7); sim.world.run.wave = 4;
-    for (let r = 0; r < 20 && events(sim, Ev.SalvageDrop).length === 0; r++) killMany(sim, 10);
+    for (let r = 0; r < 200 && events(sim, Ev.SalvageDrop).length === 0; r++) killMany(sim, 10);
     const d = events(sim, Ev.SalvageDrop)[0];
     const kill = sim.world.events.byId(d.cause)!;
     expect(kill.type).toBe(Ev.Kill);
@@ -122,7 +132,7 @@ describe('salvage', () => {
   });
   it('live crates are capped at maxLive', () => {
     const sim = arena(9); sim.world.run.wave = 4;
-    killMany(sim, 120, true);   // elites: eliteChance each
+    killMany(sim, 600, true);   // elites: eliteChance each
     expect(act(sim).liveCrates()).toBe(S.maxLive);
     expect(events(sim, Ev.SalvageDrop)).toHaveLength(S.maxLive);
   });
@@ -250,6 +260,20 @@ describe('overcharge', () => {
     expect(act(c).charging).toBe(false);
     expect(act(c).meter).toBe(O.meterMax);
     expect(events(c, Ev.Overcharge)).toHaveLength(0);
+  });
+  it('a release may report the hold the player saw (input latency), within releaseLatency below the sim hold, never longer', () => {
+    const run = (simTicks: number, seen: number): number => {
+      const sim = ocArena(); dummy(sim, 150, 0);
+      act(sim).meter = O.meterMax;
+      cmd(sim, { type: 'overcharge', action: 'charge' }); tick(sim, simTicks);
+      cmd(sim, { type: 'overcharge', action: 'release', hold: seen }); tick(sim);
+      return events(sim, Ev.Overcharge)[0].a;
+    };
+    const late = Math.round((O.perfectTo + 0.15) * TICK_RATE);                  // the sim is past the window...
+    expect(run(late, O.perfectTo - 0.05)).toBe(1);                              // ...the player let go inside it: perfect
+    expect(run(late, O.perfectTo - O.releaseLatency - 0.2)).toBe(0);            // too far below the sim's hold: ignored
+    expect(run(Math.round(0.3 * TICK_RATE), O.perfectFrom + 0.1)).toBe(0);      // cannot claim more than the sim held
+    expect(validateCommand({ type: 'overcharge', action: 'release', hold: Number.NaN })).toMatch(/Malformed/);
   });
   it('the window is real time: at ×2 speed a hold counts half per sim tick', () => {
     const sim = ocArena(); dummy(sim, 150, 0);

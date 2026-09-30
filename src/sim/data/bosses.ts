@@ -75,7 +75,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'broodheart', name: 'Broodheart', wave: 10, tests: 'Area damage vs spawning swarms',
-    hpMul: 0.6, radius: 38, speed: 8, armor: 0, shieldMul: 0,
+    hpMul: 0.45, radius: 38, speed: 8, armor: 0, shieldMul: 0,
     phases: [
       { hpFraction: 1, name: 'Gestation', attacks: ['brood_sac', 'spawn_brood'] },
       { hpFraction: 0.5, name: 'Hatching', attacks: ['brood_sac', 'spawn_brood', 'acid_spit'], weakPoint: WP(0, 30) },
@@ -87,7 +87,7 @@ export const BOSSES: BossDef[] = [
   },
   {
     id: 'warden', name: 'The Warden', wave: 15, tests: 'Target priority and shields',
-    hpMul: 1.8, radius: 36, speed: 14, armor: 15, shieldMul: 0.5,
+    hpMul: 0.5, radius: 36, speed: 14, armor: 15, shieldMul: 0.5,
     phases: [
       { hpFraction: 1, name: 'Bulwark', attacks: ['shield_links', 'shield_pulse'] },
       { hpFraction: 0.5, name: 'Last Stand', attacks: ['shield_links', 'summon_guards', 'shield_pulse'], weakPoint: WP(PI, 28) },
@@ -105,7 +105,7 @@ export const BOSSES: BossDef[] = [
       { hpFraction: 0.66, name: 'Deploy', attacks: ['ram_charge', 'deploy_turrets', 'siege_volley'], weakPoint: WP(0, 34) },
       { hpFraction: 0.33, name: 'Breach', attacks: ['ram_charge', 'armor_shed', 'siege_volley'], weakPoint: WP(PI, 30, 5) },
     ],
-    tell: { name: 'Ram charge', counter: 'time_field', windowSeconds: 1.5, everySeconds: 20, desc: 'Backs up and lowers the ram; Time Field stalls it, exposing its core.' },
+    tell: { name: 'Ram charge', counter: 'time_field', windowSeconds: 1.5, everySeconds: 12, desc: 'Backs up and lowers the ram; Time Field stalls it, exposing its core.' },
     adds: [{ kind: 'brute', perPhase: 2 }, { kind: 'kamikaze', perPhase: 3 }],
     shape: Shape.Capsule, color: [1.00, 0.46, 0.16],
     desc: 'A rolling fortress with guns, rams and escorts. The Outskirts finale.',

@@ -69,7 +69,7 @@ export function validateCommand(cmd: unknown): string | null {
     case 'delete_blueprint': return int(c.index) ? null : bad('index');
     // Active edge (systems/active.ts)
     case 'tap_assist': case 'collect_salvage': return fin(c.x) && fin(c.y) ? null : bad('x/y');
-    case 'overcharge': return c.action === 'charge' || c.action === 'release' || c.action === 'cancel' ? null : bad('action');
+    case 'overcharge': return !(c.action === 'charge' || c.action === 'release' || c.action === 'cancel') ? bad('action') : optFin(c.hold) ? null : bad('hold');
     case 'set_threat_dial': return fin(c.level) ? null : bad('level');
     case 'offline_return': return fin(c.elapsedSeconds) && (c.elapsedSeconds as number) >= 0 ? null : bad('elapsedSeconds');
     // Boons: player-only. A command claiming to come from a Directive / Autocast is rejected outright.
