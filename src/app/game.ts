@@ -128,7 +128,7 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
       resetPrefs();
       location.reload();
     },
-    setInsets: (t, r, b, l) => { app.camera.setInsets(t, r, b, l); },
+    setInsets: (t, r, b, l, bias) => { app.camera.setInsets(t, r, b, l, bias); },
     setRenderPaused: (p) => { app.renderPaused = p; audio.director.setScreen(p ? 'other' : 'battle'); },
     canInstall,
     install: promptInstall,

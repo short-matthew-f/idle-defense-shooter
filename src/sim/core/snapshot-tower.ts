@@ -30,6 +30,8 @@ export class TowerView {
   dronesOut = 0;
   /** Boons active this attempt (a slow orbit of gold pips, one per boon). */
   boons = 0;
+  /** The primary's range in world units; 0 draws no ring. */
+  range = 0;
 }
 
 const R = TOWER_RADIUS;
@@ -58,6 +60,8 @@ export function writeTowerBase(out: ArtWriter, v: TowerView): number {
   const t = v.tick, deep = v.deepest;
   const c = HULL[v.frame] ?? HULL.standard;
   const dr = c[0] * 0.32, dg = c[1] * 0.32, db = c[2] * 0.36;
+  // ---- primary range: a thin cool ring at the edge of what the gun can reach
+  if (v.range > 0) put(out, 0, 0, v.range, 0, Shape.Ring, 0.45, 0.85, 1, 0.3, 0, 0.011);
   // ---- ornament under the hull (grows with depth)
   if (deep >= 5) put(out, 0, 0, R * 1.95, 0, Shape.Ring, c[0], c[1], c[2], 0.22, 0, 0.03);
   if (deep >= 20) for (let k = 0; k < 6; k++) { const a = k * (TAU / 6) + PI / 6; put(out, cos(a) * R * 2.2, sin(a) * R * 2.2, 3, a, Shape.Diamond, c[0], c[1], c[2], 0.55); }

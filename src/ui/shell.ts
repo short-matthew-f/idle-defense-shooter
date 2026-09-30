@@ -22,7 +22,7 @@ import '../styles/shell.css';
 import type { UiState } from '@sim/core/types';
 import { button, h, text, attr, show } from './dom';
 import { icon } from './icons';
-import { BATTLE, NavModel, PANEL_WIDTH, RAIL_WIDTH, TABS, battleInsets, readNavState, shellLayout, tabBadges, tabReachable, tabsShown, writeNavState, type NavOp, type NavState, type ShellLayout, type TabId } from './shell-logic';
+import { BATTLE, NavModel, PANEL_WIDTH, DOCK_GAP, PHONE_ARENA_BIAS, STARTER_CONTENT, RAIL_WIDTH, TABS, battleInsets, readNavState, shellLayout, tabBadges, tabReachable, tabsShown, writeNavState, type NavOp, type NavState, type ShellLayout, type TabId } from './shell-logic';
 import { features as featuresOf, type Features } from './progression';
 import { anyModalOpen } from './modal';
 import { prefs, setPref } from './prefs';
@@ -277,14 +277,36 @@ export class Shell {
     const railW = layout === 'rail' ? Math.ceil(bar.width) : 0;
     const ab = this.parts.abilities.getBoundingClientRect();
     const abilities = layout === 'desktop' ? (ab.height ? Math.ceil(ab.height) + 24 : 0) : layout === 'rail' ? (ab.width ? Math.ceil(ab.width) + 16 : 0) : 0;
-    const i = battleInsets(layout, { top: topH, tabBar: tabH, rail: railW, abilities, panel: layout === 'desktop' && this.deskOpen ? PANEL_WIDTH : 0 });
-    this.host.setInsets(i.top, i.right, i.bottom, i.left);
+    const dock = layout === 'phone' ? this.dockPx(tabH) : 0;
+    this.lastDock = dock;
+    const i = battleInsets(layout, { top: topH, tabBar: tabH, rail: railW, abilities, panel: layout === 'desktop' && this.deskOpen ? PANEL_WIDTH : 0, dock });
+    this.host.setInsets(i.top, i.right, i.bottom, i.left, layout === 'phone' ? PHONE_ARENA_BIAS : 0.5);
     this.onLayout?.();
+  }
+
+  /** Dock height seen by the last relayout (the arena refits when the floating controls grow or shrink). */
+  private lastDock = 0;
+
+  /**
+   * Phone: how far up from the bottom of the canvas the controls floating over the arena reach (beyond the tab bar): the
+   * first-session Upgrade button and hint, else the ability row. The arena is fitted above it so nothing sits on it.
+   */
+  private dockPx(tabH: number): number {
+    const vh = window.innerHeight;
+    const st = this.parts.battle.querySelector<HTMLElement>('.starter');
+    if (st && !st.hidden) {
+      const r = st.getBoundingClientRect();
+      if (r.height > 0) return Math.max(0, Math.ceil(vh - r.bottom + STARTER_CONTENT + DOCK_GAP - tabH));
+    }
+    const ab = this.parts.abilities.getBoundingClientRect();
+    if (ab.height > 0 && !this.parts.abilities.hidden) return Math.max(0, Math.ceil(vh - ab.top - tabH + DOCK_GAP));
+    return 0;
   }
 
   /** Badges and the status strip (10 Hz). */
   update(ui: UiState): void {
     this.parts.strip.update(ui);
+    if (this.layout === 'phone' && this.view.tab === 'battle' && Math.abs(this.dockPx(Math.ceil(this.tabbar.getBoundingClientRect().height) * (this.feats.tabbar ? 1 : 0)) - this.lastDock) > 2) this.relayout();
     const shown = tabsShown(this.feats), visited = new Set(prefs().tabsVisited);
     const fresh = new Set(TABS.filter((t) => t.id !== 'battle' && shown[t.id] && !visited.has(t.id)).map((t) => t.id));
     const badges = tabBadges(ui, fresh);

@@ -44,11 +44,18 @@ export interface Insets { top: number; right: number; bottom: number; left: numb
  *   top: top bar height (incl. safe area) · tabBar: tab bar height (incl. safe area) on phones
  *   rail: rail width on landscape phones · abilities: height of the ability row (desktop) or width of the ability column (rail)
  */
-export function battleInsets(layout: ShellLayout, m: { top: number; tabBar: number; rail: number; abilities: number; panel: number }): Insets {
+export function battleInsets(layout: ShellLayout, m: { top: number; tabBar: number; rail: number; abilities: number; panel: number; dock?: number }): Insets {
   if (layout === 'desktop') return { top: m.top, right: m.panel, bottom: m.abilities, left: 0 };
   if (layout === 'rail') return { top: m.top, right: 0, bottom: 0, left: m.rail + m.abilities };
-  return { top: m.top, right: 0, bottom: m.tabBar, left: 0 };
+  return { top: m.top, right: 0, bottom: m.tabBar + (m.dock ?? 0), left: 0 };
 }
+
+/** Phone: the arena rides above the middle of the spare room (see Camera.vBias). */
+export const PHONE_ARENA_BIAS = 0.3;
+/** Phone: height of the first-session Upgrade button plus its hint line (px); the room under the arena is this plus the gap below it. */
+export const STARTER_CONTENT = 104;
+/** Phone: breathing room kept between the arena and the controls floating over its lower edge (px). */
+export const DOCK_GAP = 8;
 
 // ---------------------------------------------------------------- badges
 

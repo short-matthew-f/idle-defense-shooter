@@ -36,6 +36,11 @@ export class Camera {
   insetRight = 0;
   insetBottom = 0;
   insetLeft = 0;
+  /**
+   * Where the arena sits in spare vertical room (0 = top, 0.5 = centred, 1 = bottom). Phones use < 0.5 so the arena
+   * rides high, clear of the controls that float over its lower edge. Only acts when the view is taller than the arena.
+   */
+  vBias = 0.5;
 
   /**
    * Zoom kick of the frame on screen (fraction of `scale`, Juice.punch). The renderer sets it when it draws,
@@ -62,12 +67,14 @@ export class Camera {
     const availH = Math.max(1, this.viewH - this.insetTop - this.insetBottom);
     this.baseScale = Math.min(availW, availH) / (2 * arenaRadius * FIT_MARGIN);
     this.centerPx = this.insetLeft + availW * 0.5;
-    this.centerPy = this.insetTop + availH * 0.5;
+    const diameter = 2 * arenaRadius * FIT_MARGIN * this.baseScale;
+    this.centerPy = this.insetTop + Math.max(0, availH - diameter) * this.vBias + Math.min(availH, diameter) * 0.5;
     this.clampPan();
   }
 
-  setInsets(top: number, right: number, bottom: number, left: number): void {
+  setInsets(top: number, right: number, bottom: number, left: number, vBias = 0.5): void {
     this.insetTop = top; this.insetRight = right; this.insetBottom = bottom; this.insetLeft = left;
+    this.vBias = vBias < 0 ? 0 : vBias > 1 ? 1 : vBias;
     this.fit(this.arenaRadius, this.viewW, this.viewH);
   }
 

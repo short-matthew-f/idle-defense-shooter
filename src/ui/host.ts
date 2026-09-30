@@ -42,7 +42,7 @@ export interface UiHost {
   importSave(text: string): Promise<void>;
   hardReset(): Promise<void>;
   /** Screen space the UI covers (px), so the camera keeps the arena clear. */
-  setInsets(top: number, right: number, bottom: number, left: number): void;
+  setInsets(top: number, right: number, bottom: number, left: number, vBias?: number): void;
   /** Stop / resume drawing the arena while a full-screen tab covers it (the sim keeps running). */
   setRenderPaused(paused: boolean): void;
   canInstall(): boolean;

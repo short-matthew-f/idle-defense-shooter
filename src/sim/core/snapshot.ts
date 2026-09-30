@@ -169,6 +169,7 @@ export function writeScene(w: WorldImpl, out: SnapshotWriter, fromEvent: number,
   tv.tempHp = t.tempHp > 0; tv.aim = t.aimAngle; tv.firing = out.firing; tv.tick = tick;
   tv.dronesOut = w.shared.droneCount;
   tv.boons = w.build.boons ? w.build.boons.length : 0;
+  tv.range = Math.min(ARENA_RADIUS, w.stats.get('ballistics.range'));
   writeTowerBase(out, tv);
   // layer 1: hazards
   for (const h of w.hazards) {

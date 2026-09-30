@@ -42,6 +42,19 @@ describe('Camera.fit', () => {
     expect(c.toScreen(0, R).y).toBeLessThanOrEqual(844 - 300 + 1);
   });
 
+  it('rides high with a vertical bias and never leaves the available box', () => {
+    const c = new Camera();
+    c.setInsets(100, 0, 150, 0, 0.3);
+    c.fit(R, 390, 844);
+    const avail = 844 - 100 - 150;
+    const diameter = 390;   // width-bound on a phone
+    expect(c.toScreen(0, 0).y).toBeCloseTo(100 + (avail - diameter) * 0.3 + diameter / 2, 6);
+    expect(c.toScreen(0, -R).y).toBeGreaterThanOrEqual(100);
+    expect(c.toScreen(0, R).y).toBeLessThanOrEqual(844 - 150 + 1);
+    c.setInsets(100, 0, 150, 0, 7);   // out of range clamps to the bottom
+    expect(c.vBias).toBe(1);
+  });
+
   it('survives degenerate sizes', () => {
     const c = new Camera();
     c.fit(R, 0, 0);
