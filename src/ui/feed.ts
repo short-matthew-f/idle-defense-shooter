@@ -7,6 +7,7 @@ import { Ev, type SimEvent, type UiState } from '@sim/core/types';
 import { h } from './dom';
 import { icon } from './icons';
 import { titleCase } from './format';
+import { boonName } from './boons';
 import type { ToastKind } from './ctx';
 
 const ICON: Record<ToastKind, string> = { info: 'info', good: 'check', warn: 'info', core: 'cores', codex: 'codex' };
@@ -32,7 +33,7 @@ export class Feed {
       if (e.type === Ev.Checkpoint) this.toast(`Checkpoint: wave ${e.a} cleared`, 'good');
       else if (e.type === Ev.CoreDrop) cores += e.a || 1;
       else if (e.type === Ev.CounterScored) this.toast('Counter! Weak point open', 'good');
-      else if (e.type === Ev.Codex) this.toast(`Codex: ${titleCase(e.src)}`, 'codex');
+      else if (e.type === Ev.Codex) this.toast(`Codex: ${e.src.startsWith('boon.') ? `${boonName(e.src)} (boon)` : titleCase(e.src)}`, 'codex');
       else if (e.type === Ev.BossKilled) this.toast('Boss destroyed', 'good');
       else if (e.type === Ev.Prestige) this.toast('Prestige complete: a new machine begins', 'good');
       else if (e.type === Ev.Ascend) this.toast('Ascension complete', 'good');

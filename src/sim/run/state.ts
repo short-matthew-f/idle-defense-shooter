@@ -25,7 +25,7 @@ export const DEFAULT_ABILITIES: readonly AbilityId[] = ['repulsor_pulse', 'hunte
 export function newBuild(frame: FrameId = 'standard'): BuildState {
   return {
     frame, hardpoints: [], attunements: [], doctrines: {}, secondDoctrines: {}, ranks: {},
-    anomalies: [], anomalySockets: 3, targeting: {}, abilities: [...DEFAULT_ABILITIES],
+    anomalies: [], anomalySockets: 3, targeting: {}, abilities: [...DEFAULT_ABILITIES], boons: [],
   };
 }
 
@@ -37,6 +37,7 @@ export function newRun(prestigeSeed: number): RunState {
     threatDial: 0, attempts: 0, attemptsPerCheckpoint: [], prestigeStartedAt: 0, playSeconds: 0, echoRateHistory: [],
     pendingDraft: null, draftWave: 0, draftQueue: [], anomaliesOfferedAt: new Uint8Array(32), hardpointSlotsOpen: 0, attunementSlotsOpen: 0,
     speedMultiplier: 1, patrolScrapPerSecond: 0, longestChain: 0, spentByTree: {}, attemptDamageTaken: {},
+    boonOffer: null, boonOfferWave: 0, boonOfferKind: 'start', boonOfferSeq: 0, boonRerolls: 0, boonQueue: [], boonsSeenFirst: false, boonSpent: [],
   };
 }
 

@@ -117,3 +117,21 @@ export type TrialId =
 export type LinkageId = string;
 /** Node ids are `${tree}.${node}` for tree nodes, `link.${a}+${b}`, `infuse.${system}.${element}`, `fusion.${id}`, `ability.${id}`, `prestige.${id}` ... */
 export type NodeId = string;
+
+/**
+ * Boons (attempt-scoped rewards, data/boons.ts): picked at the start of a retry and after each boss's
+ * first clear, cleared when the attempt ends. Categories: stat surges, behavior twists, trades, wild cards.
+ */
+export type BoonCategory = 'surge' | 'twist' | 'trade' | 'wild';
+export type BoonRarity = 'common' | 'rare';
+export type BoonId =
+  // stat surges
+  | 'overcharge' | 'hair_trigger' | 'long_sight' | 'thick_plating' | 'ablative_shell' | 'second_wind'
+  | 'scrap_magnet' | 'quick_hands' | 'deep_reserves' | 'lucky_streak' | 'heavy_hits' | 'iron_skin'
+  // behavior twists
+  | 'encore' | 'forked_arc' | 'ricochet_rounds' | 'volatile_kills' | 'static_field' | 'frostbite'
+  | 'wildfire_seed' | 'toxic_bloom' | 'rally_drones' | 'sharpened_edge' | 'focus_beam' | 'anchor_well'
+  // trades
+  | 'glass_hour' | 'berserk' | 'miser' | 'reckless' | 'bulwark' | 'slow_and_sure' | 'overclocked' | 'hunters_gambit'
+  // wild cards
+  | 'stopwatch' | 'second_chance' | 'windfall' | 'trophy_hunter';

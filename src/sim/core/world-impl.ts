@@ -82,7 +82,11 @@ export class WorldImpl implements World {
   dynamicSpeedMul = 1;
   /** WP9: commands queued from inside the sim; Sim.step dispatches them at the start of the next tick. */
   pendingCommands: Command[] = [];
-  enqueueCommand(cmd: Command): void { this.pendingCommands.push(cmd); }
+  enqueueCommand(cmd: Command): void {
+    const t = (cmd as { type?: unknown } | null)?.type;
+    if (t === 'pick_boon' || t === 'reroll_boon' || t === 'decline_boon') return;   // Boons are player-only (run/boons.ts)
+    this.pendingCommands.push(cmd);
+  }
 
   /** WP5: live boss tell (enemies/bosses.ts writes it; ui-state reads it). */
   bossTell: World['bossTell'] = { ability: null, ticksLeft: 0, bossIndex: -1 };
@@ -99,7 +103,11 @@ export class WorldImpl implements World {
   /** WP8: the Trial being played (meta.activeTrial), or null. */
   get trial(): TrialId | null { return this.meta.activeTrial ?? null; }
   /** WP8: progression signals (systems/anomalies.ts writes them). */
-  signals: ProgressionSignals = { bladeDir: 1, ghostEdges: 0, laserNodeMul: 1 };
+  signals: ProgressionSignals = { bladeDir: 1, ghostEdges: 0, laserNodeMul: 1, droneRateMul: 1, wellLifeMul: 1 };
+  /** Boons: last-chance hook (see World.deathGuard). */
+  deathGuard: World['deathGuard'] = null;
+  /** Boons: bastion.damage_taken_mul, cached per rebuild (Overclocked). */
+  private damageTakenMul = 1;
   private hookDmg: System[] = [];
   /** WP2: element trees own the burn/poison/chill caps while attuned (cached per rebuild; 0 = use STATUS_CAPS). */
   private elemCap: Record<string, number> = { burn: 0, poison: 0, chill: 0 };
@@ -144,7 +152,8 @@ export class WorldImpl implements World {
     if (t.maxHp > 0 && maxHp > t.maxHp && t.hp > 0) t.hp += maxHp - t.maxHp;   // buying max HP heals the difference
     t.maxHp = maxHp;
     if (t.hp > maxHp) t.hp = maxHp;
-    t.maxShield = Math.max(0, s.get('bastion.shield_capacity'));
+    t.maxShield = Math.max(0, s.get('bastion.shield_capacity') + s.get('bastion.shield_hp_frac') * maxHp);   // Boons: Ablative Shell
+    this.damageTakenMul = Math.max(0, s.get('bastion.damage_taken_mul'));                                    // Boons: Overclocked
     if (t.shield > t.maxShield) t.shield = t.maxShield;
     t.ceCap = Math.max(0, s.get('economy.ce_cap'));
     if (t.ce > t.ceCap) t.ce = t.ceCap;
@@ -542,7 +551,7 @@ export class WorldImpl implements World {
     if (t.invulnT > 0) return;
     const armor = this.stats.get('bastion.armor') * this.towerArmorMul;   // WP2: Reactive Armor
     const res = Math.min(0.9, Math.max(0, this.stats.get('bastion.resistance')));
-    let dmg = amount * (armor > 0 ? 100 / (100 + armor) : 1) * (1 - res);
+    let dmg = amount * (armor > 0 ? 100 / (100 + armor) : 1) * (1 - res) * this.damageTakenMul;
     const total = dmg;
     if (t.barrier > 0) {
       const a = Math.min(t.barrier, dmg); t.barrier -= a; dmg -= a;
@@ -568,7 +577,10 @@ export class WorldImpl implements World {
       if (!t.secondCoreUsed && this.stats.has('bastion.second_core')) {
         t.hp = 1; t.invulnT = 3 * TICK_RATE; t.secondCoreUsed = true;
         this.emit(Ev.SecondCore, 'bastion', 0, 0, 0, 0, id);
-      } else { t.hp = 0; this.noteKiller(enemy, live, src, source); }
+      } else {
+        const inv = this.deathGuard !== null ? this.deathGuard(id) : 0;   // Boons: Second Chance
+        if (inv > 0) { t.hp = 1; t.invulnT = inv; } else { t.hp = 0; this.noteKiller(enemy, live, src, source); }
+      }
     }
   }
   /**

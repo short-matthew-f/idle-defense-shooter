@@ -47,10 +47,14 @@ export class TowerSystem implements System {
   }
 }
 
-/** +25% max HP between waves (none with the Tithe anomaly); shields refill. */
+/**
+ * Heal `bastion.between_wave_heal` × max HP between waves (base BETWEEN_WAVE_HEAL = 25%; Boons: Second Wind
+ * adds, Glass Hour halves; none with the Tithe anomaly); shields refill.
+ */
 export function betweenWaveHeal(w: WorldImpl): void {
   const t = w.tower;
   if (t.hp <= 0) return;
-  if (!w.stats.hasAnomaly('tithe')) w.healTower(t.maxHp * BETWEEN_WAVE_HEAL, -1);
+  const f = Math.max(0, w.stats.get('bastion.between_wave_heal') ?? BETWEEN_WAVE_HEAL);
+  if (!w.stats.hasAnomaly('tithe') && f > 0) w.healTower(t.maxHp * f, -1);
   t.shield = t.maxShield;
 }

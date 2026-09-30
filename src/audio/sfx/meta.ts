@@ -1,6 +1,6 @@
 /**
  * Run and interface sounds: purchases, Cores, wave and checkpoint moments, boss tells, Counters and
- * phases, death, Prestige and Ascension, the Anomaly draft, and light UI taps. All pitched sounds use
+ * phases, death, Prestige and Ascension, the Anomaly draft, boon offers and picks, and light UI taps. All pitched sounds use
  * the music's key.
  */
 import { fm, noise, noiseSwell, swell, tone } from '../synth';
@@ -145,6 +145,22 @@ export const META = {
     priority: 8, minInterval: 1, dur: fixed(1.1),
     play(v, p) {
       for (let k = 0; k < 3; k++) fm(v, { f: midiToHz(scaleNote(root(p, 24), pent(p), 2 + k * 2)), ratio: 2.01, index: 0.7, at: k * 0.11, d: 0.7, gain: 0.045 });
+    },
+  },
+  /** Boon offer ready (a new offer, not a reroll): a soft two-note bell, quieter than the draft chime. */
+  boon_offer: {
+    priority: 7, minInterval: 1, dur: fixed(1.2),
+    play(v, p) {
+      fm(v, { f: midiToHz(scaleNote(root(p, 24), pent(p), 4)), ratio: 3.01, index: 0.45, d: 0.9, gain: 0.035 });
+      fm(v, { f: midiToHz(scaleNote(root(p, 24), pent(p), 6)), ratio: 3.01, index: 0.4, at: 0.16, d: 1.0, gain: 0.032 });
+    },
+  },
+  /** Boon picked: a quick rising pluck with a glint on top. */
+  boon_pick: {
+    priority: 8, minInterval: 0.2, dur: fixed(0.7),
+    play(v, p) {
+      for (let k = 0; k < 3; k++) tone(v, { type: 'triangle', f: midiToHz(scaleNote(root(p, 12), pent(p), 3 + k * 2)), at: k * 0.05, a: 0.005, d: 0.22, gain: 0.06, lp: 3500 });
+      fm(v, { f: midiToHz(scaleNote(root(p, 36), pent(p), 2)), ratio: 2.01, index: 0.5, at: 0.14, d: 0.5, gain: 0.03 });
     },
   },
   /** UI: tab switch (a tiny soft click). */

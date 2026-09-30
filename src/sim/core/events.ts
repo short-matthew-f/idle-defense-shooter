@@ -12,7 +12,7 @@
  */
 import type { EventLog as IEventLog, SimEvent } from './types';
 import { Ev } from './types';
-import { bossDef, enemyDef } from './content';
+import { boonDef, bossDef, enemyDef } from './content';
 
 export const EVENT_CAPACITY = 16384;
 
@@ -171,6 +171,7 @@ export function nounFor(src: string): string {
     const head = src.slice(0, dot), rest = src.slice(dot + 1);
     if (head === 'link' || head === 'chassis') return rest.split('+').map((p) => nounFor(p)).join('-') + ' link';
     if (head === 'infuse') { const [sys, el] = rest.split('.'); return `${el ?? ''} ${nounFor(sys)}`.trim(); }
+    if (head === 'boon') { const d = boonDef(rest); return `${d ? d.name : rest.replace(/_/g, ' ')} boon`; }   // Boons: "the Volatile Kills boon"
     if (head === 'fusion' || head === 'triad' || head === 'ability' || head === 'anomaly' || head === 'star' || head === 'prestige') return rest.replace(/_/g, ' ');
     if (NOUNS[head]) return NOUNS[head];
     return rest.replace(/[_.]/g, ' ');

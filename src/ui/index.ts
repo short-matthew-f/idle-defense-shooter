@@ -13,6 +13,7 @@ import { AbilityBar } from './abilities';
 import { Shop } from './shop';
 import { qtyLabel } from './bulk';
 import { DraftModal } from './draft';
+import { BoonOffer, BoonRow } from './boons';
 import { ForecastPanel } from './forecast';
 import { openPrestige } from './prestige';
 import { PrestigeShop } from './prestige-shop';
@@ -44,6 +45,8 @@ export class GameUi {
   readonly death: DeathCard;
   readonly inspector: Inspector;
   private readonly draft: DraftModal;
+  private readonly boonOffer: BoonOffer;
+  private readonly boonRow: BoonRow;
   private readonly forecast: ForecastPanel;
   private readonly pshop: PrestigeShop;
   private readonly constellation: ConstellationPanel;
@@ -73,13 +76,15 @@ export class GameUi {
     this.inspector = new Inspector(this.ctx);
     this.inspector.onPauseChange = (p) => this.hud.setPaused(p);
     this.draft = new DraftModal(this.ctx);
+    this.boonOffer = new BoonOffer(this.ctx);
+    this.boonRow = new BoonRow(this.ctx);
     this.forecast = new ForecastPanel(this.ctx);
     this.pshop = new PrestigeShop(this.ctx);
     this.constellation = new ConstellationPanel(this.ctx);
     this.directives = new DirectivesPanel(this.ctx);
     this.trials = new TrialsPanel(this.ctx);
     this.death = new DeathCard(this.ctx, () => this.hud.lastRate);
-    this.build = new BuildScreen(this.ctx, this.shop, this.abilities, this.draft);
+    this.build = new BuildScreen(this.ctx, this.shop, this.abilities, this.draft, () => { this.shell.go('battle'); this.boonOffer.expand(); });
     this.prestigeScreen = new PrestigeScreen(this.ctx, this.forecast, this.pshop, this.constellation);
     this.strip = new StatusStrip(() => this.shell.go('battle'));
     this.more = new MoreScreen({
@@ -103,7 +108,8 @@ export class GameUi {
     };
 
     const battle = h('div', { class: 'battle-layer' },
-      h('div', { class: 'arena-top' }, this.hud.bossBar.el, this.hud.controls, this.death.el),
+      h('div', { class: 'arena-top' }, this.hud.bossBar.el, h('div', { class: 'arena-strip' }, this.boonRow.el, this.hud.controls), this.boonOffer.chip, this.death.el),
+      this.boonOffer.el,
       this.abilities.el);
     const toasts = h('div', { class: 'toast-layer' }, this.feed.el);
     this.shell = new Shell(root, host, {
@@ -149,6 +155,8 @@ export class GameUi {
     this.death.update(ui);
     this.feed.update(ui);
     this.draft.update(ui);
+    this.boonOffer.update(ui);
+    this.boonRow.update(ui);
     this.build.update(ui);
     this.prestigeScreen.update(ui);
     this.forecast.update(ui);

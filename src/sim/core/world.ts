@@ -153,6 +153,13 @@ export interface World {
   readonly trial: TrialId | null;
   /** Progression signals written by systems/anomalies.ts each tick for the systems that own the mechanic. */
   signals: ProgressionSignals;
+  // --- Boons additions ------------------------------------------------------------
+  /**
+   * Last-chance hook read by damageTower when a blow would destroy the tower (after the Bastion Second Core):
+   * returns ticks of invulnerability to survive at 1 HP (0 = no save). `cause` is the TowerHit event id.
+   * systems/boons.ts installs it (Second Chance); null = none.
+   */
+  deathGuard: ((cause: number) => number) | null;
 }
 
 /**
@@ -166,4 +173,8 @@ export interface ProgressionSignals {
   ghostEdges: number;
   /** Laser node count multiplier (Mirror Node ×2, else 1). */
   laserNodeMul: number;
+  /** Boons additions (systems/boons.ts writes them; 1 = no effect). Drone fire-rate multiplier (Rally Drones), read by drones.ts. */
+  droneRateMul: number;
+  /** Lifetime multiplier for the next gravity well that opens (Anchor Well), read by gravitics.ts when a well forms. */
+  wellLifeMul: number;
 }

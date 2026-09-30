@@ -474,4 +474,8 @@ export const BASE_STATS: Record<string, number> = {
   'star.bridge.primary+laser': 0,
   'star.bridge.ordnance+drones': 0,
   'star.bridge.ordnance+laser': 0,
+
+  // --- Boons (data/boons.ts): keys only boons write; the defaults leave behaviour unchanged ---
+  'bastion.shield_hp_frac': 0,                    // extra shield capacity as a fraction of max HP (Ablative Shell)
+  'bastion.damage_taken_mul': 1,                  // multiplier on damage the tower takes, after armor (Overclocked)
 };

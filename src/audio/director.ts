@@ -50,6 +50,8 @@ export class AudioDirector {
   private paused = false;
   private speed = 1;
   private draftShown = false;
+  /** Boons: last boon offer sequence number heard (a higher one with an offer pending chimes once). */
+  private boonSeq = -1;
   private laserRate = 0;
   private lastBatchAt = -1;
   private disposed = false;
@@ -160,6 +162,7 @@ export class AudioDirector {
       case Ev.BarrierBreak: this.play(o, 'barrier_break'); break;
       case Ev.SecondCore: this.play(o, 'second_core'); break;
       case Ev.CoreDrop: this.play(o, 'core_drop', pan); break;
+      case Ev.BoonPicked: if (e.src !== 'decline') this.play(o, 'boon_pick'); break;   // Boons
       case Ev.DoctrineChosen: case Ev.Mounted: case Ev.Attuned: case Ev.AnomalyPicked:
         this.play(o, 'purchase', 0, { pitch: scaleNote(o.key.root + 24, pentatonicFor(o.key.mode), 7) });
         break;
@@ -244,6 +247,12 @@ export class AudioDirector {
     const draft = !!ui.run.pendingDraft && ui.run.pendingDraft.length > 0;
     if (o && draft && !this.draftShown) this.play(o, 'draft_ready');
     this.draftShown = draft;
+    // Boons: a soft chime when a new offer appears (not on rerolls, not for an offer already pending at load)
+    const seq = ui.run.boonOfferSeq;
+    if (typeof seq === 'number') {
+      if (o && this.boonSeq >= 0 && seq > this.boonSeq && ui.run.boonOffer && ui.run.boonOffer.length > 0) this.play(o, 'boon_offer');
+      this.boonSeq = seq;
+    }
     if (!o) return;
     if (first) o.reseedMusic(mixSeed(this.prestigeKey, ui.run.wave));
     const m = musicInputFrom(ui);

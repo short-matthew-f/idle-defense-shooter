@@ -32,12 +32,18 @@
  *    at the first draft (and never replaced) vs the same Optimizer skipping that draft (later
  *    drafts natural in both), same seeds and time. Uses `optimizer_lite` (lookahead 1) — the beam
  *    Optimizer is ~9× slower; see the report.
+ *  - Boon cap: the idle Generalist over a fixed horizon (2 sim-h full, 1 sim-h quick) on two seeds, once
+ *    declining every boon offer (baseline) and once per boon with that boon forced: injected into every offer
+ *    and picked, and while it is active further offers are declined, so it is the only boon active. (Taking
+ *    the first card instead — the --force-boon CLI default — measures the companions too.) Pass when no boon raises the mean deepest
+ *    wave by more than 10%. The notes add the noise floor: the mean raise of boons whose `needs` the Generalist
+ *    never meets (they do nothing for it, so that raise is chaos at the walls). Quick mode forces QUICK_BOONS.
  *  - Spend efficiency: judged on damage trees only (Bastion, Reactor, ability ranks buy survival /
  *    utility, not damage share); over every idle agent run.
  */
-import type { AnomalyId, DoctrineId, TreeId } from '../src/sim/core/ids';
+import type { AnomalyId, BoonId, DoctrineId, TreeId } from '../src/sim/core/ids';
 import { allTrees } from '../src/sim/core/content';
-import { ANOMALIES } from '../src/sim/data/index';
+import { ANOMALIES, BOONS } from '../src/sim/data/index';
 import type { AcceptRow, OfflineResult, PrestigeChainResult, RunConfig, RunResult } from './types';
 import type { Job } from './jobs';
 import { runJobs } from './pool';
@@ -53,6 +59,11 @@ export interface AcceptOptions {
   hours?: number;
   parallel?: number;
   log?: (s: string) => void;
+  /**
+   * Diagnostic (`sim:accept -- --no-boons`): every agent declines every boon offer, as if boons did not exist
+   * (the Boon cap row then measures nothing). Compares the other rows with and without boons.
+   */
+  noBoons?: boolean;
 }
 
 export interface AcceptData {
@@ -108,6 +119,12 @@ export function plan(mode: Mode, seeds: number[], hours: number): Plan[] {
     att(`anomaly-none-s${seed}`, { seed, agent: 'optimizer_lite', policy: 'idle', maxSimSeconds: anH, forceAnomaly: 'skip', hashes: false });
     for (const a of forced) att(`anomaly-${a}-s${seed}`, { seed, agent: 'optimizer_lite', policy: 'idle', maxSimSeconds: anH, forceAnomaly: a, hashes: false });
   }
+  // Boon cap: baseline (every offer declined) vs each boon forced, idle Generalist, fixed horizon, two seeds
+  const bH = quick ? 3600 : 2 * 3600;
+  for (const seed of boonSeeds(seeds)) {
+    att(`boon-none-s${seed}`, { seed, agent: 'generalist', policy: 'idle', maxSimSeconds: bH, noBoons: true, hashes: false });
+    for (const b of quick ? quickBoons() : BOONS.map((x) => x.id)) att(`boon-${b}-s${seed}`, { seed, agent: 'generalist', policy: 'idle', maxSimSeconds: bH, forceBoon: b, boonCompanions: 'none', hashes: false });
+  }
   // Prestige chain, offline, determinism
   out.push({ key: 'chain', job: { kind: 'chain', cfg: { name: `chain-generalist-s${s0}`, seed: s0, agent: 'generalist', policy: 'idle', maxSimSeconds: quick ? 3600 : H }, n: quick ? 2 : 3 } });
   out.push({ key: 'offline', job: { kind: 'offline', cfg: { name: 'offline', seed: s0, agent: 'generalist', policy: 'idle', maxSimSeconds: 3600, stopAtWave: 19 }, patrolSeconds: quick ? 600 : 1800 } });
@@ -124,6 +141,7 @@ export async function gather(opts: AcceptOptions): Promise<AcceptData> {
   const hours = opts.hours ?? (mode === 'quick' ? 0.5 : 4);
   const log = opts.log ?? (() => {});
   const p = plan(mode, seeds, hours);
+  if (opts.noBoons) for (const x of p) if ('cfg' in x.job && !x.key.startsWith('boon-')) (x.job.cfg as RunConfig).noBoons = true;
   // Longest jobs first so the pool drains evenly.
   const weight = (x: Plan): number => (x.job.kind === 'chain' ? 4 : x.job.kind === 'diffclimb' ? 3 : x.key.startsWith('optimizer') ? 5 : x.key.startsWith('anomaly') ? 2 : 1);
   const order = p.map((_, i) => i).sort((a, b) => weight(p[b]) - weight(p[a]) || a - b);
@@ -363,6 +381,56 @@ export function testAnomalyCap(d: AcceptData): AcceptRow {
     notes: `optimizer_lite, ${H} sim-h, mean over ${seeds.length} seed(s) (baseline range ${spread}); over cap: ${over.join(', ') || 'none'}; all: ${parts.join(', ')}` };
 }
 
+/** The two seeds the Boon cap uses (the first two acceptance seeds; quick mode adds seed + 1). */
+export function boonSeeds(seeds: number[]): number[] { return seeds.length >= 2 ? seeds.slice(0, 2) : [seeds[0], seeds[0] + 1]; }
+
+/**
+ * The six boons quick mode forces: the ones that read closest to the cap in the last full measurement
+ * (docs/BOONS.md, "Measured effect"). Update this list when a full run reorders the top of the table.
+ */
+export const QUICK_BOONS: readonly BoonId[] = ['glass_hour', 'rally_drones', 'slow_and_sure', 'second_wind', 'thick_plating', 'trophy_hunter'];
+export function quickBoons(): BoonId[] { return QUICK_BOONS.filter((id) => BOONS.some((b) => b.id === id)); }
+
+export function testBoonCap(d: AcceptData): AcceptRow {
+  const target = 'no boon raises the idle Generalist\'s mean deepest wave > 10%';
+  const seeds = boonSeeds(d.seeds).filter((s) => d.runs[`boon-none-s${s}`]);
+  if (!seeds.length) return { name: 'Boon cap', pass: false, skipped: 'no baseline', value: '—', target, notes: '' };
+  const base = mean(seeds.map((s) => d.runs[`boon-none-s${s}`].deepestCleared));
+  const rows: { id: string; raise: number; depth: number }[] = [];
+  for (const b of BOONS) {
+    const rs = seeds.map((s) => d.runs[`boon-${b.id}-s${s}`]).filter(Boolean);
+    if (!rs.length) continue;
+    const depth = mean(rs.map((r) => r.deepestCleared));
+    rows.push({ id: b.id, raise: depth / Math.max(1, base) - 1, depth });
+  }
+  if (!rows.length) return { name: 'Boon cap', pass: false, skipped: 'no forced runs', value: '—', target, notes: '' };
+  rows.sort((a, b) => b.raise - a.raise || (a.id < b.id ? -1 : 1));
+  const over = rows.filter((r) => r.raise > 0.1);
+  const H = round(d.runs[`boon-none-s${seeds[0]}`].simSeconds / 3600, 2);
+  const fmt = (r: { id: string; raise: number; depth: number }): string => `${r.id} ${r.raise >= 0 ? '+' : ''}${pct(r.raise, 1)} (${round(r.depth, 1)})`;
+  const placebo = placeboRaise(d, seeds, rows);
+  return { name: 'Boon cap', pass: over.length === 0, value: `max ${rows[0].raise >= 0 ? '+' : ''}${pct(rows[0].raise)} (${rows[0].id}); baseline depth ${round(base, 1)}`,
+    target, notes: `generalist idle, ${H} sim-h, seeds ${seeds.join(',')}, ${rows.length} boons; top five: ${rows.slice(0, 5).map(fmt).join(', ')}; over cap: ${over.map(fmt).join(', ') || 'none'}; `
+      + `${placebo ? `noise floor ${placebo}; ` : ''}all: ${rows.map(fmt).join(', ')}` };
+}
+
+/**
+ * The measurement's noise floor: boons whose `needs` (a hardpoint or element) the Generalist's final build lacks in
+ * every forced run do nothing for it (bar the +0.25% Codex entry a pick records), so their raise is chaos at the walls.
+ */
+function placeboRaise(d: AcceptData, seeds: number[], rows: { id: string; raise: number }[]): string {
+  const idle: string[] = [];
+  for (const b of BOONS) {
+    if (!b.needs || !b.needs.length || b.needs.includes('fusion')) continue;
+    const rs = seeds.map((s) => d.runs[`boon-${b.id}-s${s}`]).filter(Boolean);
+    const met = (r: RunResult): boolean => b.needs!.every((n) => r.build.hardpoints.includes(n as never) || r.build.attunements.includes(n as never));
+    if (rs.length && !rs.some(met)) idle.push(b.id);
+  }
+  const rs = rows.filter((r) => idle.includes(r.id));
+  if (!rs.length) return '';
+  return `${pct(mean(rs.map((r) => r.raise)), 1)} mean over ${rs.length} boons the build never uses (${rs.map((r) => r.id).join(', ')})`;
+}
+
 export function testOffline(d: AcceptData): AcceptRow {
   const o = d.offline;
   if (!o) return { name: 'Offline', pass: false, skipped: 'not run', value: '—', target: '', notes: '' };
@@ -384,7 +452,7 @@ export function evaluate(d: AcceptData): AcceptRow[] {
   return [
     testCheckpointOdds(d), testCheckpointTime(d), testFirstWall(d), testReclimb(d), testPush(d), testForecast(d),
     testBuildHealth(d), testDoctrineHealth(d), testSpendEfficiency(d), testDefense(d), testActiveEdge(d), testDirectiveGap(d),
-    testFormationFairness(d), testAnomalyCap(d), testOffline(d), testDeterminism(d),
+    testFormationFairness(d), testAnomalyCap(d), testBoonCap(d), testOffline(d), testDeterminism(d),
   ];
 }
 

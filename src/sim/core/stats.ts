@@ -10,8 +10,8 @@
  * Effect sources, in resolution order: tree nodes (shared, doctrine, exotic; doctrine nodes only
  * while their doctrine is active, scaled by doctrineStrength), fusions/triads (both/all elements
  * attuned), weapon/chassis linkages (both halves mounted), infusions (system mounted + element
- * attuned), ability rank nodes, Frame effects (rank 1), socketed Anomalies (rank 1), Prestige
- * nodes (meta.prestigeRanks), Constellation nodes (meta.constellation).
+ * attuned), ability rank nodes, Frame effects (rank 1), socketed Anomalies (rank 1), active Boons (rank 1,
+ * build.boons; attempt-scoped), Prestige nodes (meta.prestigeRanks), Constellation nodes (meta.constellation).
  *
  * `rank(id)` returns the EFFECTIVE rank (0 for nodes of inactive doctrines, unmounted systems,
  * unattuned elements; +1 on Fusions for frames flagged `fusions_start_rank1`).
@@ -21,7 +21,7 @@ import type { BuildState, MetaState } from './types';
 import type { ElementId, TreeId, WeaponSystemId } from './ids';
 import type { StatEffect } from '../data/schema';
 import { BASE_STATS } from '../data/index';
-import { allNodes, nodeInfo, frameDef, anomalyDef, type NodeInfo } from './content';
+import { allNodes, nodeInfo, frameDef, anomalyDef, boonDef, type NodeInfo } from './content';
 import { metaEffects, trialHas } from '../economy/prestige';   // WP8: Trial rewards/constraints
 import { codexMultiplier } from '../economy/codex';            // WP8: Codex +0.25%/entry
 
@@ -100,6 +100,8 @@ export class StatResolver implements DerivedStats {
     const frame = frameDef(this.build.frame);
     apply(frame.effects, 1);
     for (const a of this.build.anomalies) { const d = anomalyDef(a); if (d) apply(d.effects, 1); }
+    const boons = this.build.boons;   // Boons: attempt-scoped, rank 1 while active
+    if (boons) for (const b of boons) { const d = boonDef(b); if (d) apply(d.effects, 1); }
     // WP8: Recursive Warhead grants Cluster Warheads (rank 1) without the Exotic; meta effects (Trial rewards/constraints)
     if (this.hasAnomaly('recursive_warhead') && this.mounted('ordnance') && !ranks.has(RECURSIVE_NODE)) {
       ranks.set(RECURSIVE_NODE, 1); const inf = nodeInfo(RECURSIVE_NODE); if (inf) apply(inf.def.effects, 1);
@@ -205,6 +207,8 @@ export class StatResolver implements DerivedStats {
     return false;
   }
   hasAnomaly(id: string): boolean { return this.build.anomalies.includes(id as never); }
+  /** Boons: is this boon active in the current attempt? */
+  hasBoon(id: string): boolean { const b = this.build.boons; return !!b && b.includes(id as never); }
   mounted(system: WeaponSystemId | string): boolean {
     if (system === 'primary') return !trialHas(this.meta.activeTrial, 'no_primary');   // WP8: Hive Mind / Siege Mentality
     if (this.borrowed(system)) return true;                                              // WP8: Borrowed Blade

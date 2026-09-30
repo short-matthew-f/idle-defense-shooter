@@ -15,6 +15,7 @@ import { endTrial, startTrial } from './trials';                                
 import { ascend, buyStar } from '../economy/ascension';                                                                 // WP8
 import { abilitySlotCount, secondDesignatorAllowed, trialActive } from '../systems/abilities';   // WP9
 import { allowedSpeed } from '../economy/prestige';
+import { declineBoon, pickBoon, rerollBoon } from './boons';   // Boons (player-only; see Sim.step)
 
 /**
  * Apply one command. Returns an error string (also stored in machine.lastError) or null.
@@ -75,6 +76,9 @@ function dispatch(m: RunMachine, cmd: Command): string | null {
       return null;
     }
     case 'pick_anomaly': return m.pickAnomaly(cmd.anomaly, cmd.replace);
+    case 'pick_boon': return pickBoon(w, cmd.boon, cmd.replace);
+    case 'reroll_boon': return rerollBoon(w);
+    case 'decline_boon': return declineBoon(w);
     case 'reroll_anomaly': return m.rerollDraft();
     case 'set_mode': m.setMode(cmd.mode); return null;
     case 'restart_checkpoint': m.startAttempt(true); return null;

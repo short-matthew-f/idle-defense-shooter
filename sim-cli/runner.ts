@@ -18,11 +18,12 @@
  */
 import { Sim } from '../src/sim/index';
 import type { WorldImpl } from '../src/sim/core/world-impl';
-import type { AnomalyId, FrameId } from '../src/sim/core/ids';
+import type { AnomalyId, BoonId, FrameId } from '../src/sim/core/ids';
 import type { MetaState, SaveState } from '../src/sim/core/types';
 import { Ev, TICK_RATE } from '../src/sim/core/types';
 import { Prng, combineSeed, hashString } from '../src/sim/math/prng';
 import { applyCommand } from '../src/sim/run/commands';
+import { BOON_CAP } from '../src/sim/run/boons';
 import { echoesFor, nodeCost } from '../src/sim/economy/curves';
 import { nodeInfo } from '../src/sim/core/content';
 import { PRESTIGE_NODES } from '../src/sim/data/index';
@@ -92,6 +93,7 @@ export class Climber {
   private towerDamage = 0;
   private notes: string[] = [];
   private anomalies: string[] = [];
+  private boons: string[] = [];
   private casts = 0; private tells = 0; private counters = 0; private bossCounters = 0;
   private eventMark = 0;
   private playSeconds = 0;
@@ -115,6 +117,7 @@ export class Climber {
     this.agent = agent ?? makeAgent(cfg.agent);
     this.agent.setDoctrineOverrides(cfg.doctrineOverrides);
     if (cfg.forceAnomaly && cfg.forceAnomaly !== 'skip') this.agent.keepAnomaly = cfg.forceAnomaly;
+    if (cfg.forceBoon || cfg.noBoons) this.agent.pickBoons = false;   // the runner answers offers (forceBoonOffer)
     this.policy = policy ?? makePolicy(cfg.policy);
     this.ctx = makeCtx(sim, new Prng(agentSeed(cfg.seed, cfg.agent)), cfg.policy);
     this.acc = instrument(sim.world);
@@ -205,6 +208,27 @@ export class Climber {
     } else this.belowSince = null;
     this.echo.push(s);
   }
+  /**
+   * --no-boons: decline. --force-boon: inject the forced boon into the offer and pick it; once it is active,
+   * pick the first card instead, replacing the oldest other boon at the cap (never the forced one), or with
+   * boonCompanions 'none' decline (the forced boon alone).
+   */
+  private forceBoonOffer(): void {
+    const sim = this.sim, w = sim.world, run = w.run, cfg = this.cfg;
+    if (cfg.noBoons || !cfg.forceBoon) { applyCommand(sim.machine, { type: 'decline_boon' }); return; }
+    const forced = cfg.forceBoon as BoonId;
+    let err: string | null;
+    if (!w.build.boons.includes(forced)) { run.boonOffer = [forced]; err = applyCommand(sim.machine, { type: 'pick_boon', boon: forced }); }
+    else if (cfg.boonCompanions === 'none') err = applyCommand(sim.machine, { type: 'decline_boon' });
+    else {
+      const first = run.boonOffer![0];
+      const others = w.build.boons.filter((b) => b !== forced);
+      const replace = w.build.boons.length >= BOON_CAP ? others[0] : undefined;
+      err = applyCommand(sim.machine, replace ? { type: 'pick_boon', boon: first, replace } : { type: 'pick_boon', boon: first });
+    }
+    if (err) { this.notes.push(`forced boon pick rejected: ${err}`); applyCommand(sim.machine, { type: 'decline_boon' }); }
+  }
+
   /** The recommendation is "Prestige now": the depth reached when it fires. */
   private peakWaveBefore(): number { return this.sim.world.run.deepestCleared; }
 
@@ -218,6 +242,7 @@ export class Climber {
         case Ev.CounterScored: this.counters++; break;
         case Ev.BossCounter: this.bossCounters++; break;
         case Ev.AnomalyPicked: this.anomalies.push(e.src); break;
+        case Ev.BoonPicked: if (e.src !== 'decline') this.boons.push(e.src); break;
         default: break;
       }
     });
@@ -246,6 +271,7 @@ export class Climber {
         if (cfg.forceAnomaly === 'skip') { if (applyCommand(sim.machine, { type: 'pick_anomaly', anomaly: null })) this.notes.push('forced skip rejected'); }
         else run.pendingDraft = [cfg.forceAnomaly as AnomalyId];
       }
+      if ((cfg.forceBoon || cfg.noBoons) && run.boonOffer && run.boonOffer.length > 0) this.forceBoonOffer();
       agent.tick(ctx);
       policy.tick(sim);
       sim.step();
@@ -283,6 +309,7 @@ export class Climber {
       forecastPresent: this.forecastPresent,
       build: { hardpoints: [...b.hardpoints], attunements: [...b.attunements], doctrines: { ...b.doctrines }, anomalies: [...b.anomalies], purchases: ctx.purchases },
       anomaliesPicked: this.anomalies,
+      boonsPicked: this.boons,
       casts: this.casts, tells: this.tells, counters: Math.max(this.counters, this.bossCounters), designations: policy.stats.designations,
       noops: { ...policy.stats.noops },
       finalHash: sim.events.hash(),

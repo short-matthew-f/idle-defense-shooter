@@ -17,7 +17,10 @@ describe('Trials', () => {
     w.meta.prestigeRanks['prestige.trials'] = 1;
     runUntil(sim, () => w.run.deepestCleared >= 6, 12 * 3600);
     cmd(sim, { type: 'restart_checkpoint' });
-    const before = JSON.stringify(sim.save().run);
+    // Boons: the run a Trial parks comes back as a fresh attempt whose start offer opens again (the same
+    // deterministic cards; only the offer counter moves on), see docs/BOONS.md
+    const runOf = (): string => JSON.stringify({ ...sim.save().run, boonOfferSeq: undefined });
+    const before = runOf();
     expect(cmd(sim, { type: 'start_trial', trial: 'bare_metal' })).toBeNull();
     expect(w.trial).toBe('bare_metal');
     expect(w.meta.parkedRun).toBeDefined();
@@ -29,7 +32,7 @@ describe('Trials', () => {
     expect(cmd(sim, { type: 'end_trial' })).toBeNull();
     expect(w.trial).toBeNull();
     expect(w.meta.parkedRun).toBeUndefined();
-    expect(JSON.stringify(sim.save().run)).toBe(before);
+    expect(runOf()).toBe(before);
     expect(cmd(sim, { type: 'end_trial' })).toMatch(/No Trial/);
   });
 

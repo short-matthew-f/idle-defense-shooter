@@ -1,16 +1,17 @@
 /**
  * Chain Codex (design §16): every distinct interaction is an entry. Groups: Fusions, Triads,
- * Linkages, Infusions, Anomalies, Counters, Chains (+ any other ids the sim records). Undiscovered
+ * Linkages, Infusions, Anomalies, Counters, Chains, Boons (+ any other ids the sim records). Undiscovered
  * entries read "???" and the sim's hints are listed. Each entry: +0.25% damage and Scrap.
  *
  * Entry ids assumed (see report): fusion.<id>, triad.<id>, link.<a>+<b> / chassis.<x>+<hp>,
- * infuse.<system>.<element>, anomaly.<id>, counter.<boss> (sim: counter.boss.<boss>), chain.<n> for n in 3/5/8/12.
+ * infuse.<system>.<element>, anomaly.<id>, counter.<boss> (sim: counter.boss.<boss>), chain.<n> for n in 3/5/8/12,
+ * boon.<id> (docs/BOONS.md).
  */
 import '../styles/codex.css';
 import type { UiState } from '@sim/core/types';
 import { h, text, clear } from './dom';
 import { icon } from './icons';
-import { ANOMALIES, BOSSES, CHASSIS_LINKAGES, FUSIONS, INFUSIONS, TRIADS, WEAPON_LINKAGES } from './content';
+import { ANOMALIES, BOONS, BOSSES, CHASSIS_LINKAGES, FUSIONS, INFUSIONS, TRIADS, WEAPON_LINKAGES } from './content';
 import { titleCase } from './format';
 
 export interface CodexEntry { id: string; name: string; desc: string; alt?: string[] }
@@ -28,6 +29,8 @@ export function codexGroups(): CodexGroup[] {
     // the sim records a boss Counter under its Ev.BossCounter src: `counter.boss.<id>`
     { name: 'Counters', entries: BOSSES.map((b) => ({ id: `counter.${b.id}`, name: `Countered ${b.name}`, desc: b.tell.desc, alt: [`counter.boss.${b.id}`] })) },
     { name: 'Chains', entries: [3, 5, 8, 12].map((n) => ({ id: `chain.${n}`, name: `Chain of ${n}`, desc: `A kill chain ${n} links long.` })) },
+    // Boons: the first pick of each boon (or its first firing) records `boon.<id>`
+    { name: 'Boons', entries: BOONS.map((b) => ({ id: `boon.${b.id}`, name: b.name, desc: b.desc })) },
   ];
 }
 

@@ -12,6 +12,7 @@ import { computeForecast } from '../economy/forecast';   // WP8
 import { codexHints } from '../economy/codex';           // WP8
 import { nextSlotWaves } from '../run/slots';
 import { allowedSpeed } from '../economy/prestige';
+import { BOON_CAP, boonRerollCost } from '../run/boons';
 
 function copy<T>(v: T): T { return JSON.parse(JSON.stringify(v)) as T; }
 
@@ -40,6 +41,9 @@ export function buildUiState(w: WorldImpl, m: RunMachine): UiState {
       hardpointSlotsOpen: run.hardpointSlotsOpen, attunementSlotsOpen: run.attunementSlotsOpen, longestChain: run.longestChain,
       patrolScrapPerSecond: run.patrolScrapPerSecond, ...(run.minThreatDial !== undefined ? { minThreatDial: run.minThreatDial } : {}),
       attemptDamageTaken: { ...run.attemptDamageTaken },
+      // Boons (run/boons.ts); names and descriptions are looked up client-side from data/boons.ts
+      boonOffer: run.boonOffer ? [...run.boonOffer] : null, boonOfferSeq: run.boonOfferSeq, boonOfferKind: run.boonOfferKind,
+      boons: [...w.build.boons], boonQueueLength: run.boonQueue.length, boonCap: BOON_CAP, boonRerollCost: boonRerollCost(run),
     },
     activeTrial: w.meta.activeTrial ?? null,
     nextHardpointWave: slots.hardpoint,

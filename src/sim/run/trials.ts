@@ -48,6 +48,7 @@ export function endTrial(m: RunMachine): string | null {
   const w = m.w, meta = w.meta;
   if (!w.trial || !meta.parkedRun) return 'No Trial running';
   const r = fromRunSave(meta.parkedRun);
+  r.run.boonOffer = null; r.run.boonQueue = []; r.run.boonRerolls = 0;   // Boons: the resumed run is a fresh attempt (start offer)
   meta.activeTrial = null;
   delete meta.parkedRun;
   installRun(m, r.run, r.build, r.prngState, false);

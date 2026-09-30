@@ -1,0 +1,133 @@
+/*
+ * Boons (src/ui/boons.ts): the offer card over the arena, the "Boon ready" chip, the active-boon row under the top
+ * bar, and boon rows in lists. Category reads by shape + label (surge ▲, twist loop, trade balance, wild spark),
+ * rarity by the diamond + "Rare" label; the category hue only repeats what the shape already says.
+ * --boon-h (set by BoonOffer) is the card's height, so the death card and toasts keep clear of it.
+ */
+:root { --boon-h: 0px; --boon-bottom: 82px; }
+.cat-surge { --bc: #ffb838; }
+.cat-twist { --bc: #56b4e9; }
+.cat-trade { --bc: #d58ce0; }
+.cat-wild { --bc: #4fd08a; }
+
+/* ---------------------------------------------------------------- offer card (Battle) */
+.boon-offer {
+  position: absolute; z-index: 4; left: 50%; transform: translateX(-50%); bottom: var(--boon-bottom);
+  width: min(560px, calc(100% - 16px - var(--safe-left) - var(--safe-right))); max-height: 44%; overflow-y: auto; overscroll-behavior: contain;
+  padding: 7px; border-radius: 14px; background: rgba(14, 18, 26, 0.95); border: 1px solid var(--line-2);
+  box-shadow: var(--shadow); animation: boon-in 0.2s ease-out;
+}
+@keyframes boon-in { from { opacity: 0; } to { opacity: 1; } }
+body.arming .boon-offer { --boon-bottom: 140px; }
+.bo-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.bo-card {
+  position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; min-height: var(--touch); margin: 0;
+  padding: 5px 7px 6px; border-radius: 10px; background: var(--bg-2); border: 1px solid var(--line-2); border-top: 3px solid var(--bc);
+  color: var(--text); font: inherit; text-align: left; cursor: pointer; touch-action: manipulation;
+}
+.bo-card:hover { background: var(--bg-3); }
+.bo-card.on { border-color: var(--accent); border-top-color: var(--bc); background: color-mix(in srgb, var(--accent) 14%, var(--bg-2)); box-shadow: 0 0 0 1px var(--accent); }
+.bo-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; font-size: 14px; line-height: 17px; font-weight: 700; }
+.bo-cat { display: inline-flex; align-items: center; gap: 3px; color: var(--bc); }
+.tag.rare { gap: 3px; color: var(--text); }
+.bo-rare-meta { display: none; align-items: center; gap: 3px; color: var(--text); font-weight: 600; }
+.bo-rare-meta .ico { color: var(--r-rare); }
+.tag.rare .ico { color: var(--r-rare); width: 13px; height: 13px; }
+.bo-meta .ico.tiny { width: 14px; height: 14px; }
+.bo-name { font-size: 15px; line-height: 18px; font-weight: 700; overflow-wrap: anywhere; }
+.bo-short {
+  font-size: 14px; line-height: 17px; color: var(--text-dim); overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow-wrap: break-word;
+}
+.bo-needs { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 1px; }
+.bo-needs .tag, .bi-main .bo-needs .tag { padding: 0 6px; line-height: 18px; }
+.tag.have { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, var(--line-2)); }
+.bo-sel { position: absolute; top: 3px; right: 3px; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: var(--on-accent); }
+.bo-sel .ico.tiny { width: 14px; height: 14px; stroke-width: 3; }
+.bo-detail { margin: 5px 2px 0; display: flex; flex-direction: column; gap: 3px; }
+.bo-detail p { margin: 0; font-size: 14px; line-height: 1.35; color: var(--text-dim); }
+.bo-desc b { color: var(--text); }
+.bo-replace { display: flex; align-items: center; gap: 6px; color: var(--warn) !important; }
+.bo-replace > span { flex: 1; min-width: 0; }
+.btn.ctl.bo-change { color: var(--accent); flex: none; height: 30px; min-height: 30px; padding: 0 12px; }
+.btn.ctl.bo-change::after { inset: -7px -4px; }
+.bo-rep-inline { color: var(--warn); }
+.bo-desc .btn.ctl.bo-change { display: inline-flex; vertical-align: middle; margin-left: 6px; }
+/* short phones (iPhone SE, 360×740): a tighter card so it stays near a third of the arena */
+@media (max-height: 800px) {
+  .bo-card { padding: 3px 6px 4px; gap: 1px; border-top-width: 2px; }
+  .bo-meta, .bo-short { line-height: 16px; }
+  .bo-name { font-size: 14px; line-height: 16px; }
+  .bo-needs { margin-top: 0; }
+  .bo-needs .tag { line-height: 17px; }
+  .bo-foot { margin-top: 4px; }
+  .boon-offer { padding: 5px; }
+}
+.bo-foot { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.bo-heading { flex: 1; min-width: 0; display: flex; flex-direction: column; padding-left: 4px; font-size: 14px; line-height: 17px; }
+.bo-title { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bo-q { color: var(--text-dim); }
+.bo-q:empty { display: none; }
+.btn.bo-take { flex: 1; min-width: 0; padding: 0 10px; }
+.btn.bo-reroll, .btn.bo-decline { flex: none; padding: 0 10px; }
+.bo-ico-alt { display: none; }
+.btn.bo-collapse { flex: none; }
+
+/* the offer set aside: a pulsing chip under the active row (top-left of the arena) */
+.arena-top > .btn.ctl.boon-chip {
+  align-self: flex-start; border-color: var(--accent); color: var(--text); gap: 6px; animation: pulse 1.8s infinite; --warn: var(--accent);
+}
+.boon-chip > .ico { color: var(--accent); }
+.boon-chip .count:empty { display: none; }
+
+/* overlays keep clear of the open card */
+body.boon-open .arena-top { bottom: calc(var(--boon-h) + var(--boon-bottom) + 8px); }
+body.shell-phone.tab-battle.boon-open .toast-layer { bottom: calc(var(--tab-h) + var(--boon-h) + var(--boon-bottom) + 8px); }
+body.shell-desktop.boon-open .toast-layer { bottom: calc(var(--boon-h) + var(--boon-bottom) + 8px); }
+
+/* landscape phone: the card sits bottom-right (the abilities are a column on the left), buttons in a column */
+body.shell-rail { --boon-bottom: calc(var(--safe-bottom) + 8px); }
+body.shell-rail .boon-offer {
+  left: auto; transform: none; right: calc(var(--safe-right) + 8px); width: min(620px, calc(100% - 120px)); max-height: 60%;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 6px;
+}
+body.shell-rail .bo-cards { grid-column: 1; grid-row: 1; }
+body.shell-rail .bo-detail { grid-column: 1; grid-row: 2; }
+body.shell-rail .bo-foot {
+  grid-column: 2; grid-row: 1 / span 2; align-self: start; margin-top: 0; width: 156px;
+  display: grid; grid-template-columns: minmax(0, 1fr) 44px 44px; grid-template-rows: 44px 44px; gap: 6px;
+}
+body.shell-rail .bo-heading, body.shell-rail .btn.bo-take { grid-column: 1 / span 3; grid-row: 1; }
+body.shell-rail .bo-heading { justify-content: center; padding: 0 2px; }
+body.shell-rail .btn.bo-reroll { grid-column: 1; grid-row: 2; padding: 0 6px; }
+body.shell-rail .btn.bo-decline { grid-column: 2; grid-row: 2; padding: 0; background: var(--bg-3); border-color: var(--line-2); }
+body.shell-rail .btn.bo-collapse { grid-column: 3; grid-row: 2; }
+body.shell-rail .bo-lbl { display: none; }
+body.shell-rail .bo-rare-meta { display: inline-flex; }
+body.shell-rail .bo-card .tag.rare { display: none; }
+body.shell-rail .boon-offer { padding: 5px; }
+body.shell-rail .bo-ico-alt { display: inline-block; }
+body.shell-rail.boon-open .arena-top { bottom: 12px; right: calc(var(--safe-right) + min(620px, calc(100% - 120px)) + 20px); }
+body.shell-rail.boon-open .toast-layer { bottom: calc(var(--safe-bottom) + var(--boon-h) + 16px); }
+body.shell-rail.arming .boon-offer { --boon-bottom: calc(var(--safe-bottom) + 8px); }
+
+/* ---------------------------------------------------------------- active row (under the top bar) */
+.arena-strip { display: flex; align-items: flex-start; gap: 8px; align-self: stretch; pointer-events: none !important; min-width: 0; }
+.arena-strip > * { pointer-events: auto; }
+.arena-strip > .battle-controls { margin-left: auto; }
+.btn.ctl.boon-row { flex: none; padding: 0 10px 0 6px; gap: 6px; }
+.br-icons { display: flex; gap: 3px; }
+.br-ico { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: var(--bc); background: color-mix(in srgb, var(--bc) 20%, var(--bg-3)); }
+.br-ico .ico.tiny { width: 14px; height: 14px; }
+.br-count { font-size: 14px; font-weight: 700; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+
+/* ---------------------------------------------------------------- boon rows (list dialog, Build tab) */
+.boon-list { display: flex; flex-direction: column; }
+.boon-item { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.bi-ico { flex: none; width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; color: var(--bc); background: color-mix(in srgb, var(--bc) 16%, var(--bg-3)); }
+.bi-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.bi-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; font-weight: 700; font-size: 15px; }
+.bi-desc { margin: 0; font-size: 14px; line-height: 1.4; color: var(--text-dim); }
+.bi-note { margin: 0; font-size: 14px; color: var(--warn); }
+.bi-act { flex: none; align-self: center; }
+.btn.boon-waiting .ico:first-child { color: var(--accent); }

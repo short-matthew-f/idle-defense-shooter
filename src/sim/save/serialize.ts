@@ -5,13 +5,19 @@
  * Versioning: `migrate` upgrades a save one version at a time through MIGRATIONS (append a step for
  * every SAVE_VERSION bump; tests/core/save.test.ts shows the pattern with a synthetic v2), then fills
  * defaults and sanitizes fields a corrupted or hand-edited save could break the sim with (unknown
- * Trial / frame / anomalies, non-finite numbers, a degenerate PRNG state). Valid saves pass unchanged.
+ * Trial / frame / anomalies / boons, non-finite numbers, a degenerate PRNG state). Valid saves pass unchanged.
+ *
+ * Boons: the active list (build.boons) and a pending offer with its queue are saved and restored, but a
+ * load resumes at the checkpoint as a new attempt (Sim → RunMachine.startAttempt): a reload is a fresh
+ * attempt, so the active boons are cleared. An undecided offer (and its queue) stays pending; with none,
+ * the fresh attempt's start offer opens.
  */
 import type { SaveState, RunSave, RunState, BuildState, MetaState } from '../core/types';
-import type { AnomalyId } from '../core/ids';
+import type { AnomalyId, BoonId } from '../core/ids';
 import { SAVE_VERSION } from '../core/types';
 import { newBuild, newMeta, newRun, WAVE_TABLE_SIZE } from '../run/state';
-import { anomalyDef } from '../core/content';
+import { anomalyDef, boonDef } from '../core/content';
+import { BOON_CAP, BOON_QUEUE_CAP } from '../data/boons';
 import { FRAMES, TRIALS } from '../data/index';
 import { Prng } from '../math/prng';
 
@@ -50,7 +56,16 @@ export function toRunSave(run: RunState, build: BuildState, prngState: [number, 
     build: clone(build), prngState: [...prngState] as [number, number, number, number], spentByTree: { ...run.spentByTree },
   } as RunSave, runExtras(run),   // WP8: progression extras
   run.pendingDraft && run.pendingDraft.length ? { pendingDraft: [...run.pendingDraft], draftWave: run.draftWave } : {},
-  run.draftQueue.length ? { draftQueue: [...run.draftQueue] } : {});
+  run.draftQueue.length ? { draftQueue: [...run.draftQueue] } : {},
+  boonExtras(run));
+}
+
+/** Boons: the offer bookkeeping a save carries (optional fields; see the header). */
+function boonExtras(run: RunState): Partial<RunSave> {
+  const out: Partial<RunSave> = { boonOfferSeq: run.boonOfferSeq, boonsSeenFirst: run.boonsSeenFirst };
+  if (run.boonOffer && run.boonOffer.length) Object.assign(out, { boonOffer: [...run.boonOffer], boonOfferWave: run.boonOfferWave, boonOfferKind: run.boonOfferKind, boonRerolls: run.boonRerolls });
+  if (run.boonQueue.length) out.boonQueue = [...run.boonQueue];
+  return out;
 }
 
 export function toSave(sim: Serializable): SaveState {
@@ -74,7 +89,17 @@ export function fromRunSave(s: RunSave): { run: RunState; build: BuildState; prn
   Object.assign(run, runExtras(s));   // WP8: progression extras
   if (Array.isArray(s.pendingDraft) && s.pendingDraft.length) { run.pendingDraft = [...s.pendingDraft]; run.draftWave = typeof s.draftWave === 'number' ? s.draftWave : run.checkpoint; }
   if (Array.isArray(s.draftQueue)) run.draftQueue = s.draftQueue.filter((v): v is number => typeof v === 'number' && v > 0 && v % 10 === 0);
-  return { run, build: clone(s.build), prngState: [...s.prngState] as [number, number, number, number] };
+  // Boons (restored as saved; the load's startAttempt then clears them for the fresh attempt)
+  if (Array.isArray(s.boonOffer) && s.boonOffer.length) {
+    run.boonOffer = [...s.boonOffer]; run.boonOfferWave = typeof s.boonOfferWave === 'number' ? s.boonOfferWave : run.checkpoint + 1;
+    run.boonOfferKind = s.boonOfferKind === 'boss' ? 'boss' : 'start'; run.boonRerolls = typeof s.boonRerolls === 'number' ? s.boonRerolls : 0;
+  }
+  if (Array.isArray(s.boonQueue)) run.boonQueue = [...s.boonQueue];
+  run.boonOfferSeq = typeof s.boonOfferSeq === 'number' ? s.boonOfferSeq : 0;
+  run.boonsSeenFirst = s.boonsSeenFirst === true;
+  const build = clone(s.build);
+  if (!Array.isArray(build.boons)) build.boons = [];
+  return { run, build, prngState: [...s.prngState] as [number, number, number, number] };
 }
 
 export function fromSave(save: SaveState): { meta: MetaState; run: RunState; build: BuildState; prngState: [number, number, number, number] } {
@@ -162,6 +187,19 @@ function sanitizeRun(r: RunSave): void {
   b.anomalies = b.anomalies.filter((a) => typeof a === 'string' && !!anomalyDef(a));
   if (Array.isArray(r.pendingDraft)) r.pendingDraft = r.pendingDraft.filter((a): a is AnomalyId => typeof a === 'string' && !!anomalyDef(a));
   for (const k of ['doctrines', 'secondDoctrines', 'targeting'] as const) if (!isObj(b[k])) b[k] = {};
+  // Boons: unknown ids dropped, duplicates removed, at most BOON_CAP active / BOON_QUEUE_CAP queued
+  const knownBoon = (v: unknown): v is BoonId => typeof v === 'string' && !!boonDef(v);
+  b.boons = Array.isArray(b.boons) ? b.boons.filter((v, i, a) => knownBoon(v) && a.indexOf(v) === i).slice(-BOON_CAP) : [];
+  if (r.boonOffer !== undefined) {
+    const offer = Array.isArray(r.boonOffer) ? r.boonOffer.filter((v, i, a) => knownBoon(v) && a.indexOf(v) === i).slice(0, 3) : [];
+    if (offer.length) r.boonOffer = offer; else delete r.boonOffer;
+  }
+  if (r.boonQueue !== undefined) {
+    r.boonQueue = Array.isArray(r.boonQueue) ? r.boonQueue.filter((v): v is number => typeof v === 'number' && Number.isInteger(v) && v > 0 && v % 5 === 0).slice(-BOON_QUEUE_CAP) : [];
+  }
+  for (const k of ['boonOfferWave', 'boonOfferSeq', 'boonRerolls'] as const) if (r[k] !== undefined) r[k] = Math.max(0, Math.floor(finiteOr(r[k], 0)));
+  if (r.boonOfferKind !== undefined && r.boonOfferKind !== 'start' && r.boonOfferKind !== 'boss') r.boonOfferKind = 'start';
+  if (r.boonsSeenFirst !== undefined && typeof r.boonsSeenFirst !== 'boolean') r.boonsSeenFirst = !!r.boonsSeenFirst;
   b.anomalySockets = Math.max(0, Math.floor(finiteOr(b.anomalySockets, 3)));
 }
 

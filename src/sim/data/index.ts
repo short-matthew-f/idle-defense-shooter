@@ -2,7 +2,7 @@
  * Content registry. Data work packages fill these arrays; systems, the shop
  * and the simulator agents read only from here.
  */
-import type { TreeDef, FrameDef, FusionDef, TriadDef, LinkageDef, InfusionDef, AnomalyDef, AbilityDef, TrialDef, PrestigeNodeDef, StarNodeDef } from './schema';
+import type { TreeDef, FrameDef, FusionDef, TriadDef, LinkageDef, InfusionDef, AnomalyDef, AbilityDef, TrialDef, PrestigeNodeDef, StarNodeDef, BoonDef } from './schema';
 import { CHASSIS_TREES } from './chassis';
 import { ELEMENT_TREES } from './elements';
 import { HARDPOINT_TREES } from './hardpoints';
@@ -15,6 +15,7 @@ import { ABILITIES as ABILITY_TABLE } from './abilities';
 import { TRIALS as TRIAL_TABLE } from './trials';
 import { PRESTIGE_NODES as PRESTIGE_TABLE } from './prestige';
 import { STAR_NODES as STAR_TABLE } from './constellation';
+import { BOONS as BOON_TABLE } from './boons';
 
 export const TREES: TreeDef[] = [...CHASSIS_TREES, ...ELEMENT_TREES, ...HARDPOINT_TREES];
 export const FRAMES: FrameDef[] = FRAME_TABLE;
@@ -32,6 +33,8 @@ export { SECTORS } from './sectors';
 export const TRIALS: TrialDef[] = TRIAL_TABLE;
 export const PRESTIGE_NODES: PrestigeNodeDef[] = PRESTIGE_TABLE;
 export const STAR_NODES: StarNodeDef[] = STAR_TABLE;
+/** Boons (attempt-scoped rewards; data/boons.ts). */
+export const BOONS: BoonDef[] = BOON_TABLE;
 
 export const SYSTEM_ORDER_IDS = ['primary', 'ordnance', 'drones', 'blade', 'laser', 'gravitics'] as const;
 export const ELEMENT_ORDER = ['fire', 'lightning', 'poison', 'frost'] as const;

@@ -6,7 +6,8 @@
 //   phone 390×844     (touch) the five tabs, badges, status strip → Battle, browser Back → Battle,
 //                     More → sub-screen → Back → More → Back → Battle, render pause off Battle, arena share,
 //                     nothing under the tab bar, quick buy by tap on the Upgrades screen, bulk buy
-//                     (quantity Max + Ballistics "Spend here")
+//                     (quantity Max + Ballistics "Spend here"), Boons: restart → the start-of-attempt offer card,
+//                     select a card + Take → the boon is active (row under the top bar) and the offer is gone
 // Exit code 1 on any failed check.
 //
 // Environment: PLAYWRIGHT_DIR (a directory holding the `playwright` package; default: the global npm root),
@@ -157,7 +158,10 @@ async function desktop() {
   await page.evaluate(() => window.__citadel.game.setFast(8));
   await waitUi(page, (u) => u.phase === 'combat', 60000, 'combat');
   await page.waitForTimeout(1500);
-  const inst = await page.evaluate(() => { const s = window.__citadel.app.snapshot; let n = 0; for (let i = 0; i < s.instanceCount; i++) if (s.instances[i * 12 + 9] === 4) n++; return { enemies: n, rendered: window.__citadel.app.renderer.stats.instances }; });
+  // sample until a snapshot holds enemies (at ×8 an early wave can be cleared between two samples)
+  const sample = () => page.evaluate(() => { const s = window.__citadel.app.snapshot; let n = 0; for (let i = 0; i < s.instanceCount; i++) if (s.instances[i * 12 + 9] === 4) n++; return { enemies: n, rendered: window.__citadel.app.renderer.stats.instances }; });
+  let inst = await sample();
+  for (let k = 0; k < 60 && inst.enemies === 0; k++) { await page.waitForTimeout(250); inst = await sample(); }
   await page.screenshot({ path: `${OUT}/desktop-battle.png` });
   check('canvas shows enemy instances', inst.enemies > 0 && inst.rendered > 0, inst);
 
@@ -352,6 +356,29 @@ async function phone() {
   check('phone: nothing overlaps the tab bar', ovBattle.length === 0 && ovUpgrades.length === 0, { ovBattle, ovUpgrades });
   await page.goBack();
   await page.waitForTimeout(300);
+
+  // Boons: a restart is a new attempt (not the first of the Prestige), so it offers three boons; tap a card, Take
+  const boons = () => page.evaluate(() => { const u = window.__citadel.game.latestUi(); return { offer: u.run.boonOffer, boons: u.run.boons, cap: u.run.boonCap }; });
+  await page.getByRole('button', { name: 'Restart from checkpoint' }).tap();
+  await page.locator('[role="dialog"]').getByRole('button', { name: 'Restart', exact: true }).tap();
+  for (let k = 0; k < 40 && !(await boons()).offer; k++) await page.waitForTimeout(250);
+  const bo0 = await boons();
+  const card = page.locator('.boon-offer .bo-card');
+  const offerGeo = await page.evaluate(() => {
+    const c = document.querySelector('.boon-offer').getBoundingClientRect(), l = document.querySelector('.battle-layer').getBoundingClientRect(), tb = document.querySelector('.tabbar').getBoundingClientRect(), ab = document.querySelector('.abilities').getBoundingClientRect();
+    return { share: +(c.height / l.height).toFixed(3), clearOfTabs: c.bottom <= tb.top, aboveAbilities: c.bottom <= ab.top + 1 };
+  });
+  await page.screenshot({ path: `${OUT}/phone-boon-offer.png` });
+  check('phone: a restart offers three boons in a card over the arena (≈⅓ of it, above the abilities)', bo0.offer?.length === 3 && (await card.count()) === 3 && offerGeo.share <= 0.36 && offerGeo.clearOfTabs && offerGeo.aboveAbilities, { offer: bo0.offer, offerGeo });
+  const picked = bo0.offer?.[0];
+  await card.first().tap();
+  await page.locator('.boon-offer .bo-take').tap();
+  for (let k = 0; k < 20 && (await boons()).boons.length === 0; k++) await page.waitForTimeout(150);
+  await page.waitForTimeout(300);
+  const bo1 = await boons();
+  const rowShown = await page.locator('.boon-row:not([hidden])').isVisible();
+  await page.screenshot({ path: `${OUT}/phone-boon-active.png` });
+  check('phone: picking a boon makes it active and clears the offer', bo1.boons.length === 1 && bo1.boons[0] === picked && !bo1.offer && rowShown && !(await page.locator('.boon-offer').isVisible()), { bo1, rowShown });
   check('phone: zero console errors', errors.length === 0, errors);
   await ctx.close();
 }

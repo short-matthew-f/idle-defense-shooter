@@ -2,15 +2,16 @@
  * Read-only lookups over the content tables for names and descriptions (the UI never reads sim
  * internals; data tables are shared by design).
  */
-import type { AbilityId, AnomalyId, BossId, ElementId, FrameId, HardpointId, NodeId, TreeId } from '@sim/core/ids';
-import type { AbilityDef, AnomalyDef, FrameDef, NodeDef, TreeDef } from '@sim/data/schema';
+import type { AbilityId, AnomalyId, BoonId, BossId, ElementId, FrameId, HardpointId, NodeId, TreeId } from '@sim/core/ids';
+import type { AbilityDef, AnomalyDef, BoonDef, FrameDef, NodeDef, TreeDef } from '@sim/data/schema';
 import {
-  ABILITIES, ANOMALIES, CHASSIS_LINKAGES, FRAMES, FUSIONS, INFUSIONS, PRESTIGE_NODES, STAR_NODES, TREES, TRIADS, WEAPON_LINKAGES, BOSSES, SECTORS, ENEMIES,
+  ABILITIES, ANOMALIES, BOONS, CHASSIS_LINKAGES, FRAMES, FUSIONS, INFUSIONS, PRESTIGE_NODES, STAR_NODES, TREES, TRIADS, WEAPON_LINKAGES, BOSSES, SECTORS, ENEMIES,
 } from '@sim/data/index';
 
 export const TREE_BY_ID = new Map<TreeId, TreeDef>(TREES.map((t) => [t.id, t]));
 export const ABILITY_BY_ID = new Map<AbilityId, AbilityDef>(ABILITIES.map((a) => [a.id, a]));
 export const ANOMALY_BY_ID = new Map<AnomalyId, AnomalyDef>(ANOMALIES.map((a) => [a.id, a]));
+export const BOON_BY_ID = new Map<BoonId, BoonDef>(BOONS.map((b) => [b.id, b]));
 export const FRAME_BY_ID = new Map<FrameId, FrameDef>(FRAMES.map((f) => [f.id, f]));
 export const BOSS_BY_ID = new Map<BossId, (typeof BOSSES)[number]>(BOSSES.map((b) => [b.id, b]));
 /** Enemy display names by kind ('grunt' → 'Grunt'). */
@@ -78,4 +79,4 @@ export function srcCategory(src: string): string {
   return 'other';
 }
 
-export { ABILITIES, ANOMALIES, FRAMES, FUSIONS, TRIADS, WEAPON_LINKAGES, CHASSIS_LINKAGES, INFUSIONS, PRESTIGE_NODES, STAR_NODES, TREES, BOSSES, SECTORS };
+export { ABILITIES, ANOMALIES, BOONS, FRAMES, FUSIONS, TRIADS, WEAPON_LINKAGES, CHASSIS_LINKAGES, INFUSIONS, PRESTIGE_NODES, STAR_NODES, TREES, BOSSES, SECTORS };

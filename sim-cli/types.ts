@@ -4,7 +4,7 @@
  * Everything here is plain JSON so results can cross process boundaries (sim-cli/pool.ts) and be
  * written to sim-out/*.json unchanged.
  */
-import type { AnomalyId, DoctrineId, ElementId, FrameId, HardpointId, TreeId } from '../src/sim/core/ids';
+import type { AnomalyId, BoonId, DoctrineId, ElementId, FrameId, HardpointId, TreeId } from '../src/sim/core/ids';
 import type { MetaState } from '../src/sim/core/types';
 
 export type PolicyId = 'idle' | 'directive' | 'active';
@@ -37,6 +37,19 @@ export interface RunConfig {
   stopAtRecommendation?: boolean;
   /** Force this Anomaly at the first draft, or 'skip' it (Anomaly cap test). */
   forceAnomaly?: AnomalyId | 'skip';
+  /**
+   * Boons (Boon cap test): inject this boon into every offer and pick it; once it is active, pick the first card
+   * instead (never replacing it). Without it the agent picks by its heuristic (agents/base.ts boonScore).
+   */
+  forceBoon?: BoonId;
+  /**
+   * With forceBoon: what to do with an offer while the forced boon is already active. 'first' (default, the
+   * --force-boon CLI rule) takes the first card; 'none' declines, so the forced boon is the only one active
+   * (the Boon cap acceptance row: it measures that boon alone, see sim-cli/acceptance.ts).
+   */
+  boonCompanions?: 'first' | 'none';
+  /** Boons: decline every offer (the Boon cap baseline). */
+  noBoons?: boolean;
   /** Doctrine overrides (doctrine health probes). */
   doctrineOverrides?: Partial<Record<TreeId, DoctrineId>>;
   /** Run mode (Patrol for the offline test). */
@@ -115,6 +128,8 @@ export interface RunResult {
   forecastPresent: boolean;
   build: { hardpoints: (HardpointId | null)[]; attunements: (ElementId | null)[]; doctrines: Partial<Record<TreeId, DoctrineId>>; anomalies: AnomalyId[]; purchases: number };
   anomaliesPicked: string[];
+  /** Boons picked over the climb (Ev.BoonPicked srcs, declines excluded). */
+  boonsPicked?: string[];
   casts: number;
   tells: number;
   counters: number;

@@ -4,6 +4,9 @@
  * chains of 3, 5, 8 and 12 links (EventLog depth of the Kill event). An entry is discovered once:
  * `meta.codex[id] = 1` and an `Ev.Codex` event (src = entry id, a = entries discovered).
  *
+ * Boons: the first pick of each boon registers `boon.<id>` (run/boons.ts); mechanical boons' Ev.Anomaly
+ * (src `boon.<id>`) registers the same entry.
+ *
  * Each discovered entry gives +0.25% damage and Scrap: StatResolver multiplies `combat.power_mul`
  * and `economy.scrap_mul` by `codexMultiplier(meta)` (and Prestige Echoes use it too).
  * Milestones at 10 / 25 / 50 entries unlock palettes (`meta.palettes`) and add Anomaly draft
@@ -155,6 +158,9 @@ export function codexHints(w: WorldImpl): string[] {
     if (!FIRING_ANOMALIES.has(a.id) || !w.build.anomalies.includes(a.id) || seen(`anomaly.${a.id}`) || seen(a.id)) continue;
     out.push(`${a.name} has not shown what it can do yet.`);
   }
+  // Boons: each boon's first pick (or first firing) is an entry `boon.<id>`
+  const offer = w.run.boonOffer;
+  if (!full() && offer && offer.some((id) => !seen(`boon.${id}`))) out.push('A boon on offer has never been picked: choosing it records it in the Codex.');
   const met = w.run.deepestCleared + 5;
   for (const b of BOSSES) {
     if (full()) return out;

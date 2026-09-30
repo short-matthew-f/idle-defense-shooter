@@ -10,7 +10,8 @@
  *    Targeting Profiles and the Upgrade Queue. Threat Dial needs `prestige.threat_dial` (0..10,
  *    0..20 from Ascension IV); Branch Discount needs `prestige.branch_discount`.
  *    Run start (also for Ascension and Trials): Anomaly sockets, Seed Capital Scrap, Memory of
- *    Steel / Motion ranks (build.ranks of ballistics.damage / attack_speed).
+ *    Steel / Motion ranks (build.ranks of ballistics.damage / attack_speed). Boons and boon offers are
+ *    cleared (installRun); the new run's first attempt makes no boon offer.
  *  - `set_threat_dial`: lower only; run.minThreatDial remembers the lowest level (Echoes pay at it).
  *  - `save_blueprint`: up to `prestige.blueprint_slots` ranks (same name overwrites).
  *  - `choose_doctrine {second: true}`: the tree's second doctrine where allowed.
@@ -50,6 +51,7 @@ export function installRun(m: RunMachine, run: RunState, build: BuildState, prng
   w.clearCombat();
   w.wave = null;
   w.run = run; w.build = build;
+  w.build.boons = [];   // Boons end with the attempt they were picked in (Prestige, Ascension, Trial start and end); startAttempt settles the offer
   w.stats.bind(build, w.meta);
   if (prngState) w.prng.setState(prngState); else w.prng.reseed(run.prestigeSeed ^ 0x5eed);
   Object.assign(w.tower, newTower());

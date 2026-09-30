@@ -53,7 +53,8 @@ export function battleInsets(layout: ShellLayout, m: { top: number; tabBar: numb
 
 export interface Badge { text: string; kind: 'count' | 'alert' | 'new'; label: string }
 export type BadgeState = Pick<UiState, 'shop' | 'forecast'> & {
-  run: Pick<UiState['run'], 'pendingDraft' | 'hardpointSlotsOpen' | 'attunementSlotsOpen' | 'deepestCleared'>;
+  /** `boonOffer`: Boons (optional so older call sites and tests need not set it). */
+  run: Pick<UiState['run'], 'pendingDraft' | 'hardpointSlotsOpen' | 'attunementSlotsOpen' | 'deepestCleared'> & Partial<Pick<UiState['run'], 'boonOffer'>>;
   build: Pick<UiState['build'], 'hardpoints' | 'attunements' | 'doctrines'>;
   meta: Pick<UiState['meta'], 'ascension'>;
 };
@@ -90,7 +91,9 @@ export function tabBadges(s: BadgeState): Record<TabId, Badge | null> {
   const slots = emptySlots(s);
   const forks = openForkCount(s);
   const draft = !!s.run.pendingDraft && s.run.pendingDraft.length > 0;
+  const boon = !!s.run.boonOffer && s.run.boonOffer.length > 0;
   const build: Badge | null = draft ? { text: '!', kind: 'alert', label: 'Anomaly draft waiting' }
+    : boon ? { text: '!', kind: 'alert', label: 'Boon offer waiting' }
     : slots > 0 ? { text: '+', kind: 'new', label: slots === 1 ? 'New slot open' : `${slots} slots open` }
     : forks > 0 ? { text: '+', kind: 'new', label: forks === 1 ? 'Doctrine fork open' : `${forks} Doctrine forks open` }
     : null;

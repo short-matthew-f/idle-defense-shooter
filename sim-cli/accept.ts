@@ -1,5 +1,6 @@
 /**
- * `npm run sim:accept [-- --quick] [--seeds 1,2,3] [--hours 4] [--jobs N] [--out sim-out]`
+ * `npm run sim:accept [-- --quick] [--seeds 1,2,3] [--hours 4] [--jobs N] [--out sim-out] [--no-boons]`
+ * (`--no-boons`: diagnostic, every agent declines every boon offer; see AcceptOptions.noBoons)
  *
  * Runs every §19 acceptance test, prints the table, writes sim-out/accept[-quick].{json,md},
  * sim-out/difficulty.{json,md} and one JSON per run under sim-out/accept/, and exits non-zero when
@@ -18,7 +19,7 @@ async function main(): Promise<void> {
   const out = typeof a.out === 'string' ? a.out : OUT_DIR;
   const t0 = performance.now();
   const rep = await runAcceptance({ mode, seeds: seeds.length ? seeds : undefined, hours: a.hours ? num(a.hours, 4) : undefined, parallel: a.jobs ? num(a.jobs, 1) : undefined,
-    log: (s) => console.error(s) });
+    log: (s) => console.error(s), noBoons: !!a['no-boons'] });
   const d = rep.data;
   const suffix = mode === 'quick' ? '-quick' : '';
   const md = [`# Acceptance (${mode})`, '', `seeds ${d.seeds.join(', ')} · ${d.hours} sim-h per climb · ${Math.round((performance.now() - t0) / 1000)} s wall`, '', acceptMarkdown(rep.rows), '',

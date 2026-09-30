@@ -11,7 +11,7 @@
  *  - Events: every event has an id and a cause id (the parent event), forming the kill chain.
  */
 import type {
-  AbilityId, AnomalyId, BossId, DoctrineId, ElementId, EliteModifier, EnemyKind, FormationId,
+  AbilityId, AnomalyId, BoonId, BossId, DoctrineId, ElementId, EliteModifier, EnemyKind, FormationId,
   FrameId, HardpointId, NodeId, TargetingProfile, TreeId, TrialId, WeaponSystemId,
 } from './ids';
 
@@ -226,6 +226,12 @@ export interface BuildState {
   anomalySockets: number;
   targeting: Partial<Record<WeaponSystemId, TargetingProfile>>;
   abilities: (AbilityId | null)[];             // tactical slots
+  /**
+   * Boons addition: active boons of the current attempt, oldest first (≤ BOON_CAP). Cleared at every
+   * attempt start, Prestige, Ascension and Trial start/end (run/boons.ts). Stat effects resolve next to
+   * the Anomalies in core/stats.ts; mechanical ones in systems/boons.ts.
+   */
+  boons: BoonId[];
 }
 
 export type RunMode = 'push' | 'patrol';
@@ -287,6 +293,24 @@ export interface RunState {
   patrolMeasured?: boolean;
   /** The last few non-boss Push clears (Scrap without the first-clear bonus, seconds incl. phase overhead) for the Patrol estimate. Not saved. */
   recentClears?: { wave: number; scrap: number; seconds: number }[];
+  // --- Boons additions (run/boons.ts; offers never auto-pick) ---
+  /** The pending boon offer (three cards), or null. Waits until the player picks, rerolls or declines. */
+  boonOffer: BoonId[] | null;
+  /** Wave and kind ('start' of an attempt / 'boss' first clear) of the pending offer (the roll's inputs). */
+  boonOfferWave: number; boonOfferKind: 'start' | 'boss';
+  /** Offers opened this Prestige (UI: a new number = a new offer; audio chime). */
+  boonOfferSeq: number;
+  /** Rerolls of the pending offer (the next one costs boonRerolls + 1 Cores). */
+  boonRerolls: number;
+  /** Boss waves whose offer waits behind the pending one (≤ BOON_QUEUE_CAP, oldest dropped). */
+  boonQueue: number[];
+  /** True once this Prestige made its first offer (the first offer draws only stat surges). */
+  boonsSeenFirst: boolean;
+  /**
+   * One-use boons that fired and left the active list this attempt (Second Chance: never offered or picked
+   * again in the same attempt). Cleared at every attempt start; not saved (a load is a fresh attempt).
+   */
+  boonSpent: BoonId[];
 }
 
 export interface MetaState {
@@ -398,7 +422,15 @@ export type Command =
   | { type: 'end_trial' }
   | { type: 'set_threat_dial'; level: number }
   | { type: 'offline_return'; elapsedSeconds: number }
-  | { type: 'set_setting'; key: keyof MetaState['settings']; value: number | boolean };
+  | { type: 'set_setting'; key: keyof MetaState['settings']; value: number | boolean }
+  /**
+   * Boons additions (player-only: Directives, Autocast and the Upgrade Queue can never issue these;
+   * Sim.step rejects them from the in-sim command queue). `replace` names the active boon to drop at the
+   * cap (default: the oldest). Reroll costs boonRerolls + 1 Cores; decline is free and gives nothing.
+   */
+  | { type: 'pick_boon'; boon: BoonId; replace?: BoonId }
+  | { type: 'reroll_boon' }
+  | { type: 'decline_boon' };
 
 // ---------------------------------------------------------------------------
 // Events (sim → everyone). Every event carries a cause for the kill chain.
@@ -409,6 +441,8 @@ export const enum Ev {
   TowerHit, TowerDeath, BarrierBreak, SecondCore, Cast, CounterScored, Heal,
   Purchase, DoctrineChosen, Mounted, Attuned, AnomalyPicked, CoreDrop, ScrapGain,
   Checkpoint, AttemptStart, Prestige, Ascend, Fx, Codex, Chain,
+  /** Boons additions: an offer opened (src 'start' | 'boss' | 'reroll', a = offer seq, b = rerolls) / resolved (src = boon id or 'decline', a = active count). */
+  BoonOffer, BoonPicked,
 }
 
 export interface SimEvent {
@@ -499,7 +533,10 @@ export const enum FxKind { Hit = 0, Kill = 1, Explosion = 2, Spark = 3, Ember = 
 export interface UiState {
   tick: number;
   run: Pick<RunState, 'wave' | 'checkpoint' | 'deepestCleared' | 'mode' | 'phase' | 'scrap' | 'cores' | 'attempts' | 'threatDial' | 'speedMultiplier' | 'playSeconds' | 'pendingDraft' | 'hardpointSlotsOpen' | 'attunementSlotsOpen' | 'longestChain'
-    /* integration additions */ | 'patrolScrapPerSecond' | 'minThreatDial' /* UX-review additions */ | 'attemptDamageTaken'> & {
+    /* integration additions */ | 'patrolScrapPerSecond' | 'minThreatDial' /* UX-review additions */ | 'attemptDamageTaken'
+    /* Boons additions */ | 'boonOffer' | 'boonOfferSeq' | 'boonOfferKind'> & {
+    /** Boons additions: active boons (oldest first), offers queued behind the pending one, the cap, the next reroll's Core cost. */
+    boons: BoonId[]; boonQueueLength: number; boonCap: number; boonRerollCost: number;
   };
   /** Integration additions: the Trial being played (meta.activeTrial), or null. */
   activeTrial: TrialId | null;
@@ -583,6 +620,13 @@ export interface RunSave {
   /** Code-health addition: an Anomaly draft offered but not yet picked (restored on load; it was lost before). */
   pendingDraft?: AnomalyId[];
   draftWave?: number; draftQueue?: number[];
+  /**
+   * Boons additions (optional; sanitized on load). A save taken mid-attempt keeps the pending offer and its
+   * queue (build.boons keeps the active list), but loading resumes at the checkpoint as a new attempt: the
+   * active boons are cleared, an undecided offer stays pending, else the start offer opens (run/machine.ts).
+   */
+  boonOffer?: BoonId[]; boonOfferWave?: number; boonOfferKind?: 'start' | 'boss'; boonOfferSeq?: number; boonRerolls?: number;
+  boonQueue?: number[]; boonsSeenFirst?: boolean;
 }
 
 // ---------------------------------------------------------------------------

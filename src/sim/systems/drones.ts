@@ -173,7 +173,7 @@ export class DronesSystem implements System {
       } else { this.x[k] += (mx / ml) * sp; this.y[k] += (my / ml) * sp; }
       if (ml > 1e-3) this.hd[k] = atan2(my, mx);
       // --- firing
-      let r = this.rate * gr * (1 + boost);
+      let r = this.rate * gr * (1 + boost) * (w.signals?.droneRateMul ?? 1);   // Boons: Rally Drones (1 = none)
       if (role === ROLE_GUNSHIP) r *= this.gunshipMul;
       else if (role === ROLE_MEDIC) r *= 0.5;
       this.cool[k] -= r * TICK_DT;

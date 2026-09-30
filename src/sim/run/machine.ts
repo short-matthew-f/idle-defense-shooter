@@ -10,6 +10,10 @@
  *  draft      (legacy phase, no longer entered) — drafts never block: the offer waits in run.pendingDraft
  *             while the run continues, and later draft waves queue in run.draftQueue
  *  dead       1.5 s, then a new attempt at checkpoint+1 with full HP and empty CE (attempts++)
+ * Boons (run/boons.ts): every attempt start clears the active boons and any offer, then (except on the first
+ * attempt of a Prestige, and in Patrol) opens the start-of-attempt offer; a save load keeps an undecided offer
+ * the save carried instead. Every boss cleared in Push opens (or queues) another offer. Offers wait for the
+ * player; nothing here ever picks one.
  * Push advances wave by wave; Patrol loops checkpoint+1 … checkpoint+4 and never fights a boss,
  * measuring run.patrolScrapPerSecond for offline returns. Until Patrol has measured it, every non-boss
  * Push clear re-estimates it from the last PATROL_ESTIMATE_CLEARS such clears (first-clear bonus removed).
@@ -30,6 +34,7 @@ import { enemyHp } from '../economy/curves';
 import { betweenWaveHeal } from '../systems/tower';
 import { updateSlots } from './slots';
 import { rollDraft } from './draft';
+import { clearBoons, offerForBossClear, openBoonOffer } from './boons';   // Boons
 import { ASCENSION_WAVE, deepWavesUnlocked } from '../economy/ascension';
 import { trialWave } from './trials';                 // WP8
 import { trialHas } from '../economy/prestige';       // WP8
@@ -61,9 +66,18 @@ export class RunMachine {
   // -------------------------------------------------------------------------
   // Attempts
   // -------------------------------------------------------------------------
-  /** Begin an attempt at checkpoint+1 with full HP and empty CE. */
+  /**
+   * Begin an attempt at checkpoint+1 with full HP and empty CE. `countAttempt` is false when a save loads or a
+   * Trial ends (the run resumes at its checkpoint as a fresh attempt without counting one).
+   */
   startAttempt(countAttempt: boolean): void {
     const w = this.w, run = w.run, t = w.tower;
+    // Boons: every attempt starts with no active boons. The pristine first attempt of a Prestige (new game,
+    // Prestige, Ascension, Trial start) gets no offer; a save load keeps an offer the save carried (it was never
+    // decided, and reloading must not reroll it); anything else (death, restart, Trial end) opens the start offer.
+    const pristine = countAttempt && run.attempts === 0;
+    const keepOffer = !countAttempt && !!run.boonOffer && run.boonOffer.length > 0;
+    if (keepOffer) { w.build.boons = []; run.boonSpent = []; } else clearBoons(w);
     w.clearCombat();
     w.wave = null;
     this.cursor = 0; this.bossIndex = NO_ENTITY; this.clumpIndex = NO_ENTITY;
@@ -85,6 +99,7 @@ export class RunMachine {
     this.setPhase('between');
     w.emit(Ev.AttemptStart, 'run', run.wave, run.attempts, 0, 0, -1);
     for (const s of w.systems) s.onAttemptStart?.(w);
+    if (!pristine && !keepOffer && run.mode === 'push') openBoonOffer(w, 'start', run.wave);   // Boons: a retry never starts weaker
   }
 
   setPhase(p: WorldImpl['run']['phase']): void { this.w.run.phase = p; this.w.run.phaseTicks = 0; }
@@ -249,6 +264,7 @@ export class RunMachine {
         else this.openDraft(wv);
       }
     }
+    if (wv % 5 === 0) offerForBossClear(w, wv);   // Boons: every boss the tower clears (Push only; see run/boons.ts)
     for (const s of w.systems) s.onWaveEnd?.(w);
     this.setPhase('wave_clear');
   }

@@ -14,11 +14,12 @@
 import type { Sim } from '../../src/sim/index';
 import type { WorldImpl } from '../../src/sim/core/world-impl';
 import type { Command, ShopEntry } from '../../src/sim/core/types';
-import type { AnomalyId, DoctrineId, ElementId, HardpointId, TreeId } from '../../src/sim/core/ids';
+import type { AnomalyId, BoonId, DoctrineId, ElementId, HardpointId, TreeId } from '../../src/sim/core/ids';
 import type { Prng } from '../../src/sim/math/prng';
 import { applyCommand } from '../../src/sim/run/commands';
 import { buildShop, spendKey } from '../../src/sim/economy/shop';
-import { anomalyDef, nodeInfo, treeDef } from '../../src/sim/core/content';
+import { anomalyDef, boonDef, nodeInfo, treeDef } from '../../src/sim/core/content';
+import { boonNeedsMet } from '../../src/sim/run/boons';
 import type { PolicyId } from '../types';
 
 export const ALL_HARDPOINTS: HardpointId[] = ['ordnance', 'drones', 'blade', 'laser', 'gravitics'];
@@ -135,10 +136,14 @@ export abstract class Agent {
     return treeDef(tree)?.doctrines[0]?.id;
   }
 
+  /** Pick boons from offers (false when the runner decides offers itself: --force-boon / --no-boons). */
+  pickBoons = true;
+
   /** Called before every sim step by the runner. Cheap unless there is something to decide. */
   tick(ctx: AgentCtx): void {
     const w = ctx.w, run = w.run;
     if (run.pendingDraft && run.pendingDraft.length > 0) this.handleDraft(ctx);
+    if (this.pickBoons && run.boonOffer && run.boonOffer.length > 0) this.handleBoon(ctx);
     if (this.slotsPending(w)) { this.fillSlots(ctx); this.waitScrap = 0; }
     if (run.scrap >= this.waitScrap || w.stats.version !== this.lastVer || run.cores !== this.lastCores || w.build !== this.lastBuild) this.shopPass(ctx);
   }
@@ -201,6 +206,14 @@ export abstract class Agent {
       if (s > bestScore) { bestScore = s; best = id; }
     }
     return best;
+  }
+
+  /** Boon offer: the best-scoring card (boonScore; ties keep offer order). At the cap the oldest is replaced. */
+  handleBoon(ctx: AgentCtx): void {
+    const offers = ctx.w.run.boonOffer ?? [];
+    let best: BoonId | null = null, bestScore = -Infinity;
+    for (const id of offers) { const s = boonScore(ctx.w, id); if (s > bestScore) { bestScore = s; best = id; } }
+    if (!best || ctx.apply({ type: 'pick_boon', boon: best })) ctx.apply({ type: 'decline_boon' });
   }
 
   /** One shopping pass: doctrines, exotics, then Scrap purchases until the agent wants to save. */
@@ -296,6 +309,17 @@ export function anomalyMatchScore(w: WorldImpl, id: AnomalyId): number {
   let n = 0;
   for (const x of d.needs) if (x === 'primary' || w.stats.mounted(x) || w.stats.attuned(x)) n++;
   return n - (n < d.needs.length ? 0.75 : 0);
+}
+
+/**
+ * Deterministic boon heuristic: a boon whose `needs` the build meets scores 10 + its needs count, one that
+ * needs something missing −10, a generic one 0; plus its declared `value` (1..5).
+ */
+export function boonScore(w: WorldImpl, id: BoonId): number {
+  const d = boonDef(id);
+  if (!d) return -Infinity;
+  const needs = d.needs && d.needs.length > 0;
+  return (needs ? (boonNeedsMet(w, d) ? 10 + d.needs!.length : -10) : 0) + d.value;
 }
 
 /** Weighted value helper shared by the weight-table agents. */

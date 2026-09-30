@@ -11,7 +11,7 @@
  *  - linkages / infusions / fusions: 3 ranks, stat-style pricing
  */
 import type {
-  AbilityId, AnomalyId, AnomalyRarity, BossId, DoctrineId, ElementId, EnemyKind,
+  AbilityId, AnomalyId, AnomalyRarity, BoonCategory, BoonId, BoonRarity, BossId, DoctrineId, ElementId, EnemyKind,
   FormationId, FrameId, FusionId, HardpointId, NodeId, SectorId, TreeId, TriadId, TrialId, WeaponSystemId,
 } from '../core/ids';
 
@@ -90,6 +90,25 @@ export interface AnomalyDef {
   needs?: (HardpointId | ElementId | 'primary')[];
   effects: StatEffect[];
   pool: 'base' | 'echo' | 'rot' | 'paradox_extra' | 'mythic';
+}
+
+/**
+ * Boon (data/boons.ts): an attempt-scoped reward. Stat boons resolve through `effects` (rank 1, next to
+ * Anomalies in core/stats.ts); mechanical boons carry a `flag` that systems/boons.ts switches on (their
+ * tunables are BOON_TUNING in data/boons.ts). `desc` and `short` state the numbers exactly as implemented.
+ */
+export interface BoonDef {
+  id: BoonId; name: string; desc: string;
+  /** One line for the offer's mini-card (≤ about 34 characters, with the numbers). */
+  short: string;
+  category: BoonCategory; rarity: BoonRarity;
+  /** Systems / elements this boon needs to matter ('fusion' = any Fusion active); offers weight toward the build. */
+  needs?: (HardpointId | ElementId | 'fusion')[];
+  effects: StatEffect[];
+  /** Mechanic key read by systems/boons.ts (mechanical boons only). */
+  flag?: BoonId;
+  /** Declared value 1..5 (the headless agents' pick heuristic; not used by the sim). */
+  value: number;
 }
 
 export interface AbilityDef {

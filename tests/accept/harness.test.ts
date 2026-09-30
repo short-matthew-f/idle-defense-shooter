@@ -42,7 +42,7 @@ describe('WP10 simulator harness', () => {
     report = await runAcceptance({ mode: 'quick', parallel: 1 });
     const names = report.rows.map((r) => r.name);
     expect(names).toEqual(['Checkpoint odds', 'Checkpoint time', 'First wall', 'Reclimb', 'Push', 'Forecast', 'Build health', 'Doctrine health',
-      'Spend efficiency', 'Defense', 'Active edge', 'Directive gap', 'Formation fairness', 'Anomaly cap', 'Offline', 'Determinism']);
+      'Spend efficiency', 'Defense', 'Active edge', 'Directive gap', 'Formation fairness', 'Anomaly cap', 'Boon cap', 'Offline', 'Determinism']);
     for (const r of report.rows) { expect(typeof r.pass).toBe('boolean'); expect(r.value.length).toBeGreaterThan(0); expect(r.target.length).toBeGreaterThan(0); }
     expect(acceptMarkdown(report.rows)).toContain('| Test | Result |');
     expect(report.data.difficulty?.cells.length ?? 0).toBeGreaterThan(10);

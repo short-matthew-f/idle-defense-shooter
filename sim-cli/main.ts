@@ -6,24 +6,28 @@
  *   npm run sim -- --agent generalist --chain 3 --report          (Prestige chain)
  *   npm run sim -- --difficulty [--quick]                           (Difficulty Multiplier grid)
  *   npm run sim -- --profile                                        (ticks/second, incl. a ~900-enemy dense case)
+ *   npm run sim -- --boon-cap [--quick] [--seeds 1,2]               (only the Boon cap acceptance row)
  *
  * Options: --stop-wave W, --dial T, --wall-minutes M, --force-anomaly ID, --doctrine tree.doctrine,
+ *          --force-boon ID (inject that boon into every offer; once active, take the first card, or with
+ *          --boon-companions none decline), --no-boons (decline every offer),
  *          --stop-at-recommendation, --out DIR, --jobs N (parallel processes; default = cores).
  * Agents: greedy survival elemental generalist random hp_ordnance hp_drones hp_blade hp_laser
  *         hp_gravitics optimizer optimizer_lite doctrine:<tree>.<doctrine>
  */
 import { parseArgs, list, num } from './args';
 import type { AgentId, PolicyId, RunConfig, RunResult, PrestigeChainResult } from './types';
-import type { FrameId, AnomalyId, TreeId, DoctrineId } from '../src/sim/core/ids';
+import type { FrameId, AnomalyId, TreeId, DoctrineId, BoonId } from '../src/sim/core/ids';
 import { BASE_AGENTS } from './agents/index';
 import { runJobs } from './pool';
 import type { Job } from './jobs';
 import { OUT_DIR, runMarkdown, summaryMarkdown, writeJson, writeRun, writeText } from './report';
 import { aggregateDifficulty, difficultyJobs, difficultyMarkdown, FULL_DIFF, QUICK_DIFF, type ArchetypeSnapshots, type DiffJobResult } from './difficulty';
 import { runAttempt } from './runner';
+import { plan, testBoonCap } from './acceptance';
 import { Sim } from '../src/sim/index';
 import { round } from './metrics';
-import { allNodes } from '../src/sim/core/content';
+import { allNodes, boonDef } from '../src/sim/core/content';
 import { TAU, cos, sin } from '../src/sim/math/lut';
 import { ARENA_RADIUS } from '../src/sim/core/types';
 
@@ -34,6 +38,21 @@ async function main(): Promise<void> {
   if (a.help) { console.log((await import('node:fs')).readFileSync(new URL(import.meta.url), 'utf8').split('*/')[0]); return; }
 
   if (a.profile) return profile();
+
+  if (a['boon-cap']) {
+    const mode = a.quick ? 'quick' : 'full';
+    const seeds = list(a.seeds).length ? list(a.seeds).map(Number) : [1, 2];
+    const p = plan(mode, seeds, 4).filter((x) => x.key.startsWith('boon-'));
+    if (a['boon-companions'] === 'first') for (const x of p) if (x.job.kind === 'attempt' && x.job.cfg.forceBoon) x.job.cfg.boonCompanions = 'first';   // the literal rule, for comparison
+    const t0 = performance.now();
+    const res = await runJobs<RunResult>(p.map((x) => x.job), jobsN, (_i, r, done) => { if (done % 10 === 0 || done === p.length) console.error(`  ${done}/${p.length} (${round((performance.now() - t0) / 1000, 0)} s) ${r.name}: ${r.deepestCleared}`); });
+    const runs: Record<string, RunResult> = {};
+    p.forEach((x, i) => { runs[x.key] = res[i]; });
+    const row = testBoonCap({ mode, seeds, hours: 0, runs, chain: null, offline: null, difficulty: null, determinism: null, wallSeconds: 0 });
+    writeJson(`boon-cap${a.quick ? '-quick' : ''}`, { row, depths: Object.fromEntries(Object.entries(runs).map(([k, r]) => [k, r.deepestCleared])) }, out);
+    console.log(`${row.name}: ${row.pass ? 'PASS' : 'FAIL'} · ${row.value}\n${row.notes}`);
+    return;
+  }
 
   if (a.difficulty) {
     const opts = a.quick ? QUICK_DIFF : FULL_DIFF;
@@ -62,7 +81,11 @@ async function main(): Promise<void> {
     ...(a['wall-minutes'] ? { wallMinutes: num(a['wall-minutes'], 40) } : {}),
     ...(typeof a['force-anomaly'] === 'string' ? { forceAnomaly: a['force-anomaly'] as AnomalyId } : {}),
     ...(a['stop-at-recommendation'] ? { stopAtRecommendation: true } : {}),
+    ...(typeof a['force-boon'] === 'string' ? { forceBoon: a['force-boon'] as BoonId } : {}),
+    ...(a['no-boons'] ? { noBoons: true } : {}),
+    ...(a['boon-companions'] === 'none' || a['boon-companions'] === 'first' ? { boonCompanions: a['boon-companions'] } : {}),
   };
+  if (base.forceBoon && !boonDef(base.forceBoon)) throw new Error(`Unknown boon '${base.forceBoon}'`);
   if (typeof a.doctrine === 'string') { const [t, d] = a.doctrine.split('.'); base.doctrineOverrides = { [t as TreeId]: d as DoctrineId }; }
   const chainN = a.chain ? num(a.chain, 2) : 0;
   const jobs: Job[] = [];

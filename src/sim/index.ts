@@ -24,6 +24,7 @@ import { fromSave, toSave } from './save/serialize';
 import { SnapshotWriter, writeScene } from './core/snapshot';
 import { buildUiState } from './core/ui-state';
 import { Ev } from './core/types';
+import { isBoonCommand } from './run/boons';
 
 export interface SimOptions {
   /** Prestige seed for a new game (default 1). Ignored when loading a save. */
@@ -85,7 +86,7 @@ export class Sim implements ISim {
     if (w.pendingCommands.length) {   // WP9: Directive / Autocast commands, same dispatch path
       const q = w.pendingCommands;
       w.pendingCommands = [];
-      for (const c of q) applyCommand(m, c);
+      for (const c of q) if (!isBoonCommand(c)) applyCommand(m, c);   // Boons are player-only: never from the sim's own queue
     }
     m.preTick();
     m.spawnScheduled();

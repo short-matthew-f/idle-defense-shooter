@@ -1,7 +1,7 @@
 /**
  * Build screen (design §4, "why did my build converge"): every commitment of this Prestige on one
- * page — Frame, Hardpoint and Attunement slots, the Doctrine per tree, Anomaly sockets, ability
- * slots, and the Cores balance with what Cores buy. It reuses the shop's slot pickers, Refit dialog,
+ * page — Frame, this attempt's active Boons (and a pending boon offer), Hardpoint and Attunement slots, the
+ * Doctrine per tree, Anomaly sockets, ability slots, and the Cores balance with what Cores buy. It reuses the shop's slot pickers, Refit dialog,
  * Doctrine fork cards (by opening the tree in Upgrades) and Cores tab rather than duplicating them.
  */
 import '../styles/build.css';
@@ -12,6 +12,7 @@ import { abilityIcon, icon } from './icons';
 import { fmtNum } from './format';
 import { ABILITY_BY_ID, CHASSIS, ELEMENT_BLURB, FRAME_BY_ID, HARDPOINT_BLURB, NODE_BY_ID, TREE_BY_ID, TREE_LABEL } from './content';
 import { anomalyCard } from './draft';
+import { boonsSection } from './boons';
 import { openModal } from './modal';
 import type { Shop } from './shop';
 import type { AbilityBar } from './abilities';
@@ -36,7 +37,7 @@ export function buildKey(ui: UiState): string {
   const b = ui.build, r = ui.run;
   const docs = ui.shop.filter((e) => e.kind === 'doctrine').map((e) => `${e.node}:${e.cost}:${e.affordable ? 1 : 0}:${e.locked ?? ''}`).join(',');
   return JSON.stringify([b.frame, b.hardpoints, b.attunements, b.doctrines, b.secondDoctrines, b.anomalies, b.anomalySockets, b.abilities,
-    r.hardpointSlotsOpen, r.attunementSlotsOpen, ui.nextHardpointWave, ui.nextAttunementWave, r.cores, r.pendingDraft, docs,
+    r.hardpointSlotsOpen, r.attunementSlotsOpen, ui.nextHardpointWave, ui.nextAttunementWave, r.cores, r.pendingDraft, docs, r.boons, r.boonOffer, r.mode,
     CHASSIS.map((t) => sharedOwned(ui, t))]);
 }
 
@@ -51,7 +52,9 @@ export class BuildScreen {
   shown = false;
   private key = '';
 
-  constructor(private readonly ctx: UiCtx, private readonly shop: Shop, private readonly abilities: AbilityBar, private readonly draft: DraftModal) {}
+  constructor(private readonly ctx: UiCtx, private readonly shop: Shop, private readonly abilities: AbilityBar, private readonly draft: DraftModal,
+    /** Boons: show the pending offer on Battle. */
+    private readonly openBoonOffer: () => void = () => {}) {}
 
   setShown(on: boolean): void {
     this.shown = on;
@@ -66,7 +69,7 @@ export class BuildScreen {
     const y = this.el.parentElement?.scrollTop ?? 0;
     clear(this.el);
     if (this.draft.pending) this.el.append(button([icon('info', 'ico'), h('span', { class: 'bs-name', text: 'An Anomaly draft is waiting: choose one' }), icon('right', 'ico tiny chev')], () => this.draft.open(), { class: 'btn bs-draft top' }));
-    this.el.append(this.frame(ui), this.hardpoints(ui), this.attunements(ui), this.doctrines(ui), this.anomalies(ui), this.abilitySlots(ui), this.cores(ui));
+    this.el.append(this.frame(ui), boonsSection(ui, this.openBoonOffer), this.hardpoints(ui), this.attunements(ui), this.doctrines(ui), this.anomalies(ui), this.abilitySlots(ui), this.cores(ui));
     if (this.el.parentElement) this.el.parentElement.scrollTop = y;
   }
 

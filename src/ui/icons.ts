@@ -2,7 +2,7 @@
  * Inline SVG icons (24×24 viewBox, stroke = currentColor). Static strings only.
  * Shapes carry meaning together with labels: rarity and statuses never rely on hue alone.
  */
-import type { AbilityId, AnomalyRarity } from '@sim/core/ids';
+import type { AbilityId, AnomalyRarity, BoonCategory } from '@sim/core/ids';
 
 const P: Record<string, string> = {
   scrap: '<path d="M12 3l7 9-7 9-7-9z" fill="currentColor" stroke="none"/>',
@@ -49,6 +49,12 @@ const P: Record<string, string> = {
   r_rare: '<path d="M12 4l8 8-8 8-8-8z" fill="currentColor" stroke="none"/>',
   r_paradox: '<path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z" fill="none" stroke-width="2.4"/><path d="M8 8l8 8M16 8l-8 8"/>',
   r_cursed: '<path d="M12 3.5l9 16H3z" fill="currentColor" stroke="none"/><path d="M12 9.5v5M12 17h.01" stroke="#0b0d12" stroke-width="2.2"/>',
+  // boon categories (shape + label, never colour alone): surge an up-arrow, twist a loop, trade a balance, wild a spark
+  c_surge: '<path d="M12 3l8 9h-5v9H9v-9H4z" fill="currentColor" stroke="none"/>',
+  c_twist: '<path d="M20 12a8 8 0 1 1-3-6.2"/><path d="M13 12a3.5 3.5 0 1 0 3.5-3.5H21"/><path d="M18 3.5l3 2.4-2.9 2.6"/>',
+  c_trade: '<path d="M12 3v18M5 21h14"/><path d="M3 8h8M13 8h8"/><path d="M3 8l-1 5a3 3 0 0 0 6 0l-1-5M17 8l-1 5a3 3 0 0 0 6 0l-1-5" stroke-width="1.6"/>',
+  c_wild: '<path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z" fill="currentColor" stroke="none"/>',
+  boon: '<path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z"/>',
   // abilities
   a_hunter_mark: '<circle cx="12" cy="12" r="7.5"/><path d="M12 2v6M12 16v6M2 12h6M16 12h6"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/>',
   a_repulsor_pulse: '<circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M6.3 6.3a8 8 0 0 0 0 11.4M17.7 6.3a8 8 0 0 1 0 11.4M3.5 3.5a12 12 0 0 0 0 17M20.5 3.5a12 12 0 0 1 0 17"/>',
@@ -83,3 +89,5 @@ export function icon(name: string, cls = 'ico'): SVGSVGElement {
 
 export function abilityIcon(id: AbilityId | 'designate', cls = 'ico'): SVGSVGElement { return icon(`a_${id}`, cls); }
 export function rarityIcon(r: AnomalyRarity, cls = 'ico'): SVGSVGElement { return icon(`r_${r}`, cls); }
+/** Boons: the category shape (surge / twist / trade / wild). */
+export function boonCategoryIcon(c: BoonCategory, cls = 'ico'): SVGSVGElement { return icon(`c_${c}`, cls); }

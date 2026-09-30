@@ -155,7 +155,7 @@ export class GraviticsSystem implements System {
     // ("Wells drag enemies inward"), never held in place at the edge of the weapons' reach.
     const bx = w.enemies.x[best], by = w.enemies.y[best], br = Math.sqrt(bx * bx + by * by);
     const kIn = br > 1e-6 ? Math.max(0, br - this.R * 0.25) / br : 0;
-    this.open(k, bx * kIn, by * kIn, this.R, this.duration, 1, false);
+    this.open(k, bx * kIn, by * kIn, this.R, Math.max(1, Math.round(this.duration * (w.signals?.wellLifeMul ?? 1))), 1, false);   // Boons: Anchor Well
     w.emit(Ev.Fx, 'gravitics.well', k, bestScore, this.wx[k], this.wy[k], -1);
   }
 

@@ -6,9 +6,9 @@
  * The index is built lazily on first use; `invalidateContent()` rebuilds it (tests).
  */
 import type { EnemyKind, BossId, TreeId, FrameId, EliteModifier, ElementId, HardpointId } from './ids';
-import type { TreeDef, NodeDef, EnemyDef, BossDef, FrameDef, AbilityDef, AnomalyDef } from '../data/schema';
+import type { TreeDef, NodeDef, EnemyDef, BossDef, FrameDef, AbilityDef, AnomalyDef, BoonDef } from '../data/schema';
 import {
-  TREES, FRAMES, FUSIONS, TRIADS, WEAPON_LINKAGES, CHASSIS_LINKAGES, INFUSIONS, ANOMALIES, ABILITIES,
+  TREES, FRAMES, FUSIONS, TRIADS, WEAPON_LINKAGES, CHASSIS_LINKAGES, INFUSIONS, ANOMALIES, ABILITIES, BOONS,
   ENEMIES, BOSSES, PRESTIGE_NODES, STAR_NODES,
 } from '../data/index';
 import { EnemyFlag, Shape } from './types';
@@ -250,3 +250,6 @@ export function abilityDef(id: string): AbilityDef | undefined { return idx().ab
 export function anomalyDef(id: string): AnomalyDef | undefined { return idx().anomalyById.get(id); }
 export function allAnomalies(): readonly AnomalyDef[] { return ANOMALIES; }
 export function allAbilities(): readonly AbilityDef[] { return ABILITIES; }
+const BOON_BY_ID = new Map<string, BoonDef>(BOONS.map((b) => [b.id, b]));
+export function boonDef(id: string): BoonDef | undefined { return BOON_BY_ID.get(id); }
+export function allBoons(): readonly BoonDef[] { return BOONS; }

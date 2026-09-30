@@ -8,6 +8,7 @@
  *    blade hub, laser emitter, gravitics core.
  *  - Attunements: element-coloured rune arcs with the status glyph (flame, bolt, droplet, flake).
  *  - Ornament grows with the deepest wave: bare at wave 1, rings, ticks, crown and filigree by 100.
+ *  - Boons: while any are active, one small gold pip per boon circles the hull and a faint halo glows.
  */
 import { InstFlag, INST_FLAG_SCALE, Shape, TOWER_RADIUS } from './types';
 import { cos, sin, TAU, PI } from '../math/lut';
@@ -27,6 +28,8 @@ export class TowerView {
   tick = 0;
   /** Drones currently deployed (docked drones show while this is 0). */
   dronesOut = 0;
+  /** Boons active this attempt (a slow orbit of gold pips, one per boon). */
+  boons = 0;
 }
 
 const R = TOWER_RADIUS;
@@ -64,6 +67,11 @@ export function writeTowerBase(out: ArtWriter, v: TowerView): number {
   if (deep >= 100) {
     put(out, 0, 0, R * 3.4, 0, Shape.Ring, 1, 0.84, 0.36, 0.45, 0, 0.025);
     for (let k = 0; k < 4; k++) { const a = t * 0.01 + k * (TAU / 4); put(out, cos(a) * R * 3.4, sin(a) * R * 3.4, 2.2, 0, Shape.Circle, 1, 0.92, 0.6, 0.9); }
+  }
+  // ---- boons: a faint gold halo and one orbiting pip per active boon (attempt-scoped)
+  if (v.boons > 0) {
+    put(out, 0, 0, R * 2.05, 0, Shape.Circle, 1, 0.82, 0.4, 0.1, 0);
+    for (let k = 0; k < v.boons; k++) { const a = t * 0.012 + k * (TAU / v.boons); put(out, cos(a) * R * 1.8, sin(a) * R * 1.8, 2.4, a, Shape.Diamond, 1, 0.84, 0.42, 0.95); }
   }
   // ---- attunement runes: element arcs with the status glyph at their middle
   const na = v.attunements.length;

@@ -66,6 +66,13 @@ export function validateCommand(cmd: unknown): string | null {
     case 'start_trial': return str(c.trial) ? null : bad('trial');
     case 'set_threat_dial': return fin(c.level) ? null : bad('level');
     case 'offline_return': return fin(c.elapsedSeconds) && (c.elapsedSeconds as number) >= 0 ? null : bad('elapsedSeconds');
+    // Boons: player-only. A command claiming to come from a Directive / Autocast is rejected outright.
+    case 'pick_boon':
+      if (c.viaDirective !== undefined || c.directive !== undefined) return 'Boons are picked by the player only';
+      if (!str(c.boon)) return bad('boon');
+      return c.replace === undefined || str(c.replace) ? null : bad('replace');
+    case 'reroll_boon': case 'decline_boon':
+      return c.viaDirective !== undefined || c.directive !== undefined ? 'Boons are picked by the player only' : null;
     case 'set_setting': {
       const kind = typeof c.key === 'string' && Object.prototype.hasOwnProperty.call(SETTINGS, c.key) ? SETTINGS[c.key] : undefined;
       if (!kind) return bad('key');
