@@ -11,7 +11,7 @@ export function newMeta(): MetaState {
     prestigeRanks: {}, constellation: {}, unlockedFrames: ['standard'], codex: {}, trials: {},
     blueprints: [], directives: [], upgradeQueue: [], keepsake: null,
     records: { deepestWave: 0, longestChain: 0, fastestWave100Seconds: null },
-    settings: { clarity: 0.5, autoPrestige: false },
+    settings: { clarity: 0.5, autoPrestige: false, quartermaster: { on: false, reserve: 25, trees: {}, order: [] } },   // Quartermaster: off until switched on (directives/quartermaster.ts)
   };
 }
 

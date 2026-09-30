@@ -17,6 +17,7 @@ import { ascend, buyStar } from '../economy/ascension';                         
 import { abilitySlotCount, secondDesignatorAllowed, trialActive } from '../systems/abilities';   // WP9
 import { allowedSpeed } from '../economy/prestige';
 import { declineBoon, pickBoon, rerollBoon } from './boons';   // Boons (player-only; see Sim.step)
+import { setQuartermaster } from '../directives/quartermaster';
 
 /**
  * Apply one command. Returns an error string (also stored in machine.lastError) or null.
@@ -136,7 +137,8 @@ function dispatch(m: RunMachine, cmd: Command): string | null {
       if (s > 0) { run.scrap += s; w.emit(Ev.ScrapGain, 'offline', Math.floor(cmd.elapsedSeconds), s, 0, 0, -1); }
       return null;
     }
-    case 'set_setting': (w.meta.settings as Record<string, number | boolean>)[cmd.key] = cmd.value; return null;
+    case 'set_setting': (w.meta.settings as Record<string, unknown>)[cmd.key] = cmd.value; return null;
+    case 'set_quartermaster': return setQuartermaster(w, cmd);   // directives/quartermaster.ts (locked before the first Prestige)
     // --- WP8: progression (run/prestige.ts, run/trials.ts, economy/ascension.ts) ---
     case 'save_blueprint': return saveBlueprint(w, cmd.blueprint);
     case 'delete_blueprint': {   // Reachability: free a Blueprint slot

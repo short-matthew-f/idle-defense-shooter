@@ -313,6 +313,35 @@ export interface RunState {
    * again in the same attempt). Cleared at every attempt start; not saved (a load is a fresh attempt).
    */
   boonSpent: BoonId[];
+  /**
+   * Quartermaster addition (directives/quartermaster.ts): this Prestige's auto-buy bookkeeping, created lazily on
+   * the first pass. Not saved (a load starts a fresh allowance from the Scrap on hand).
+   */
+  quartermaster?: QuartermasterRun;
+}
+
+/** Quartermaster run bookkeeping (see RunState.quartermaster). */
+export interface QuartermasterRun {
+  /** Scrap the Quartermaster may still spend: (100 − reserve)% of the Scrap on hand when it started, plus of every kill's Scrap since. */
+  allowance: number;
+  /** World.scrapEarned at the last pass (income since then feeds the allowance). */
+  earnedMark: number;
+  /** Whether it was switched on at the last pass (switching on, or changing settings, restarts the allowance). */
+  active: boolean;
+  /** Ranks bought per tree this Prestige, and the Scrap they cost. */
+  bought: Partial<Record<TreeId, number>>;
+  spent: number;
+}
+
+/** Quartermaster settings (MetaState.settings.quartermaster; `set_quartermaster` patches them). */
+export interface QuartermasterSettings {
+  on: boolean;
+  /** Percent of Scrap kept for the player: 0, 25, 50 or 75. */
+  reserve: number;
+  /** Per-tree switches; a tree missing here is on. */
+  trees: Partial<Record<TreeId, boolean>>;
+  /** Tree priority order (earlier trees buy first each round); [] = cheapest next rank first. */
+  order: TreeId[];
 }
 
 export interface MetaState {
@@ -334,7 +363,9 @@ export interface MetaState {
   records: { deepestWave: number; longestChain: number; fastestWave100Seconds: number | null };
   settings: { clarity: number; autoPrestige: boolean;
     /** Reachability addition: Autocast switched off per ability, a bitmask over the ABILITIES data order (bit k = ABILITIES[k]). */
-    autocastOff?: number };
+    autocastOff?: number;
+    /** Quartermaster addition: auto-buy of stat ranks (unlocks at prestigeCount ≥ 1). Absent in old saves = off. */
+    quartermaster?: QuartermasterSettings };
   // --- WP8 additions (optional) ---
   /** The main run, parked while a Trial runs (run/trials.ts). */
   parkedRun?: RunSave;
@@ -445,7 +476,21 @@ export type Command =
    * checkpoint), so Dual Doctrine can move to another tree. `delete_blueprint` frees a Blueprint slot.
    */
   | { type: 'clear_second_doctrine'; tree: TreeId }
-  | { type: 'delete_blueprint'; index: number };
+  | { type: 'delete_blueprint'; index: number }
+  /**
+   * Quartermaster addition: patch the Quartermaster settings (only the fields given change). Rejected before the
+   * first Prestige. `trees` switches single trees on/off; `order` replaces the priority order ([] = cheapest first).
+   */
+  | { type: 'set_quartermaster'; on?: boolean; reserve?: number; trees?: Partial<Record<TreeId, boolean>>; order?: TreeId[] }
+  /**
+   * Active-edge additions (systems/active.ts, docs/ACTIVE.md; player-only, never an error: a tap that finds nothing,
+   * lands inside the cooldown or outside combat is ignored). `tap_assist`: a free bonus shot at the live enemy
+   * nearest (x, y). `collect_salvage`: collect the live salvage crate nearest (x, y). `overcharge`: start charging
+   * (meter full), release (fires the volley; inside the timing window at full power) or cancel (keeps the meter).
+   */
+  | { type: 'tap_assist'; x: number; y: number }
+  | { type: 'collect_salvage'; x: number; y: number }
+  | { type: 'overcharge'; action: 'charge' | 'release' | 'cancel' };
 
 // ---------------------------------------------------------------------------
 // Events (sim → everyone). Every event carries a cause for the kill chain.
@@ -458,6 +503,19 @@ export const enum Ev {
   Checkpoint, AttemptStart, Prestige, Ascend, Fx, Codex, Chain,
   /** Boons additions: an offer opened (src 'start' | 'boss' | 'reroll', a = offer seq, b = rerolls) / resolved (src = boon id or 'decline', a = active count). */
   BoonOffer, BoonPicked,
+  /**
+   * Quartermaster addition: an auto-buy pass that is about to buy (src 'quartermaster', a = Scrap on hand, b = its
+   * allowance, both floored). The pass's Purchase events name it as their cause and carry data { via: 'quartermaster' }.
+   */
+  Quartermaster,
+  /**
+   * Active-edge additions (systems/active.ts). Assist: a tap's bonus shot (src 'assist', a = enemy, b = damage; its Hit
+   * is the child). SalvageDrop: a crate fell (src 'salvage', a = crate value, b = 0 ordinary / 1 elite / 2 boss; cause =
+   * the Kill). SalvageCollect: a crate paid out (src 'salvage.tap' | 'salvage.passive', a = Scrap paid, b = chain links;
+   * cause = its SalvageDrop; the Scrap goes through World.addScrap like kill Scrap). Overcharge: the volley (src
+   * 'overcharge', a = 1 perfect / 0 weak, b = damage per enemy; its Hits are the children).
+   */
+  Assist, SalvageDrop, SalvageCollect, Overcharge,
 }
 
 export interface SimEvent {
@@ -492,6 +550,11 @@ export interface EventLog {
  * enemy (core/snapshot.ts). The field overlay (app/overlay.ts) enlarges exactly these to a thumb-sized reticle.
  */
 export const RETICLE_MARK = 1;
+/**
+ * Active-edge addition: aux1 of the layer-7 Diamond drawn for each live salvage crate (systems/active.ts). The app
+ * picks crates for `collect_salvage` taps from exactly these (app/pick.ts nearestCrate).
+ */
+export const SALVAGE_MARK = 2;
 
 export const enum Shape { Circle = 0, Ring = 1, Triangle = 2, Square = 3, Diamond = 4, Hex = 5, Star = 6, Capsule = 7, Line = 8, Shard = 9, Cross = 10, Crescent = 11,
   /** Graphics-pass additions (SDFs in render/shaders.ts). Arc = a 90° ring segment centred on +x (aux0 = thickness like Ring); Drop = teardrop, point on +x. */
@@ -600,6 +663,38 @@ export interface UiState {
   hints: string[];               // Codex hints for undiscovered nearby entries
   wallGaugeSeconds: number | null;
   recentEvents: SimEvent[];      // for the event feed / Inspector (last ~2 s)
+  /**
+   * Quartermaster addition (directives/quartermaster.ts): auto-buy of stat ranks. `unlocked` from the first Prestige on.
+   * `trees` lists the chassis and mounted hardpoint trees in priority order with their switch and ranks bought this
+   * Prestige; `boughtThisRun` / `scrapSpentThisRun` are the Prestige's totals.
+   */
+  quartermaster?: QuartermasterUi;
+  /** Active-edge addition (systems/active.ts; docs/ACTIVE.md): assist cooldown, salvage chain, Overcharge meter. */
+  active?: ActiveUi;
+}
+
+/** Active-edge UiState (systems/active.ts). Seconds are sim seconds. */
+export interface ActiveUi {
+  /** Assist cooldown remaining (s, 0 = ready) and its full length. */
+  assistCooldown: number; assistCooldownMax: number;
+  /** Live salvage crates, current chain links and the multiplier the next collect in the window would pay. */
+  crates: number; chain: number; chainMul: number;
+  overcharge: {
+    /** Progression feature `overcharge` reached (deepest wave ≥ ACTIVE.overcharge.unlockWave). */
+    unlocked: boolean;
+    /** 0..meterMax; `ready` = full, in combat, not Blackout. */
+    meter: number; meterMax: number; ready: boolean;
+    /** Charging: hold time so far (s, real-time), the perfect window and the auto-release limit (s). */
+    charging: boolean; hold: number; perfectFrom: number; perfectTo: number; maxHold: number;
+  };
+}
+
+export interface QuartermasterUi {
+  unlocked: boolean; on: boolean; reserve: number;
+  trees: { tree: TreeId; on: boolean; bought: number }[];
+  /** The saved priority order ([] = cheapest next rank first). */
+  order: TreeId[];
+  boughtThisRun: number; scrapSpentThisRun: number;
 }
 
 export interface ShopEntry {
@@ -632,7 +727,8 @@ export interface DamageShare { bySource: Record<string, number>; total: number; 
 // ---------------------------------------------------------------------------
 // Save state
 // ---------------------------------------------------------------------------
-export const SAVE_VERSION = 1;
+/** 2: Quartermaster settings (meta.settings.quartermaster; v1 saves migrate with it off). */
+export const SAVE_VERSION = 2;
 export interface SaveState {
   version: number;
   savedAtMs: number;             // wall clock, main-thread only

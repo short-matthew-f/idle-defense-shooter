@@ -15,6 +15,7 @@
  *    Queued enemy indices are repaired in onCompact (dead targets drop the command).
  *  - Autocast (`prestige.autocast`) runs after the Directives for abilities no enabled Directive casts and the player left on (meta.settings.autocastOff).
  *  - Upgrade Queue (`prestige.directives`): every 15 ticks between waves, every 2 s in combat.
+ *  - Quartermaster (from the first Prestige, directives/quartermaster.ts): once per sim second, after the Queue.
  *
  * Conditions (see core/types.ts DirectiveCondition):
  *   inner_ring_at_least n      hostile enemies within INNER_RING of the tower ≥ n
@@ -42,6 +43,7 @@ import { abilityCost, abilityIndex, findAbilities, type AbilitiesSystem } from '
 import { GroupFinder, findBoss, hostile, isTargetingProfile, nearestWith, pickDesignation } from './targeting-profiles';
 import { Autocast } from './autocast';
 import { runUpgradeQueue, sanitizeRules } from './upgrade-queue';
+import { quartermasterDue, runQuartermaster } from './quartermaster';
 import { forecastRecommends as economyForecastRecommends } from '../economy/forecast';   // WP8
 
 export const MAX_DIRECTIVES = 12;
@@ -127,6 +129,8 @@ export class DirectivesSystem implements System {
       if (run.phase === 'between' ? run.phaseTicks % QUEUE_BETWEEN_TICKS === 0 : run.waveTick % QUEUE_COMBAT_TICKS === QUEUE_COMBAT_TICKS - 1) runUpgradeQueue(w);
       this.runDirectives(w, slots);
     }
+    // Quartermaster (prestigeCount ≥ 1): after the Upgrade Queue, once per sim second (directives/quartermaster.ts)
+    if (quartermasterDue(w)) runQuartermaster(w);
     if (this.abil && w.stats.has('prestige.autocast') && run.phase === 'combat') {
       this.collectOwned(w, slots);
       this.autocast.update(w, this.abil, this.groups, reactionDelayTicks(w), this.reservedCe, this.skip);

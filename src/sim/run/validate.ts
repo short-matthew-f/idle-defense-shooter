@@ -76,6 +76,13 @@ export function validateCommand(cmd: unknown): string | null {
       return c.replace === undefined || str(c.replace) ? null : bad('replace');
     case 'reroll_boon': case 'decline_boon':
       return c.viaDirective !== undefined || c.directive !== undefined ? 'Boons are picked by the player only' : null;
+    case 'set_quartermaster': {   // Quartermaster: a partial patch; game rules (unlock, known trees, reserve choices) in the handler
+      if (!optBool(c.on)) return bad('on');
+      if (!(c.reserve === undefined || int(c.reserve))) return bad('reserve');
+      if (c.trees !== undefined && (!isObj(c.trees) || !Object.values(c.trees).every((v) => typeof v === 'boolean') || Object.keys(c.trees).length > 16)) return bad('trees');
+      if (c.order !== undefined && (!Array.isArray(c.order) || c.order.length > 16 || !c.order.every(str))) return bad('order');
+      return null;
+    }
     case 'set_setting': {
       const kind = typeof c.key === 'string' && Object.prototype.hasOwnProperty.call(SETTINGS, c.key) ? SETTINGS[c.key] : undefined;
       if (!kind) return bad('key');

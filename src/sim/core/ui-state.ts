@@ -14,6 +14,7 @@ import { attunementCap, hardpointCap, nextSlotWaves } from '../run/slots';
 import { trialForbidsMount } from '../run/prestige';
 import { allowedSpeed } from '../economy/prestige';
 import { BOON_CAP, boonRerollCost } from '../run/boons';
+import { quartermasterUi } from '../directives/quartermaster';
 
 function copy<T>(v: T): T { return JSON.parse(JSON.stringify(v)) as T; }
 
@@ -77,6 +78,7 @@ export function buildUiState(w: WorldImpl, m: RunMachine): UiState {
     stats: w.damageShare(),
     hints: codexHints(w),
     wallGaugeSeconds: forecast.wallGaugeSeconds,
+    quartermaster: quartermasterUi(w),   // directives/quartermaster.ts
     recentEvents: w.events.recent(run.tick - 2 * TICK_RATE, 200, (ev) => ev.type !== Ev.Hit && ev.type !== Ev.Spawn && ev.type !== Ev.StatusTick),
   };
 }

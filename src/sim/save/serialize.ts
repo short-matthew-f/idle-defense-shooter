@@ -20,6 +20,7 @@ import { anomalyDef, boonDef } from '../core/content';
 import { BOON_CAP, BOON_QUEUE_CAP } from '../data/boons';
 import { FRAMES, TRIALS } from '../data/index';
 import { Prng } from '../math/prng';
+import { defaultQuartermasterSettings, sanitizeQuartermaster } from '../directives/quartermaster';
 
 /** Minimal surface of the Sim the serializer needs (avoids an import cycle). */
 export interface Serializable { world: { run: RunState; build: BuildState; meta: MetaState; prng: { state(): [number, number, number, number] } } }
@@ -111,11 +112,13 @@ export function fromSave(save: SaveState): { meta: MetaState; run: RunState; bui
 /** One migration step: upgrades a save of version `v` (the table key) to `v + 1`. */
 export type Migration = (save: SaveState) => SaveState;
 /**
- * MIGRATIONS[v] upgrades a v-save to v+1. Empty while SAVE_VERSION is 1. When bumping SAVE_VERSION to
- * N, add `MIGRATIONS[N - 1]` (pure: take the old shape, return the new one) and a test next to the
- * synthetic-v2 test in tests/core/save.test.ts.
+ * MIGRATIONS[v] upgrades a v-save to v+1. When bumping SAVE_VERSION to N, add `MIGRATIONS[N - 1]` (pure: take the
+ * old shape, return the new one) and a test next to the synthetic-v2 test in tests/core/robustness.test.ts.
+ *  1 → 2  Quartermaster: meta.settings.quartermaster added, switched OFF (an old save never starts auto-buying).
  */
-export const MIGRATIONS: Readonly<Record<number, Migration>> = {};
+export const MIGRATIONS: Readonly<Record<number, Migration>> = {
+  1: (s) => ({ ...s, meta: { ...s.meta, settings: { ...s.meta.settings, quartermaster: defaultQuartermasterSettings() } } }),
+};
 
 /**
  * Bring any older save up to `target` (default SAVE_VERSION), then fill defaults and sanitize.
@@ -154,6 +157,8 @@ function sanitize(s: SaveState): void {
   if (!Array.isArray(m.directives)) m.directives = [];
   if (!Array.isArray(m.upgradeQueue)) m.upgradeQueue = [];
   if (!Array.isArray(m.blueprints)) m.blueprints = [];
+  if (!isObj(m.settings)) m.settings = newMeta().settings;
+  m.settings.quartermaster = sanitizeQuartermaster(m.settings.quartermaster);   // unknown trees / reserves repaired; missing = off
   m.echoes = Math.max(0, finiteOr(m.echoes, 0)); m.stars = Math.max(0, finiteOr(m.stars, 0));
   sanitizeRun(s.run);
   if (m.parkedRun) { if (isObj(m.parkedRun) && isObj(m.parkedRun.build)) sanitizeRun(m.parkedRun); else delete m.parkedRun; }

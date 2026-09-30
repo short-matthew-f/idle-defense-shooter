@@ -14,7 +14,7 @@
  * (`buy_cheapest`) buy rank by rank through `purchaseOne` and rebuild stats once; every entry
  * previews its next 10 prices and how many ranks the current Scrap buys (`preview`).
  */
-import type { ShopEntry } from '../core/types';
+import type { ShopEntry, SimEvent } from '../core/types';
 import { Ev } from '../core/types';
 import type { WorldImpl } from '../core/world-impl';
 import type { NodeDef, TreeDef } from '../data/schema';
@@ -218,7 +218,7 @@ export function purchase(w: WorldImpl, nodeId: string): string | null {
  * Buy one rank without rebuilding stats (the caller rebuilds once). Doctrine choices go through
  * chooseDoctrine, which rebuilds itself. Returns an error or null.
  */
-function purchaseOne(w: WorldImpl, nodeId: string): string | null {
+function purchaseOne(w: WorldImpl, nodeId: string, cause = -1, data?: SimEvent['data']): string | null {
   const info = nodeInfo(nodeId);
   if (!info) {
     const dot = nodeId.indexOf('.');
@@ -243,8 +243,22 @@ function purchaseOne(w: WorldImpl, nodeId: string): string | null {
   }
   const r = (w.build.ranks[nodeId] | 0) + 1;
   w.build.ranks[nodeId] = r;
-  w.emit(Ev.Purchase, nodeId, r, ev.cost, 0, 0, -1);
+  w.emit(Ev.Purchase, nodeId, r, ev.cost, 0, 0, cause, data);
   return null;
+}
+
+/**
+ * Quartermaster addition: buy one rank WITHOUT rebuilding stats (the caller rebuilds once), with the Purchase event's
+ * cause and data (directives/quartermaster.ts passes its pass event and { via: 'quartermaster' }). Returns an error or null.
+ */
+export function purchaseRank(w: WorldImpl, nodeId: string, cause: number, data?: SimEvent['data']): string | null {
+  return purchaseOne(w, nodeId, cause, data);
+}
+
+/** Quartermaster addition: price and lock state of a node's next rank, exactly as a purchase would see it. */
+export function quoteNode(w: WorldImpl, info: NodeInfo): { visible: boolean; locked: boolean; cost: number; currency: 'scrap' | 'cores' } {
+  const ev = evaluate(w, info);
+  return { visible: ev.visible, locked: !!ev.locked, cost: ev.cost, currency: ev.currency };
 }
 
 /** Clamp a bulk count: 0 (Max) → MAX_BULK_RANKS; otherwise 1..MAX_BULK_RANKS. */
