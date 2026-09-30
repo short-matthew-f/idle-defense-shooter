@@ -7,7 +7,7 @@ import { buildShop } from '../economy/shop';
 import { shopTreeTotals } from '../economy/bulk';
 import { abilityUi } from '../systems/abilities';
 import { bossDef, bossDefByIndex } from './content';
-import { SECTORS } from '../data/index';
+import { SECTORS, SYSTEM_ORDER_IDS } from '../data/index';
 import { computeForecast } from '../economy/forecast';   // WP8
 import { codexHints } from '../economy/codex';           // WP8
 import { nextSlotWaves } from '../run/slots';
@@ -46,6 +46,7 @@ export function buildUiState(w: WorldImpl, m: RunMachine): UiState {
       boons: [...w.build.boons], boonQueueLength: run.boonQueue.length, boonCap: BOON_CAP, boonRerollCost: boonRerollCost(run),
     },
     activeTrial: w.meta.activeTrial ?? null,
+    extraSystems: extraSystems(w),
     nextHardpointWave: slots.hardpoint,
     nextAttunementWave: slots.attunement,
     speedAllowed: allowedSpeed(run, w.meta),
@@ -71,4 +72,14 @@ export function buildUiState(w: WorldImpl, m: RunMachine): UiState {
     wallGaugeSeconds: forecast.wallGaugeSeconds,
     recentEvents: w.events.recent(run.tick - 2 * TICK_RATE, 200, (ev) => ev.type !== Ev.Hit && ev.type !== Ev.Spawn && ev.type !== Ev.StatusTick),
   };
+}
+
+/** Systems that run without a hardpoint slot (Frame free mount, Borrowed Blade), for the Upgrades and Build screens. */
+function extraSystems(w: WorldImpl): NonNullable<UiState['extraSystems']> {
+  const out: NonNullable<UiState['extraSystems']> = [];
+  for (const s of SYSTEM_ORDER_IDS) {
+    if (s === 'primary' || w.build.hardpoints.includes(s) || !w.stats.mounted(s)) continue;
+    out.push({ system: s, via: w.stats.borrowed(s) ? 'borrowed' : 'frame' });
+  }
+  return out;
 }

@@ -325,6 +325,8 @@ export class Shop {
         const n = Math.max(r.hardpointSlotsOpen, b.hardpoints.length);
         const out: Chip[] = [];
         for (let i = 0; i < n; i++) { const hp = b.hardpoints[i]; out.push(hp ? { id: hp, label: TREE_LABEL[hp] } : { id: `slot:${i}`, label: 'Empty slot', empty: true }); }
+        // systems that run without a slot: a Frame's free mount, or a Borrowed Blade
+        for (const x of ui.extraSystems ?? []) out.push({ id: x.system, label: `${TREE_LABEL[x.system]} · ${x.via === 'borrowed' ? 'borrowed' : 'Frame'}` });
         return out;
       }
       case 'cross': return [{ id: 'fusion', label: 'Fusions' }, { id: 'link', label: 'Linkages' }, { id: 'infuse', label: 'Infusions' }];
@@ -530,7 +532,8 @@ export class Shop {
       } else {
         out.push({ t: 'head', text: 'Doctrine changes', sub: 'Changing a chosen Doctrine costs 1 Core and is allowed only at a checkpoint (between waves, right after a boss).' });
         let any = false;
-        for (const t of [...CHASSIS, ...ui.build.attunements, ...ui.build.hardpoints]) {
+        const frameMounted = (ui.extraSystems ?? []).filter((x) => x.via === 'frame').map((x) => x.system);
+        for (const t of [...CHASSIS, ...ui.build.attunements, ...ui.build.hardpoints, ...frameMounted]) {
           if (!t || !ui.build.doctrines[t as TreeId]) continue;
           any = true;
           out.push({ t: 'fork', tree: t as TreeId });

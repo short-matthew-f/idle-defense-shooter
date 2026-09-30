@@ -121,7 +121,21 @@ export class BuildScreen {
   }
 
   private hardpoints(ui: UiState): HTMLElement {
-    return section('Hardpoints', 'Weapon systems. Mounts lock for this Prestige; a Refit costs 3 Cores.', ...this.slotRows(ui, false));
+    return section('Hardpoints', 'Weapon systems. Mounts lock for this Prestige; a Refit costs 3 Cores.', ...this.slotRows(ui, false), ...this.extraRows(ui));
+  }
+
+  /** Systems that run without a slot: a Frame's free mount, or a Borrowed Blade from an Anomaly. */
+  private extraRows(ui: UiState): HTMLElement[] {
+    return (ui.extraSystems ?? []).map((x) => {
+      const name = TREE_LABEL[x.system as TreeId] ?? x.system;
+      const doc = ui.build.doctrines[x.system as TreeId];
+      const docName = doc ? TREE_BY_ID.get(x.system as TreeId)?.doctrines.find((d) => d.id === doc)?.name : null;
+      const via = x.via === 'borrowed' ? 'Borrowed by an Anomaly: base upgrades only, no Doctrines.' : 'Mounted free by your Frame.';
+      return row(icon('check', 'ico'), name,
+        h('span', null, docName ? h('span', { class: 'bs-doc', text: `${docName} Doctrine` }) : null, docName ? h('br') : null, via, h('br'), HARDPOINT_BLURB[x.system as never]),
+        [button(['Tree', icon('right', 'ico tiny chev')], () => this.shop.jumpTo(x.system), { class: 'btn small', label: `Open the ${name} tree` })],
+        `filled ${x.system}`);
+    });
   }
 
   private attunements(ui: UiState): HTMLElement {
@@ -129,7 +143,8 @@ export class BuildScreen {
   }
 
   private doctrines(ui: UiState): HTMLElement {
-    const trees = [...CHASSIS, ...ui.build.attunements.filter(Boolean), ...ui.build.hardpoints.filter(Boolean)] as TreeId[];
+    const frameMounted = (ui.extraSystems ?? []).filter((x) => x.via === 'frame').map((x) => x.system);
+    const trees = [...CHASSIS, ...ui.build.attunements.filter(Boolean), ...ui.build.hardpoints.filter(Boolean), ...frameMounted] as TreeId[];
     const rows = trees.map((tree) => {
       const t = TREE_BY_ID.get(tree);
       if (!t) return null;

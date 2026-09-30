@@ -540,6 +540,12 @@ export interface UiState {
   };
   /** Integration additions: the Trial being played (meta.activeTrial), or null. */
   activeTrial: TrialId | null;
+  /**
+   * Weapon systems that are active without a hardpoint slot: mounted free by the Frame (Hive drones, Prism laser)
+   * or borrowed by an Anomaly (Borrowed Blade). `build.hardpoints` lists only slotted systems, so the UI needs this
+   * to show their trees.
+   */
+  extraSystems?: { system: HardpointId; via: 'frame' | 'borrowed' }[];
   /** Wave whose clear opens the next hardpoint / attunement slot (run/slots.ts), or null when no more can open. */
   nextHardpointWave: number | null;
   nextAttunementWave: number | null;
