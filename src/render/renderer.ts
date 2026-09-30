@@ -319,8 +319,9 @@ export class Renderer {
     // camera: snapshot trauma (tower hits) and cue shake, both scaled by the Screen shake / reduced motion setting
     camera.update(dt, snap.cameraShake * o.motion.shake);
     if (juice.shake > 0) { camera.addShake(juice.shake); juice.shake = 0; }
-    const punch = 1 + juice.punch;
-    const s = camera.scale * punch;
+    // the punch zoom kick lives on the camera so pointer math (camera.toWorld) matches this frame exactly
+    camera.punch = juice.punch;
+    const s = camera.drawScale;
     o.minR = this.minEnemyPx / Math.max(1e-6, s);
     o.pxPerUnit = s;
 

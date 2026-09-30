@@ -242,3 +242,9 @@ at 8.6K particles while only one enemy is alive. Worth a check on a real phone b
   `overlay.test.ts`, landscape cases in `sheet.test.ts`).
 - `npm run build`: succeeds.
 - The e2e script (`e2e.mjs`): `SUMMARY {"fail":[],"consoleErrors":0}`.
+
+## Touch offset (follow-up)
+
+"Taps land 30-50 px below the finger" on an iPhone home-screen app: audit, fixes (pointer scaled from the canvas
+box into the camera view, punch included in the pointer math, re-fit on every viewport change), the Touch test
+and tap calibration are in [docs/TOUCH.md](../TOUCH.md).

@@ -92,7 +92,7 @@ export class GameUi {
       automation: { title: 'Automation', el: () => this.directives.el, onShow: () => { this.directives.open(this.autoTab); this.directives.setShown(true); }, onHide: () => this.directives.setShown(false) },
       trials: { title: 'Trials', el: () => this.trials.el, onShow: () => this.trials.setShown(true), onHide: () => this.trials.setShown(false) },
       settings: { title: 'Settings', el: () => settingsPanel(this.ctx) },
-      help: { title: 'Help & shortcuts', el: () => helpPanel() },
+      help: { title: 'Help & shortcuts', el: () => helpPanel(this.ctx) },
     }, {
       go: (sub: MoreSub) => this.shell.go('more', sub),
       back: () => this.shell.back(),

@@ -13,6 +13,7 @@ import { maybeOnboard } from './onboard';
 import { graphicsSettings } from './graphics-settings';
 import { soundSettings } from '../audio/ui';
 import type { UiCtx } from './ctx';
+import { openTouchTest } from './touch-test';
 
 export const SHORTCUTS: [string, string][] = [
   ['Space', 'Pause and open the Kill-Chain Inspector'],
@@ -107,7 +108,7 @@ export function settingsPanel(ctx: UiCtx): HTMLElement {
 }
 
 /** The Help sub-screen: gestures, keyboard shortcuts, the intro again, about. */
-export function helpPanel(): HTMLElement {
+export function helpPanel(ctx: UiCtx): HTMLElement {
   return h('div', { class: 'settings help' },
     h('h3', { class: 'sec-title', text: 'Touch' }),
     h('dl', { class: 'keys' }, ...GESTURES.flatMap(([k, d]) => [h('dt', { text: k }), h('dd', { text: d })])),
@@ -117,6 +118,9 @@ export function helpPanel(): HTMLElement {
     h('p', { class: 'dim small', text: 'Project Citadel: an idle tower-defense game where the tower is the character and each Prestige is a new machine. No dailies, no streaks, nothing decays.' }),
     h('p', { class: 'dim small build-id', text: `Build ${BUILD}` }),
     h('div', { class: 'row gap wrap' }, button('Replay intro', () => maybeOnboard(true), { class: 'btn' }), updateButton()),
+    h('h3', { class: 'sec-title', text: 'Tap accuracy' }),
+    h('p', { class: 'dim small', text: 'Taps landing off target? The touch test shows where the browser reads each touch and where the game acts on it, and can calibrate taps for this device.' }),
+    h('div', { class: 'row gap wrap' }, button('Touch test', () => openTouchTest(ctx), { class: 'btn' })),
     h('h3', { class: 'sec-title', text: 'Layout diagnostics' }),
     diagnostics());
 }
@@ -148,7 +152,7 @@ function diagnostics(): HTMLElement {
       `html client ${document.documentElement.clientWidth}×${document.documentElement.clientHeight}  body h ${document.body.getBoundingClientRect().height.toFixed(0)}`,
       `safe-area top ${sat} bottom ${sab}  vars --safe-top ${cs.getPropertyValue('--safe-top').trim()} --top-h ${cs.getPropertyValue('--top-h').trim()} --tab-h ${cs.getPropertyValue('--tab-h').trim()}`,
       `standalone ${String(nav.standalone)}  display-mode ${matchMedia('(display-mode: standalone)').matches ? 'standalone' : 'browser'}`,
-      rect('#app'), rect('#ui'), rect('.topbar'), rect('.wave-num'), rect('.battle-layer'), rect('.tabbar'),
+      rect('#app'), rect('#game'), rect('#ui'), rect('.topbar'), rect('.wave-num'), rect('.battle-layer'), rect('.tabbar'),
       `body classes ${document.body.className}`,
       navigator.userAgent,
     ].join('\n');

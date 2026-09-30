@@ -11,11 +11,14 @@
 //   phone reach       (Reachability, docs/reviews/REACHABILITY.md) a save with Spare Barrel, Second Opinion and the Third
 //                     Tactical Slot: choose a second Ballistics Doctrine on the fork, the third ability slot appears,
 //                     is assigned from its picker and cast, and two enemies are designated (HUD "2/2"), one cleared by a re-tap
+//   phone touch       (docs/TOUCH.md) More → Help → Touch test: the canvas marker lands on the tap; calibration with honest
+//                     taps says "accurate" and stores nothing; a synthetic 40 px pointer offset (taps read 40 px below the
+//                     finger) is measured, calibrated away (prefs touchCal), survives a reload, and Reset restores identity
 // Exit code 1 on any failed check.
 //
 // Environment: PLAYWRIGHT_DIR (a directory holding the `playwright` package; default: the global npm root),
 // CHROMIUM (browser executable; default: Playwright's own), E2E_URL (skip the preview server and test this URL),
-// E2E_OUT (screenshots; default tests/e2e/out), E2E_SKIP_DESKTOP=1 / E2E_SKIP_PHONE=1 / E2E_SKIP_REACH=1.
+// E2E_OUT (screenshots; default tests/e2e/out), E2E_SKIP_DESKTOP=1 / E2E_SKIP_PHONE=1 / E2E_SKIP_REACH=1 / E2E_SKIP_TOUCH=1.
 import { createRequire } from 'node:module';
 import { spawn, execSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -83,6 +86,7 @@ try {
   if (!process.env.E2E_SKIP_DESKTOP) await desktop();
   if (!process.env.E2E_SKIP_PHONE) await phone();
   if (!process.env.E2E_SKIP_REACH) await reach();
+  if (!process.env.E2E_SKIP_TOUCH) await touchCheck();
 } catch (e) {
   check('no exceptions', false, String(e && e.stack || e));
 } finally {
@@ -501,8 +505,118 @@ async function reach() {
   if (again) await page.touchscreen.tap(again.sx, again.sy);
   await page.waitForTimeout(300);
   const r5 = await rs();
-  // relative to the count just before the tap (a designated enemy can also die in between)
-  check('reach: tapping a designated enemy clears it', !!again && before.des?.live >= 1 && r5.des?.live === before.des.live - 1, { before: before.des, after: r5.des });
+  // relative to the count just before the tap; the other designated enemy can also die in the same 300 ms, so
+  // also check that no reticle is left on the enemy that was tapped (world distance from the tapped point)
+  const leftOnTapped = again ? await page.evaluate((t) => {
+    const c = window.__citadel, s = c.app.snapshot, r = c.app.canvas.getBoundingClientRect();
+    const w = c.app.camera.toWorld((t.sx - r.left) * c.app.camera.viewW / r.width, (t.sy - r.top) * c.app.camera.viewH / r.height, { x: 0, y: 0 });
+    let n = 0;
+    for (let i = 0; i < s.instanceCount; i++) { const o = i * 12; if (s.instances[o + 9] === 7 && s.instances[o + 11] !== 0 && Math.hypot(s.instances[o] - w.x, s.instances[o + 1] - w.y) < 24) n++; }
+    return n;
+  }, again) : -1;
+  check('reach: tapping a designated enemy clears it', !!again && before.des?.live >= 1 && r5.des?.live <= before.des.live - 1 && leftOnTapped === 0, { before: before.des, after: r5.des, leftOnTapped });
   check('reach: zero console errors', errors.length === 0, errors);
+  await ctx.close();
+}
+
+// ================================================================ touch offset (docs/TOUCH.md)
+async function touchCheck() {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+  const page = await ctx.newPage();
+  const consoleErrors = [];
+  attachLogs(page, consoleErrors);
+  // synthetic device offset: canvas pointer events report clientY + __touchOffsetY (hit-testing is unchanged)
+  await page.addInitScript(() => {
+    window.__touchOffsetY = 0;
+    for (const t of ['pointerdown', 'pointermove', 'pointerup']) {
+      window.addEventListener(t, (e) => {
+        if (!window.__touchOffsetY || !(e.target instanceof HTMLCanvasElement)) return;
+        const y = e.clientY + window.__touchOffsetY;
+        Object.defineProperty(e, 'clientY', { value: y });
+        Object.defineProperty(e, 'pageY', { value: y });
+      }, true);
+    }
+  });
+  await page.goto(URL);
+  await page.waitForTimeout(1200);
+  await skipOnboarding(page);
+  await page.waitForFunction(() => !!window.__citadel?.game?.ready, null, { timeout: 60000 });
+  const hook = () => page.evaluate(() => {
+    const inp = window.__citadel.app.input;
+    inp.onTap = (x, y) => { window.__lastTap = { x, y }; };   // measure only
+  });
+  /** Tap the arena with the finger at (x, y): where the drawn frame shows the world point the game acted on, minus the finger. */
+  const tapError = async (x, y) => {
+    await page.evaluate(() => { window.__lastTap = null; });
+    await page.touchscreen.tap(x, y);
+    await page.waitForTimeout(150);
+    return page.evaluate(({ x, y }) => {
+      const t = window.__lastTap; if (!t) return null;
+      const c = window.__citadel.app, r = c.canvas.getBoundingClientRect(), p = c.camera.toScreen(t.x, t.y, { x: 0, y: 0 });
+      return { dx: +(r.left + p.x * r.width / c.camera.viewW - x).toFixed(2), dy: +(r.top + p.y * r.height / c.camera.viewH - y).toFixed(2) };
+    }, { x, y });
+  };
+  const openTest = async () => {
+    await tab(page, 'more');
+    await page.locator('.menu-item', { hasText: 'Help' }).first().tap();
+    await page.waitForTimeout(300);
+    await page.getByRole('button', { name: 'Touch test' }).tap();
+    await page.waitForTimeout(400);
+  };
+  const calibrate = async () => {
+    await page.getByRole('button', { name: 'Calibrate taps' }).tap();
+    await page.waitForTimeout(300);
+    const targets = await page.evaluate(() => JSON.parse(document.querySelector('.touch-test').dataset.targets));
+    for (const [x, y] of targets) { await page.touchscreen.tap(x, y); await page.waitForTimeout(200); }
+    return page.evaluate(() => ({ result: document.querySelector('.touch-test').dataset.result, pref: JSON.parse(localStorage.getItem('citadel.prefs.v1') || '{}').touchCal ?? null }));
+  };
+  await hook();
+  const honest = await tapError(120, 520);
+  check('touch: a tap acts on the point drawn under the finger', honest && Math.hypot(honest.dx, honest.dy) < 1, honest);
+
+  await openTest();
+  await page.touchscreen.tap(200, 560);
+  await page.waitForTimeout(300);
+  const last = await page.evaluate(() => JSON.parse(document.querySelector('.touch-test').dataset.last || 'null'));
+  await page.screenshot({ path: `${OUT}/phone-touch-test.png` });
+  check('touch test: the canvas marker is drawn where the game read the tap (DOM crosshair)', last && Math.hypot(last.bx - last.cx, last.by - last.cy) < 0.5 && last.cx === 200 && last.cy === 560, last);
+  const acc = await calibrate();
+  check('touch: calibration with accurate taps stores nothing', /accurate/.test(acc.result) && acc.pref === null, acc);
+
+  // a device that reads taps 40 px below the finger
+  await page.evaluate(() => { window.__touchOffsetY = 40; });
+  await page.getByRole('button', { name: 'Close' }).tap();
+  await page.waitForTimeout(300);
+  await page.goBack(); await page.waitForTimeout(200); await page.goBack(); await page.waitForTimeout(300);
+  const off = await tapError(120, 520);
+  check('touch: the synthetic offset is measured (≈ 40 px below)', off && Math.abs(off.dy - 40) < 1 && Math.abs(off.dx) < 1, off);
+  await openTest();
+  const cal = await calibrate();
+  await page.screenshot({ path: `${OUT}/phone-touch-calibrated.png` });
+  check('touch: calibration fits the offset and stores it', /Calibrated/.test(cal.result) && cal.pref && Math.abs(cal.pref.by + 40) < 1.5 && Math.abs(cal.pref.ay - 1) < 0.01, cal);
+  await page.getByRole('button', { name: 'Close' }).tap();
+  await page.waitForTimeout(300);
+  await page.goBack(); await page.waitForTimeout(200); await page.goBack(); await page.waitForTimeout(300);
+  const fixed = [await tapError(120, 520), await tapError(300, 300)];
+  check('touch: with the calibration the offset is gone (< 2 px)', fixed.every((e) => e && Math.hypot(e.dx, e.dy) < 2), fixed);
+
+  // the calibration survives a reload, and Reset restores identity
+  await page.reload();
+  await page.waitForFunction(() => !!window.__citadel?.game?.ready, null, { timeout: 60000 });
+  await page.waitForTimeout(500);
+  await hook();
+  const calLoaded = await page.evaluate(() => window.__citadel.app.input.calibration);
+  await page.evaluate(() => { window.__touchOffsetY = 40; });   // the init script reset it: same device again
+  const reloaded = { ...(await tapError(200, 450)), by: calLoaded?.by };
+  check('touch: the stored calibration applies after a reload', calLoaded && Math.hypot(reloaded.dx, reloaded.dy) < 2, reloaded);
+  await openTest();
+  await page.getByRole('button', { name: 'Reset calibration' }).tap();
+  await page.waitForTimeout(200);
+  const reset = await page.evaluate(() => ({ pref: JSON.parse(localStorage.getItem('citadel.prefs.v1') || '{}').touchCal ?? null, input: window.__citadel.app.input.calibration }));
+  await page.getByRole('button', { name: 'Close' }).tap();
+  await page.waitForTimeout(200);
+  const closed = await page.evaluate(() => ({ probe: !!window.__citadel.app.input.probe, testing: document.body.classList.contains('touch-testing'), paused: window.__citadel.game.paused }));
+  check('touch: Reset calibration restores identity; closing hands taps back to the game', reset.pref === null && reset.input === null && !closed.probe && !closed.testing && !closed.paused, { reset, closed });
+  check('touch: no console errors', consoleErrors.length === 0, consoleErrors.slice(0, 5));
   await ctx.close();
 }

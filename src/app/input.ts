@@ -5,8 +5,46 @@
  *   - pinch / wheel zoom (applied to the Camera; onZoom fires after)
  * Angles are radians from `aimOrigin` (the tower, default 0,0) to the pointer in world space
  * (atan2(dy, dx), +y down on screen). Touch and mouse both go through Pointer Events.
+ *
+ * Pointer → camera pixels (docs/TOUCH.md): every event reads the canvas' CSS box, applies the tap
+ * calibration (if the player stored one) in box pixels, then scales box pixels into the camera's view size
+ * (`camera.viewW / rect.width`), so a tap maps onto what is drawn even when the box and the size the
+ * camera was fitted to disagree (the draw maps the camera view onto the whole box). A disagreement also
+ * calls `onStale` (the app re-fits). `probe` (the touch test) takes every pointer instead of the game.
  */
 import type { Camera } from '@render/camera';
+import { applyCal, type TouchCal } from './touch-cal';
+
+/** Everything the touch test shows about one pointer event. */
+export interface ProbeSample {
+  phase: 'down' | 'move' | 'up';
+  pointerType: string;
+  clientX: number; clientY: number;
+  pageX: number; pageY: number;
+  screenX: number; screenY: number;
+  offsetX: number; offsetY: number;
+  /** Canvas CSS box at the event. */
+  rect: { left: number; top: number; width: number; height: number };
+  /** Canvas-local CSS px, no calibration (what calibration fits against). */
+  rawX: number; rawY: number;
+  /** Canvas-local CSS px after the calibration. */
+  calX: number; calY: number;
+  /** Camera px (after scaling the box to the camera view). */
+  camX: number; camY: number;
+  /** The world point the game would act on. */
+  worldX: number; worldY: number;
+}
+
+/** Box-local CSS px → camera px: calibration in box px, then box → camera view scale. Pure (tests). */
+export function boxToView(x: number, y: number, rectW: number, rectH: number, viewW: number, viewH: number, cal: Readonly<TouchCal> | null, out: { x: number; y: number }): { x: number; y: number } {
+  applyCal(cal, x, y, out);
+  out.x *= rectW > 0 ? viewW / rectW : 1;
+  out.y *= rectH > 0 ? viewH / rectH : 1;
+  return out;
+}
+
+/** Box and camera view differ by more than this (CSS px): the camera is stale. */
+const STALE_PX = 1;
 
 export interface InputCallbacks {
   onTap?: (worldX: number, worldY: number) => void;
@@ -37,6 +75,15 @@ export class Input {
   holdMs: number;
   slopPx: number;
   aimOrigin: { x: number; y: number };
+  /** Tap calibration applied to every pointer position (null = identity). */
+  calibration: TouchCal | null = null;
+  /** The touch test: when set, every pointer goes here and the game sees nothing. */
+  probe: ((s: ProbeSample) => void) | null = null;
+  /** The canvas box and the camera view disagreed (the app re-fits the camera). */
+  onStale: (() => void) | null = null;
+  /** Self-check: pointer events that found the canvas box and the camera view out of step (this session). */
+  staleCount = 0;
+  lastStale = '';
 
   private readonly canvas: HTMLCanvasElement;
   private readonly camera: Camera;
@@ -58,6 +105,14 @@ export class Input {
   private lastPinchCy = 0;
   private rectLeft = 0;
   private rectTop = 0;
+  private rectW = 0;
+  private rectH = 0;
+  /** World point under each pointer when it went down (a tap acts on what the finger touched). */
+  private readonly downWX = new Float32Array(MAX_POINTERS);
+  private readonly downWY = new Float32Array(MAX_POINTERS);
+  private probeId = -1;
+  private stalePending = false;
+  private readonly tmp = { x: 0, y: 0 };
 
   constructor(canvas: HTMLCanvasElement, camera: Camera, callbacks: InputCallbacks = {}, opts: InputOptions = {}) {
     this.canvas = canvas;
@@ -100,10 +155,46 @@ export class Input {
     return -1;
   }
 
+  /** Read the canvas box (every pointer event: cheap, and never stale) and check it against the camera. */
   private updateRect(): void {
     const r = this.canvas.getBoundingClientRect();
     this.rectLeft = r.left;
     this.rectTop = r.top;
+    this.rectW = r.width;
+    this.rectH = r.height;
+    const cam = this.camera;
+    if (r.width > 0 && r.height > 0 && (Math.abs(r.width - cam.viewW) > STALE_PX || Math.abs(r.height - cam.viewH) > STALE_PX)) {
+      this.staleCount++;
+      this.lastStale = `box ${r.width.toFixed(1)}×${r.height.toFixed(1)} vs camera ${cam.viewW}×${cam.viewH}`;
+      if (this.staleCount <= 3) console.info(`[input] canvas ${this.lastStale}: taps rescaled, camera re-fitted`);
+      // re-fit after this event: the event itself maps onto the frame on screen, drawn with the current camera
+      if (!this.stalePending) { this.stalePending = true; queueMicrotask(() => { this.stalePending = false; this.onStale?.(); }); }
+    }
+  }
+
+  /** Client px → camera px into `out` (calibrated, scaled to the camera view). */
+  private toView(clientX: number, clientY: number, out: { x: number; y: number }): { x: number; y: number } {
+    return boxToView(clientX - this.rectLeft, clientY - this.rectTop, this.rectW, this.rectH, this.camera.viewW, this.camera.viewH, this.calibration, out);
+  }
+
+  private setPos(slot: number, e: PointerEvent): void {
+    const v = this.toView(e.clientX, e.clientY, this.tmp);
+    this.px[slot] = v.x;
+    this.py[slot] = v.y;
+  }
+
+  private emitProbe(e: PointerEvent, phase: ProbeSample['phase']): void {
+    const rawX = e.clientX - this.rectLeft, rawY = e.clientY - this.rectTop;
+    const c = applyCal(this.calibration, rawX, rawY, { x: 0, y: 0 });
+    const v = this.toView(e.clientX, e.clientY, { x: 0, y: 0 });
+    const w = this.camera.toWorld(v.x, v.y, { x: 0, y: 0 });
+    this.probe?.({
+      phase, pointerType: e.pointerType,
+      clientX: e.clientX, clientY: e.clientY, pageX: e.pageX, pageY: e.pageY, screenX: e.screenX, screenY: e.screenY,
+      offsetX: e.offsetX, offsetY: e.offsetY,
+      rect: { left: this.rectLeft, top: this.rectTop, width: this.rectW, height: this.rectH },
+      rawX, rawY, calX: c.x, calY: c.y, camX: v.x, camY: v.y, worldX: w.x, worldY: w.y,
+    });
   }
 
   private angleTo(slot: number): number {
@@ -114,6 +205,14 @@ export class Input {
   private readonly handleContext = (e: Event): void => { e.preventDefault(); };
 
   private readonly handleDown = (e: PointerEvent): void => {
+    if (this.probe) {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      this.updateRect();
+      this.probeId = e.pointerId;
+      try { this.canvas.setPointerCapture(e.pointerId); } catch { /* not capturable */ }
+      this.emitProbe(e, 'down');
+      return;
+    }
     if (!this.enabled) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     let slot = this.slotOf(e.pointerId);
@@ -123,8 +222,12 @@ export class Input {
     if (slot < 0) return;
     this.updateRect();
     this.ids[slot] = e.pointerId;
-    this.px[slot] = this.downX[slot] = e.clientX - this.rectLeft;
-    this.py[slot] = this.downY[slot] = e.clientY - this.rectTop;
+    this.setPos(slot, e);
+    this.downX[slot] = this.px[slot];
+    this.downY[slot] = this.py[slot];
+    const w = this.camera.toWorld(this.px[slot], this.py[slot]);
+    this.downWX[slot] = w.x;
+    this.downWY[slot] = w.y;
     this.active++;
     try { this.canvas.setPointerCapture(e.pointerId); } catch { /* not capturable */ }
 
@@ -157,10 +260,14 @@ export class Input {
   }
 
   private readonly handleMove = (e: PointerEvent): void => {
+    if (this.probe) {
+      if (e.pointerId === this.probeId) { this.updateRect(); this.emitProbe(e, 'move'); }
+      return;
+    }
     const slot = this.slotOf(e.pointerId);
     if (slot < 0) return;
-    this.px[slot] = e.clientX - this.rectLeft;
-    this.py[slot] = e.clientY - this.rectTop;
+    this.updateRect();
+    this.setPos(slot, e);
     if (this.pinching) { this.updatePinch(); return; }
     if (!this.moved) {
       const dx = this.px[slot] - this.downX[slot];
@@ -175,10 +282,17 @@ export class Input {
   };
 
   private readonly handleUp = (e: PointerEvent): void => {
+    if (this.probe && e.pointerId === this.probeId) {
+      this.probeId = -1;
+      this.updateRect();
+      this.emitProbe(e, 'up');
+      try { this.canvas.releasePointerCapture(e.pointerId); } catch { /* already released */ }
+      return;
+    }
     const slot = this.slotOf(e.pointerId);
     if (slot < 0) return;
-    this.px[slot] = e.clientX - this.rectLeft;
-    this.py[slot] = e.clientY - this.rectTop;
+    this.updateRect();
+    this.setPos(slot, e);
     const wasSingle = this.active === 1 && !this.pinching;
     const wasAiming = this.aiming;
     const wasMoved = this.moved;
@@ -189,13 +303,12 @@ export class Input {
     }
     this.cancelHold();
     if (wasAiming) { this.endAim(); return; }
-    if (!wasMoved && this.enabled) {
-      const w = this.camera.toWorld(this.downX[slot], this.downY[slot]);
-      this.onTap?.(w.x, w.y);
-    }
+    // the world point under the finger when it went down (the frame the player aimed at)
+    if (!wasMoved && this.enabled) this.onTap?.(this.downWX[slot], this.downWY[slot]);
   };
 
   private readonly handleCancel = (e: PointerEvent): void => {
+    if (e.pointerId === this.probeId) { this.probeId = -1; return; }
     const slot = this.slotOf(e.pointerId);
     if (slot < 0) return;
     this.release(slot, e.pointerId);
@@ -242,13 +355,14 @@ export class Input {
   }
 
   private readonly handleWheel = (e: WheelEvent): void => {
-    if (!this.enabled) return;
+    if (!this.enabled || this.probe) return;
     e.preventDefault();
     this.updateRect();
     // normalize line/page deltas to pixels
     const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
     const f = Math.exp(-e.deltaY * unit * 0.0015);
-    this.camera.zoomBy(f, e.clientX - this.rectLeft, e.clientY - this.rectTop);
+    const v = this.toView(e.clientX, e.clientY, this.tmp);
+    this.camera.zoomBy(f, v.x, v.y);
     this.onZoom?.(this.camera.zoom);
   };
 }

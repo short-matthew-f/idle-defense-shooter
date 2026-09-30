@@ -155,3 +155,36 @@ describe('Camera shake', () => {
     expect(w.y).toBeCloseTo(60, 4);
   });
 });
+
+describe('Camera punch (zoom kick)', () => {
+  it('toScreen / toWorld include the punch, like the drawn frame (s = scale · (1 + punch))', () => {
+    const c = new Camera();
+    c.fit(R, 393, 793);
+    const at = c.toScreen(200, -150, { x: 0, y: 0 });
+    c.punch = 0.07;
+    const kicked = c.toScreen(200, -150, { x: 0, y: 0 });
+    expect(kicked.x - c.centerPx).toBeCloseTo((at.x - c.centerPx) * 1.07, 6);
+    expect(kicked.y - c.centerPy).toBeCloseTo((at.y - c.centerPy) * 1.07, 6);
+    const w = c.toWorld(kicked.x, kicked.y, { x: 0, y: 0 });
+    expect(w.x).toBeCloseTo(200, 6);
+    expect(w.y).toBeCloseTo(-150, 6);
+    expect(c.drawScale).toBeCloseTo(c.scale * 1.07, 9);
+  });
+
+  it('zoom keeps the point under the pointer fixed during a punch', () => {
+    const c = new Camera();
+    c.fit(R, 393, 793);
+    c.punch = 0.05;
+    const before = c.toWorld(170, 450, { x: 0, y: 0 });   // inside the pan limit at zoom 2
+    c.setZoom(2, 170, 450);
+    const after = c.toWorld(170, 450, { x: 0, y: 0 });
+    expect(after.x).toBeCloseTo(before.x, 6);
+    expect(after.y).toBeCloseTo(before.y, 6);
+  });
+
+  it('reset clears the punch', () => {
+    const c = new Camera();
+    c.punch = 0.07; c.reset();
+    expect(c.punch).toBe(0);
+  });
+});

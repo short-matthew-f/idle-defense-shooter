@@ -37,6 +37,12 @@ export class Camera {
   insetBottom = 0;
   insetLeft = 0;
 
+  /**
+   * Zoom kick of the frame on screen (fraction of `scale`, Juice.punch). The renderer sets it when it draws,
+   * so toWorld / toScreen use the same magnification as the drawn frame (0 = none).
+   */
+  punch = 0;
+
   /** Shake state. `trauma` in 0..1 decays; offsets are in world units. */
   trauma = 0;
   shakeX = 0;
@@ -65,20 +71,23 @@ export class Camera {
     this.fit(this.arenaRadius, this.viewW, this.viewH);
   }
 
-  /** CSS pixels per world unit at the current zoom. */
+  /** CSS pixels per world unit at the current zoom (no punch: use for sizes). */
   get scale(): number { return this.baseScale * this.zoom; }
 
-  /** Pixel -> world (includes current shake so taps line up with what is drawn). Returns a shared object unless `out` is given. */
+  /** CSS pixels per world unit as drawn this frame: `scale` with the punch zoom kick. Use for positions. */
+  get drawScale(): number { return this.baseScale * this.zoom * (1 + this.punch); }
+
+  /** Pixel -> world as drawn (includes the current shake and punch, so taps line up with the frame). Returns a shared object unless `out` is given. */
   toWorld(px: number, py: number, out: Vec2 = this.tmp): Vec2 {
-    const s = this.scale;
+    const s = this.drawScale;
     out.x = (px - this.centerPx) / s + this.x + this.shakeX;
     out.y = (py - this.centerPy) / s + this.y + this.shakeY;
     return out;
   }
 
-  /** World -> pixel. Returns a shared object unless `out` is given. */
+  /** World -> pixel as drawn (shake and punch included). Returns a shared object unless `out` is given. */
   toScreen(wx: number, wy: number, out: Vec2 = this.tmp): Vec2 {
-    const s = this.scale;
+    const s = this.drawScale;
     out.x = (wx - this.x - this.shakeX) * s + this.centerPx;
     out.y = (wy - this.y - this.shakeY) * s + this.centerPy;
     return out;
@@ -93,11 +102,11 @@ export class Camera {
     const nz = z < this.minZoom ? this.minZoom : z > this.maxZoom ? this.maxZoom : z;
     const sx = this.shakeX, sy = this.shakeY;
     this.shakeX = 0; this.shakeY = 0;
-    const bx = (px - this.centerPx) / this.scale + this.x;
-    const by = (py - this.centerPy) / this.scale + this.y;
+    const bx = (px - this.centerPx) / this.drawScale + this.x;
+    const by = (py - this.centerPy) / this.drawScale + this.y;
     this.zoom = nz;
-    const ax = (px - this.centerPx) / this.scale + this.x;
-    const ay = (py - this.centerPy) / this.scale + this.y;
+    const ax = (px - this.centerPx) / this.drawScale + this.x;
+    const ay = (py - this.centerPy) / this.drawScale + this.y;
     this.x += bx - ax;
     this.y += by - ay;
     this.shakeX = sx; this.shakeY = sy;
@@ -106,7 +115,7 @@ export class Camera {
 
   /** Pan by a pixel delta (used by two-finger drag). */
   panByPixels(dx: number, dy: number): void {
-    const s = this.scale;
+    const s = this.drawScale;
     this.x -= dx / s;
     this.y -= dy / s;
     this.clampPan();
@@ -120,7 +129,7 @@ export class Camera {
     if (this.y > lim) this.y = lim; else if (this.y < -lim) this.y = -lim;
   }
 
-  reset(): void { this.zoom = 1; this.x = 0; this.y = 0; this.trauma = 0; this.shakeX = 0; this.shakeY = 0; }
+  reset(): void { this.zoom = 1; this.x = 0; this.y = 0; this.trauma = 0; this.shakeX = 0; this.shakeY = 0; this.punch = 0; }
 
   /** Add trauma directly (0..1). */
   addShake(amount: number): void {

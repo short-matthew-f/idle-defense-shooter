@@ -1,5 +1,6 @@
 /** Per-device UI preferences (not part of the save): localStorage, fail-safe. */
 import type { TrialId } from '@sim/core/ids';
+import type { TouchCal } from '@app/touch-cal';
 
 export interface Prefs {
   onboarded: boolean;
@@ -23,11 +24,13 @@ export interface Prefs {
   soundMusic: number;
   soundMuted: boolean;
   musicOn: boolean;
+  /** Tap calibration (More → Help → Touch test); null = identity. Validated with parseCal on use. */
+  touchCal: TouchCal | null;
 }
 
 const KEY = 'citadel.prefs.v1';
 const DEFAULTS: Prefs = { onboarded: false, bloom: true, affordableFirst: false, panelOpen: true, shopCategory: 'chassis', shopTree: 'ballistics', activeTrial: null, buyCoach: 0, buyQty: 1, suggestOpen: true,
-  soundMaster: 0.71, soundSfx: 0.8, soundMusic: 0.55, soundMuted: false, musicOn: true };
+  soundMaster: 0.71, soundSfx: 0.8, soundMusic: 0.55, soundMuted: false, musicOn: true, touchCal: null };
 
 let cache: Prefs | null = null;
 

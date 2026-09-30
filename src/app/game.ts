@@ -13,6 +13,7 @@ import { SimClient } from './sim-client';
 import { TickPacer, offlineSecondsOnReturn, HIDDEN_OFFLINE_AFTER_S } from './pacing';
 import { nearestEnemy, tapReach } from './pick';
 import { FieldOverlay } from './overlay';
+import { parseCal } from './touch-cal';
 import type { Command } from '@sim/core/types';
 import { clearSave, exportToString, importFromString, loadSave, parkSave, storeSave } from './storage';
 import { canInstall, initInstallPrompt, promptInstall, onUpdateReady } from './pwa';
@@ -20,7 +21,7 @@ import { GameUi } from '@ui/index';
 import { createGameAudio, type GameAudio } from '../audio/index';
 import { prefs, resetPrefs } from '@ui/prefs';
 import { offlineEstimate } from '@ui/format';
-import type { UiHost } from '@ui/host';
+import type { TouchHost, UiHost } from '@ui/host';
 import type { RenderApp } from './main';
 
 const AUTOSAVE_MS = 30_000;
@@ -70,6 +71,40 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
   // audio pass: lazy Web Audio (unlocked by the first tap); a silent no-op without Web Audio
   const audio = createGameAudio();
 
+  // ---------------------------------------------------------------- touch test / tap calibration
+  const overlay = new FieldOverlay();
+  app.input.calibration = parseCal(prefs().touchCal);
+  const boxScale = (): { r: DOMRect; kx: number; ky: number } => {
+    const r = app.canvas.getBoundingClientRect(), c = app.camera;
+    return { r, kx: c.viewW > 0 ? r.width / c.viewW : 1, ky: c.viewH > 0 ? r.height / c.viewH : 1 };
+  };
+  const touch: TouchHost = {
+    begin: (onSample) => { app.input.probe = onSample; app.forceRender = true; },
+    end: () => { app.input.probe = null; app.forceRender = false; overlay.setMarkers([]); },
+    setMarkers: (m) => overlay.setMarkers(m),
+    toClient: (wx, wy) => {
+      const { r, kx, ky } = boxScale();
+      const p = app.camera.toScreen(wx, wy, { x: 0, y: 0 });
+      return { x: r.left + p.x * kx, y: r.top + p.y * ky };
+    },
+    fromClient: (cx, cy) => {
+      const { r, kx, ky } = boxScale();
+      return app.camera.toWorld((cx - r.left) / kx, (cy - r.top) / ky, { x: 0, y: 0 });
+    },
+    view: () => {
+      const r = app.canvas.getBoundingClientRect(), c = app.camera;
+      return {
+        rect: { left: r.left, top: r.top, width: r.width, height: r.height },
+        viewW: c.viewW, viewH: c.viewH, centerPx: c.centerPx, centerPy: c.centerPy,
+        scale: c.scale, punch: c.punch, shakeX: c.shakeX, shakeY: c.shakeY, zoom: c.zoom,
+        dpr: window.devicePixelRatio || 1, bufferW: app.canvas.width, bufferH: app.canvas.height,
+        staleCount: app.input.staleCount, lastStale: app.input.lastStale,
+      };
+    },
+    calibration: () => app.input.calibration,
+    setCalibration: (c) => { app.input.calibration = c; },
+  };
+
   const host: UiHost = {
     send: (cmd) => client.send(cmd),
     inspect: (i, g) => client.inspect(i, g),
@@ -96,6 +131,7 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
     canInstall,
     install: promptInstall,
     saveNow: () => { if (ready) client.requestSave(); },
+    touch,
   };
 
   const ui = new GameUi(uiRoot, host);
@@ -188,7 +224,6 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
   }
 
   // ---------------------------------------------------------------- pacing
-  const overlay = new FieldOverlay();
   app.onFrame = (dt, now) => {
     const snap = app.snapshot;
     const live = snap && snap.instances.buffer.byteLength > 0 ? snap : null;

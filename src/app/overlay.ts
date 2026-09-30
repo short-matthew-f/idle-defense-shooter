@@ -5,10 +5,12 @@
  *     tagged aux1 = RETICLE_MARK (core/snapshot.ts); here it is redrawn at least 12 CSS px wide (the
  *     sim's ring is sized in world units, a few px on a phone)
  *   - aim line: tower → pointer while hold-to-aim steers the primary
+ *   - touch test markers (More → Help → Touch test): where the game computed a tap, calibration rings
  * Sizes are in CSS pixels converted with the camera scale, so they read the same on every screen.
  * Pure over typed arrays (no DOM, no GL); allocates nothing per frame.
  */
 import { INSTANCE_FLOATS, Shape, ARENA_RADIUS, TOWER_RADIUS, RETICLE_MARK } from '@sim/core/types';
+import type { TouchMarker } from '@ui/host';
 
 export const OVERLAY_LAYER = 7;
 const MAX = 96;
@@ -25,6 +27,10 @@ export class FieldOverlay {
   private rippleY = 0;
   private rippleT = -1;
   private rippleHit = false;
+  private markers: readonly TouchMarker[] = [];
+
+  /** Touch test markers (world units); drawn every frame until replaced. */
+  setMarkers(m: readonly TouchMarker[]): void { this.markers = m; }
 
   /** A tap landed at world (x, y); `hit` = it snapped onto an enemy. `now` in seconds. */
   tap(x: number, y: number, hit: boolean, now: number): void {
@@ -63,6 +69,21 @@ export class FieldOverlay {
         const r = (8 + 18 * t) * px;
         const c = this.rippleHit ? [1, 0.45, 0.45] : [0.85, 0.92, 1];
         this.push(this.rippleX, this.rippleY, r, Shape.Ring, c[0], c[1], c[2], 0.9 * (1 - t), Math.min(0.5, (2 * px) / r));
+      }
+    }
+    for (const m of this.markers) {
+      if (m.kind === 'tap') {
+        // where the game computed the tap: magenta ring + dot + short cross arms (14 CSS px)
+        this.push(m.x, m.y, 14 * px, Shape.Ring, 1, 0.3, 0.9, 1, (2.5 * px) / (14 * px));
+        this.push(m.x, m.y, 2.5 * px, Shape.Circle, 1, 0.3, 0.9, 1);
+        this.push(m.x - 22 * px, m.y, 1 * px, Shape.Line, 1, 0.3, 0.9, 0.9, m.x - 16 * px, m.y);
+        this.push(m.x + 16 * px, m.y, 1 * px, Shape.Line, 1, 0.3, 0.9, 0.9, m.x + 22 * px, m.y);
+        this.push(m.x, m.y - 22 * px, 1 * px, Shape.Line, 1, 0.3, 0.9, 0.9, m.x, m.y - 16 * px);
+        this.push(m.x, m.y + 16 * px, 1 * px, Shape.Line, 1, 0.3, 0.9, 0.9, m.x, m.y + 22 * px);
+      } else {
+        const on = m.kind === 'target';
+        this.push(m.x, m.y, 24 * px, Shape.Ring, 0.55, 0.95, 1, on ? 1 : 0.35, (3 * px) / (24 * px));
+        this.push(m.x, m.y, 3 * px, Shape.Circle, 0.55, 0.95, 1, on ? 1 : 0.35);
       }
     }
     if (aim !== null) {

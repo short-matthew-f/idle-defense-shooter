@@ -33,6 +33,8 @@ export interface RenderApp {
   frozen: boolean;
   /** Skip drawing (a full-screen UI tab covers the arena; saves battery). The sim and pacing keep running. */
   renderPaused: boolean;
+  /** Draw even while renderPaused (the touch test shows the canvas over a full-screen tab). */
+  forceRender: boolean;
   /** Re-fit the camera to the canvas (after insets change). */
   fit(): void;
 }
@@ -86,20 +88,40 @@ function boot(): RenderApp | null {
   let latest: RenderSnapshot | null = null;
   const idle = makeIdleSnapshot();
 
+  // Re-fit whenever the canvas box or the pixel ratio may have changed (docs/TOUCH.md). iOS home-screen apps
+  // can change the viewport (status bar, resume from background) without a resize event, so besides the
+  // events the frame loop compares the box with the fitted size every frame (clientWidth/Height: no
+  // allocation, layout is clean at rAF time) and Input reports a box that disagrees with the camera.
+  let fitDpr = window.devicePixelRatio || 1;
   const fit = (): void => {
+    // iOS can scroll a position: fixed app by a few px (overflow hidden or not): taps and drawing then disagree
+    if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+    fitDpr = window.devicePixelRatio || 1;
     renderer.resize();
     camera.fit(ARENA_RADIUS, renderer.cssWidth, renderer.cssHeight);
   };
+  /** Fit now and again once layout has settled (iOS reports the new viewport late after rotation / resume). */
+  const refitSoon = (): void => { fit(); window.setTimeout(fit, 120); window.setTimeout(fit, 500); };
   fit();
   window.addEventListener('resize', fit);
-  window.addEventListener('orientationchange', fit);
+  window.addEventListener('orientationchange', refitSoon);
+  window.addEventListener('pageshow', refitSoon);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refitSoon(); });
+  window.visualViewport?.addEventListener('resize', fit);
   if (typeof ResizeObserver !== 'undefined') new ResizeObserver(fit).observe(canvas);
+  const fitStale = (): boolean => {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (w <= 0 || h <= 0) return false;   // hidden: keep the last fit
+    return w !== renderer.cssWidth || h !== renderer.cssHeight || w !== camera.viewW || h !== camera.viewH
+      || (window.devicePixelRatio || 1) !== fitDpr;
+  };
 
   const input = new Input(canvas, camera, dev ? {
     onTap: (x, y) => console.debug('tap', x.toFixed(1), y.toFixed(1)),
     onAimStart: (a) => console.debug('aim start', a.toFixed(2)),
     onAimEnd: () => console.debug('aim end'),
   } : {});
+  input.onStale = fit;
 
   const app: RenderApp = {
     canvas, renderer, camera, input,
@@ -108,6 +130,7 @@ function boot(): RenderApp | null {
     onFrame: null,
     frozen: false,
     renderPaused: false,
+    forceRender: false,
     fit,
   };
 
@@ -154,7 +177,10 @@ function boot(): RenderApp | null {
       snap = latest && latest.instances.buffer.byteLength > 0 ? latest : idle;
     }
 
-    if (!app.renderPaused || harness) renderer.render(snap, paused || app.frozen ? 0 : dt, camera);
+    if (!app.renderPaused || app.forceRender || harness) {
+      if (fitStale()) fit();
+      renderer.render(snap, paused || app.frozen ? 0 : dt, camera);
+    }
 
     fpsFrames++;
     if (now - fpsAt >= 500) {
