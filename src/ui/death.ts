@@ -13,7 +13,7 @@ import { fmtDuration, fmtNum } from './format';
 import { damageSourceName, deathHeadline, killerName, suggestPurchases, topDamageSource, type Category, type Suggestion } from './advice';
 import { BOSS_BY_ID, TREE_LABEL } from './content';
 import type { UiCtx } from './ctx';
-import { STARTER_IDS } from './progression';
+import { STARTER_IDS, contentPool, poolShop } from './progression';
 
 export class DeathCard {
   readonly el: HTMLElement;
@@ -66,8 +66,13 @@ export class DeathCard {
     if (ui.run.phase === 'dead') this.showCause(ui);   // the ledger resets when the next attempt starts
     // progressive reveal: suggest only what the player can see (stage 0: the three starter stats; no slot before its category)
     const f = this.ctx.features();
-    const seen = { ...ui, shop: f.chassisAll ? ui.shop : ui.shop.filter((e) => STARTER_IDS.has(e.node)),
-      run: { ...ui.run, attunementSlotsOpen: f.elements ? ui.run.attunementSlotsOpen : 0, hardpointSlotsOpen: f.hardpoints ? ui.run.hardpointSlotsOpen : 0 } };
+    // …and only cross-system buys whose parts this Prestige offers (progression.ts content pool)
+    const pool = contentPool(ui, { unlockAll: f.unlockAll });
+    const offered = poolShop(ui.shop, pool);
+    const canAttune = f.elements && pool.elements.some((e) => !ui.build.attunements.includes(e));
+    const canMount = f.hardpoints && pool.hardpoints.some((x) => !ui.build.hardpoints.includes(x) && !ui.mountBlocked?.[x]);
+    const seen = { ...ui, shop: f.chassisAll ? offered : offered.filter((e) => STARTER_IDS.has(e.node)),
+      run: { ...ui.run, attunementSlotsOpen: canAttune ? ui.run.attunementSlotsOpen : 0, hardpointSlotsOpen: canMount ? ui.run.hardpointSlotsOpen : 0 } };
     const sugg = suggestPurchases(seen, this.rate(), 3);
     text(this.lead, sugg.length ? `You have ${fmtNum(ui.run.scrap)} Scrap. These could help:` : `You have ${fmtNum(ui.run.scrap)} Scrap.`);
     // Rebuild only when the suggestions change (never under a finger at 10 Hz); ETAs refresh with them.

@@ -11,7 +11,7 @@ import { Ev, type RenderSnapshot, type SaveState, type UiState } from '@sim/core
 import { sectorIndexForWave } from '@sim/data/sectors';
 import { SimClient } from './sim-client';
 import { TickPacer, offlineSecondsOnReturn, HIDDEN_OFFLINE_AFTER_S } from './pacing';
-import { CRATE_REACH_PX, nearestCrate, nearestEnemy, tapReach } from './pick';
+import { CRATE_REACH_PX, nearestCrate, nearestEnemy, reticleAt, tapReach } from './pick';
 import { TapRouter, holdOnTower } from './active-tap';
 import { TOWER_RADIUS } from '@sim/core/types';
 import { FieldOverlay } from './overlay';
@@ -295,8 +295,10 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
     const hit = live ? nearestEnemy(live.instances, live.instanceCount, x, y, tapReach(app.camera.scale)) : null;
     // Active edge (docs/ACTIVE.md, app/active-tap.ts): crates first; an enemy tap is an assist shot and a designation
     if (!paused) {
-      const crate = live ? nearestCrate(live.instances, live.instanceCount, x, y, tapReach(app.camera.scale, CRATE_REACH_PX)) : null;
-      const route = taps.route(crate, hit, ui.abilities.arming.armed, app.camera.scale, performance.now());
+      const f = ui.ctx.features();
+      const crate = live && f.salvage ? nearestCrate(live.instances, live.instanceCount, x, y, tapReach(app.camera.scale, CRATE_REACH_PX)) : null;
+      const marked = !!(live && hit && reticleAt(live.instances, live.instanceCount, hit.x, hit.y));
+      const route = taps.route(crate, hit, ui.abilities.arming.armed, app.camera.scale, performance.now(), marked, { assist: f.tapAssist, salvage: f.salvage });
       if (route.kind === 'collect') {
         client.send({ type: 'collect_salvage', x: route.x, y: route.y });
         overlay.tap(route.x, route.y, true, performance.now() / 1000);
@@ -311,7 +313,7 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
   // Active edge: hold on the tower while Overcharge is ready charges it; lifting fires (the sim times the window)
   let charging = false;
   app.input.onHoldStart = (x, y) => {
-    if (!ready || paused || !latestUi?.active?.overcharge.ready || ui.abilities.arming.armed) return false;
+    if (!ready || paused || !latestUi?.active?.overcharge.ready || !ui.ctx.features().overcharge || ui.abilities.arming.armed) return false;
     if (!holdOnTower(x, y, TOWER_RADIUS, app.camera.scale)) return false;
     charging = true;
     client.send({ type: 'overcharge', action: 'charge' });

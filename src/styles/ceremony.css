@@ -1,0 +1,31 @@
+/* First-Prestige ceremony (src/ui/ceremony.ts): short, warm, one primary button. Text ≥ 14px, 44px targets. */
+.ceremony { display: flex; flex-direction: column; gap: 10px; }
+.cer-lead { margin: 0; font-size: 16px; line-height: 1.4; }
+.cer-gain { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 12px; border-radius: var(--radius);
+  background: color-mix(in srgb, var(--echo) 12%, var(--bg-2)); border: 1px solid color-mix(in srgb, var(--echo) 45%, var(--line)); color: var(--echo); }
+.cer-gain .ico.big { width: 30px; height: 30px; }
+.cer-gain-val { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.cer-sub { margin: -4px 0 0; text-align: center; font-size: 14px; color: var(--text-dim); }
+.cer-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.cer-line { display: flex; align-items: flex-start; gap: 10px; font-size: 15px; line-height: 1.4; }
+.cer-line .ico { flex: none; width: 20px; height: 20px; margin-top: 1px; color: var(--text-dim); }
+.cer-line.keeps .ico { color: var(--ok); }
+.cer-line.frontier .ico { color: var(--echo); }
+.btn.cer-go { min-height: 48px; font-size: 16px; }
+
+/* guided first Echo spend (Prestige tab → Upgrades): an inline coach line and highlighted affordable picks */
+.pshop .coach-banner.ps-guide { width: auto; margin: 0 0 8px; }
+.pshop .node.guide .node-name { color: var(--echo); }
+.pshop .node.guide .btn.buy { border-color: var(--echo); background: color-mix(in srgb, var(--echo) 22%, var(--bg-3)); box-shadow: 0 0 12px color-mix(in srgb, var(--echo) 45%, transparent); }
+@media (prefers-reduced-motion: no-preference) { .pshop .node.guide .btn.buy { animation: guide-glow 1.8s ease-in-out infinite; } }
+@keyframes guide-glow { 50% { box-shadow: 0 0 3px color-mix(in srgb, var(--echo) 20%, transparent); } }
+
+/* content pool (progression.ts): a "New" tag on picker entries until first seen */
+.tag.new-tag { margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 12px; font-weight: 700; vertical-align: middle;
+  background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); }
+
+/* Quartermaster card at the top of Upgrades */
+.shop-body > .qm-card { margin: 8px 0 4px; }
+/* the guide line lives on the Prestige tab: phones hide toast-layer coach lines off Battle (coach.css), not this one */
+body .pshop .coach-banner.ps-guide:not([hidden]) { display: flex; }
+.btn.coach-act { flex: none; }

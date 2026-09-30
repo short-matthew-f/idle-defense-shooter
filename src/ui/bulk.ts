@@ -119,10 +119,10 @@ export function spendLabel(s: { ranks: number; total: number }, q: BuyQty): stri
   return `${q === 0 ? `Max ×${s.ranks}` : `×${s.ranks}`} · ♦${fmtNum(s.total)}`;
 }
 
-/** Toast after a bulk buy, from the Purchase events it produced; null for 0–1 ranks (single buys stay quiet). */
+/** Toast after a bulk buy, from the Purchase events it produced; null for 0–1 ranks (single buys stay quiet). Quartermaster buys (data.via) never count. */
 export function bulkToast(events: readonly SimEvent[], where: string | null): string | null {
   let n = 0, total = 0;
-  for (const e of events) if (e.type === Ev.Purchase) { n++; total += e.b; }
+  for (const e of events) if (e.type === Ev.Purchase && e.data?.via !== 'quartermaster') { n++; total += e.b; }
   if (n < 2) return null;
   return `Bought ${n} ranks${where ? ` ${where}` : ''} for ♦${fmtNum(total)}`;
 }

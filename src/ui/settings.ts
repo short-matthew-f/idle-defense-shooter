@@ -15,6 +15,7 @@ import { graphicsSettings } from './graphics-settings';
 import { soundSettings } from '../audio/ui';
 import type { UiCtx } from './ctx';
 import { openTouchTest } from './touch-test';
+import { replayHints } from './pointer';
 
 export const SHORTCUTS: [string, string][] = [
   ['Space', 'Pause and open the Kill-Chain Inspector'],
@@ -102,6 +103,7 @@ export function settingsPanel(ctx: UiCtx): HTMLElement {
   const body = h('div', { class: 'settings' },
     row('Clarity', h('div', { class: 'range-wrap' }, slider, val), 'Spectacle ↔ Clarity: player effects fade, enemies never do', true),
     row('Unlock everything', unlock, 'For experienced players: every tab, control and choice from the start, instead of one at a time as you climb.'),
+    row('Show pointer hints', toggle('Show pointer hints', prefs().pointerHints !== false, (v) => setPref('pointerHints', v)), 'A soft ring on the control a tip is about'),
     row('Auto-Prestige', toggle('Auto-Prestige', !!ui?.meta.settings.autoPrestige, (v) => ctx.host.send({ type: 'set_setting', key: 'autoPrestige', value: v })), autonomy ? 'Lets a Prestige Directive fire' : 'Needs Autonomy (Prestige IV) and a Prestige Directive'),
     ...graphicsSettings(ctx, row, toggle),
     ...soundSettings(row, toggle),
@@ -122,6 +124,7 @@ export function helpPanel(ctx: UiCtx): HTMLElement {
   return h('div', { class: 'settings help' },
     h('h3', { class: 'sec-title', text: 'Tips' }),
     h('ul', { class: 'tips' }, ...tips.map((m) => h('li', { text: m.text }))),
+    h('div', { class: 'row gap wrap' }, button('Replay hints', () => { replayHints(); ctx.toast('Hints will point again where they still apply', 'info'); }, { class: 'btn' })),
     h('h3', { class: 'sec-title', text: 'Touch' }),
     h('dl', { class: 'keys' }, ...GESTURES.flatMap(([k, d]) => [h('dt', { text: k }), h('dd', { text: d })])),
     h('h3', { class: 'sec-title', text: 'Keyboard' }),

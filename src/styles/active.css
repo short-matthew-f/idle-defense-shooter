@@ -41,8 +41,12 @@ body.shell-rail .oc-wrap { bottom: calc(12px + var(--safe-bottom, 0px)); }
 .btn.oc-btn[aria-disabled="true"] { cursor: default; }
 
 /* salvage floaters: "+1.2K ×2" rising from a collected crate (client px from the camera) */
-/* a zero-size anchor (never a full-screen layer: #ui's own rules could give it pointer events and eat taps) */
-.salvage-floaters { position: fixed; left: 0; top: 0; width: 0; height: 0; overflow: visible; pointer-events: none !important; z-index: 30; }
+/* A zero-size anchor appended to #ui, never a full-screen layer. base.css gives every direct child of #ui
+   `pointer-events: auto` (`#ui > *`, specificity 1-0-0), so the rule is written as `#ui > .salvage-floaters`
+   (1-1-0) to win on specificity whatever the stylesheet order; `.salvage-floaters` alone would lose and the layer
+   would swallow canvas taps. */
+#ui > .salvage-floaters, .salvage-floaters { position: fixed; left: 0; top: 0; width: 0; height: 0; overflow: visible; pointer-events: none; z-index: 30; }
+#ui > .salvage-floaters * { pointer-events: none; }
 .salvage-floater {
   position: absolute; pointer-events: none; transform: translate(-50%, -100%); white-space: nowrap;
   font: 800 15px/1 var(--font, system-ui); color: var(--scrap); font-variant-numeric: tabular-nums;

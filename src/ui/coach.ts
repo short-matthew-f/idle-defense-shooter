@@ -10,7 +10,8 @@ import { icon } from './icons';
 import { prefs, setPref } from './prefs';
 import type { FeatureId, Features } from './progression';
 
-export type CoachId = 'start' | 'checkpoint' | 'elements' | 'build' | 'abilities' | 'boons' | 'anomalies' | 'bulk' | 'prestige' | 'machine';
+export type CoachId = 'start' | 'checkpoint' | 'elements' | 'build' | 'abilities' | 'boons' | 'anomalies' | 'bulk' | 'prestige' | 'machine'
+  | 'salvage' | 'overcharge';
 
 export interface CoachMsg {
   id: CoachId;
@@ -31,23 +32,43 @@ export const COACH: readonly CoachMsg[] = [
   { id: 'anomalies', feature: 'anomalies', icon: 'info', text: 'Anomaly drafts follow bosses: each card bends the rules until you Prestige.' },
   { id: 'bulk', feature: 'bulk', icon: 'upgrade', text: 'Upgrades now suggests buys: Buy all, or ×10 and Max per tap.' },
   { id: 'prestige', feature: 'prestigeTab', icon: 'prestige', text: 'Something is coming. The Prestige tab shows when rebuilding pays off.' },
-  { id: 'machine', feature: 'quartermaster', icon: 'more', text: 'A new machine. Automation and Trials open in More as you earn them.' },
+  { id: 'machine', feature: 'quartermaster', icon: 'more', text: 'A new machine: every tab stays open. New weapons and elements arrive with later Prestiges; Automation and Trials unlock in More.' },
+  // active edge (docs/ACTIVE.md): shown only while their subject is on screen (LIVE_COACH)
+  { id: 'salvage', feature: 'salvage', icon: 'scrap', text: 'Glowing crates: tap them for bonus Scrap. Quick taps chain.' },
+  { id: 'overcharge', feature: 'overcharge', icon: 'bolt', text: 'Overcharge is full: hold the glowing button, let go in the bright band.' },
 ];
 
 /** Explainers tied to an event that can come at any stage (an offer, a draft), not to a stage. */
-const EVENT_COACH: ReadonlySet<CoachId> = new Set<CoachId>(['boons', 'anomalies']);
+const EVENT_COACH: ReadonlySet<CoachId> = new Set<CoachId>(['boons', 'anomalies', 'salvage', 'overcharge']);
+/**
+ * Explainers shown only while their subject is on screen (a salvage crate drifting in, a full Overcharge meter), after
+ * any unread stage message. Once shown, the banner keeps one until "Got it" (CoachBanner), so it does not blink with the crates.
+ */
+const LIVE_COACH: ReadonlySet<CoachId> = new Set<CoachId>(['salvage', 'overcharge']);
 
 /** What makes a message urgent right now (its thing is on screen): it jumps the queue. */
-export interface CoachLive { boonOffer: boolean; draft: boolean }
+export interface CoachLive {
+  boonOffer: boolean; draft: boolean;
+  /** A salvage crate is on the field (UiState.active.crates > 0). */
+  crate?: boolean;
+  /** The Overcharge meter is full and can be charged (UiState.active.overcharge.ready). */
+  overchargeReady?: boolean;
+}
+
+/** UiState → the live flags of the active-edge explainers. */
+export function activeCoachLive(a: { crates: number; overcharge: { ready: boolean } } | undefined): Pick<CoachLive, 'crate' | 'overchargeReady'> {
+  return { crate: (a?.crates ?? 0) > 0, overchargeReady: !!a?.overcharge.ready };
+}
 
 /**
  * The message to show now, or null, among unread messages whose feature is on: an event explainer whose subject is
  * live (a boon offer, an Anomaly draft) first; else the NEWEST stage message (an older unread one is stale: reading
- * the newer one retires it, see staleWith); else an event explainer.
+ * the newer one retires it, see staleWith); else an event explainer (the active-edge ones only while their subject is live).
  */
 export function pendingCoach(f: Features, seen: ReadonlySet<string>, live: CoachLive = { boonOffer: false, draft: false }): CoachMsg | null {
   if (f.unlockAll) return null;
-  const open = COACH.filter((m) => f[m.feature] && !seen.has(m.id));
+  const liveNow = (m: CoachMsg): boolean => (m.id === 'salvage' && !!live.crate) || (m.id === 'overcharge' && !!live.overchargeReady);
+  const open = COACH.filter((m) => f[m.feature] && !seen.has(m.id) && (!LIVE_COACH.has(m.id) || liveNow(m)));
   if (!open.length) return null;
   const urgent = open.find((m) => (m.id === 'boons' && live.boonOffer) || (m.id === 'anomalies' && live.draft));
   const stage = open.filter((m) => !EVENT_COACH.has(m.id));
@@ -75,22 +96,41 @@ export function initialSeen(f: Features, stage: number): CoachId[] {
   return unlockedCoach(f).map((m) => m.id);
 }
 
+/**
+ * A one-off line from outside the ladder (post-Prestige beats: new content in the pool, the Quartermaster; see
+ * ceremony.ts / index.ts). Shown after every unread ladder message, first unread first; read = its id in coachSeen.
+ * `action` adds a button (e.g. "Turn on") that runs and then marks the line read.
+ */
+export interface CoachExtra { id: string; icon: string; text: string; action?: { label: string; run: () => void } }
+
 export class CoachBanner {
   readonly el: HTMLElement;
   private readonly ico = h('span', { class: 'coach-ico' });
   private readonly msg = h('span', { class: 'coach-text' });
+  private readonly act: HTMLButtonElement;
   private cur: CoachMsg | null = null;
+  private extra: CoachExtra | null = null;
   constructor() {
     const ok = button('Got it', () => this.dismiss(), { class: 'btn small coach-ok' });
-    this.el = h('div', { class: 'coach-banner', attrs: { role: 'status', 'aria-live': 'polite' } }, this.ico, this.msg, ok);
+    this.act = button('', () => { const x = this.extra; this.dismiss(); x?.action?.run(); }, { class: 'btn small primary coach-act' });
+    this.act.hidden = true;
+    this.el = h('div', { class: 'coach-banner', attrs: { role: 'status', 'aria-live': 'polite' } }, this.ico, this.msg, this.act, ok);
     this.el.hidden = true;
   }
 
   get current(): CoachId | null { return this.cur?.id ?? null; }
 
-  update(f: Features, live: CoachLive): void {
-    const next = pendingCoach(f, new Set(prefs().coachSeen), live);
-    if (next?.id === this.cur?.id) return;
+  /** `extras` wait behind the ladder; `hold` ids count as read for now (e.g. 'machine' while the Echo guide runs). */
+  update(f: Features, live: CoachLive, extras: readonly CoachExtra[] = [], hold: readonly string[] = []): void {
+    const seen = new Set([...prefs().coachSeen, ...hold]);
+    const next = pendingCoach(f, seen, live);
+    if (!next && !f.unlockAll && !(this.cur && LIVE_COACH.has(this.cur.id) && !seen.has(this.cur.id))) {
+      const x = extras.find((e) => !seen.has(e.id)) ?? null;
+      if (x || this.extra) { this.showExtra(x); return; }
+    } else if (this.extra) { this.extra = null; this.act.hidden = true; }
+    if (next?.id === this.cur?.id) { if (next) show(this.el, true); return; }
+    // a live explainer stays up until read, even after its crate is gone (unless something else is due)
+    if (!next && this.cur && LIVE_COACH.has(this.cur.id) && !seen.has(this.cur.id) && !f.unlockAll) return;
     this.cur = next;
     show(this.el, !!next);
     if (!next) return;
@@ -101,7 +141,22 @@ export class CoachBanner {
     this.el.classList.remove('in'); void this.el.offsetWidth; this.el.classList.add('in');
   }
 
+  private showExtra(x: CoachExtra | null): void {
+    this.cur = null;
+    if (x?.id === this.extra?.id && x?.text === this.extra?.text) return;
+    this.extra = x;
+    show(this.el, !!x);
+    this.act.hidden = !x?.action;
+    if (!x) return;
+    text(this.act, x.action?.label ?? '');
+    this.ico.replaceChildren(icon(x.icon, 'ico'));
+    text(this.msg, x.text);
+    this.el.dataset.coach = x.id;
+    this.el.classList.remove('in'); void this.el.offsetWidth; this.el.classList.add('in');
+  }
+
   dismiss(): void {
+    if (this.extra) { markCoachSeen([this.extra.id]); this.extra = null; this.act.hidden = true; show(this.el, false); return; }
     const id = this.cur?.id;
     if (!id) return;
     markCoachSeen(staleWith(id));

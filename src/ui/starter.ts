@@ -31,6 +31,7 @@ export class StarterPanel {
   constructor(private readonly ctx: UiCtx, private readonly rate: () => number) {
     this.btn = button([h('span', { class: 'st-main' }, icon('upgrade', 'ico'), h('span', { class: 'st-label', text: 'Upgrade' })), h('span', { class: 'st-sub' }, this.what, this.price)],
       () => {}, { class: 'btn primary st-btn' });
+    this.btn.dataset.hint = 'upgrade';   // pointer hints (hints.ts)
     // tap buys one; holding keeps buying (the same touch rules as every Buy button: a swipe never buys)
     holdRepeat(this.btn, () => this.buy());
     for (const s of STARTER_NODES) {

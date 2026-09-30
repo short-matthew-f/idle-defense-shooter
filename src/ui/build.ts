@@ -23,6 +23,8 @@ import type { DraftModal } from './draft';
 import type { UiCtx } from './ctx';
 
 const REFIT_CORES = 3;
+/** Tag a control for the pointer hints (hints.ts). */
+const hint = <T extends HTMLElement>(el: T, key: string): T => { el.dataset.hint = key; return el; };
 
 function row(ico: Node, name: string | Node, sub: string | Node | null, actions: (HTMLElement | null)[] = [], cls = ''): HTMLElement {
   return h('div', { class: `bs-row ${cls}` },
@@ -75,7 +77,7 @@ export class BuildScreen {
     this.key = key;
     const y = this.el.parentElement?.scrollTop ?? 0;
     clear(this.el);
-    if (this.draft.pending) this.el.append(button([icon('info', 'ico'), h('span', { class: 'bs-name', text: 'An Anomaly draft is waiting: choose one' }), icon('right', 'ico tiny chev')], () => this.draft.open(), { class: 'btn bs-draft top' }));
+    if (this.draft.pending) this.el.append(hint(button([icon('info', 'ico'), h('span', { class: 'bs-name', text: 'An Anomaly draft is waiting: choose one' }), icon('right', 'ico tiny chev')], () => this.draft.open(), { class: 'btn bs-draft top' }), 'draft'));
     const on = <T>(gate: boolean, make: () => T): T | null => (gate ? make() : null);
     for (const sec of [on(f.frame, () => this.frame(ui)), on(f.boons, () => boonsSection(ui, this.openBoonOffer)), on(f.hardpoints, () => this.hardpoints(ui)),
       on(f.elements, () => this.attunements(ui)), this.doctrines(ui), on(f.anomalies, () => this.anomalies(ui)), on(f.abilities, () => this.abilitySlots(ui)), on(f.cores, () => this.cores(ui))]) if (sec) this.el.append(sec);
@@ -117,7 +119,7 @@ export class BuildScreen {
           `filled ${id}`));
       } else if (i < open) {
         out.push(row(icon('plus', 'ico'), 'Empty slot', isEl ? 'Attune an element: it opens its tree, Infusions and Fusions.' : 'Mount a weapon system for the rest of this Prestige.',
-          [button(isEl ? 'Attune' : 'Mount', () => this.pick(isEl, i), { class: 'btn primary' })], 'open'));
+          [hint(button(isEl ? 'Attune' : 'Mount', () => this.pick(isEl, i), { class: 'btn primary' }), isEl ? 'build-attune' : 'build-mount')], 'open'));
       } else {
         const first = i === open;
         const when = first && next !== null ? (next <= 0 ? 'Opens now' : `Opens after clearing wave ${next}`) : 'Opens deeper in the climb';

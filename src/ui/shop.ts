@@ -23,7 +23,8 @@ import { CHASSIS, ELEMENTS, ELEMENT_BLURB, HARDPOINTS, HARDPOINT_BLURB, NODE_BY_
 import { confirmDialog, openModal } from './modal';
 import { doctrineFork, forkKey } from './doctrine';
 import { prefs, setPref } from './prefs';
-import { STARTER_IDS, contentPool, type Features } from './progression';
+import { POOL_COMPLETE_AT, STARTER_IDS, contentPool, newInPool, poolShop, type ContentPool, type Features } from './progression';
+import { QuartermasterPanel } from './quartermaster';
 import type { UiCtx } from './ctx';
 
 export type Category = 'chassis' | 'elements' | 'hardpoints' | 'cross' | 'cores';
@@ -137,7 +138,7 @@ export class Shop {
   private readonly buyAllText = h('span', { class: 'sg-buyall-text' });
   private readonly buyAllPrice = h('span', { class: 'price scrap' });
   private readonly qtyBtns = new Map<BuyQty, HTMLButtonElement>();
-  private readonly qtySeg = h('div', { class: 'qty-seg', attrs: { role: 'radiogroup', 'aria-label': 'Buy quantity (Q)' } });
+  private readonly qtySeg = h('div', { class: 'qty-seg', attrs: { role: 'radiogroup', 'aria-label': 'Buy quantity (Q)' }, data: { hint: 'qty' } });
   /** The open tree's "Spend here" button (rebuilt with the view, relabelled every update). */
   private spend: { tree: string; name: string; btn: HTMLButtonElement; line: HTMLSpanElement; key: string } | null = null;
   /** A bulk buy in flight: its Purchase events are summed into one toast. */
@@ -156,6 +157,8 @@ export class Shop {
   private ui: UiState | null = null;
   private readonly qtyTools: HTMLElement[];
   private revealKey = '';
+  /** Quartermaster card (quartermaster.ts), at the top of the Chassis and Hardpoints lists once 'quartermaster' is revealed. */
+  private readonly qm: QuartermasterPanel;
 
   constructor(private readonly ctx: UiCtx) {
     const p = prefs();
@@ -164,6 +167,7 @@ export class Shop {
     for (const c of CATEGORIES) {
       const n = h('span', { class: 'count' });
       const b = button([c.label, n], () => this.setCategory(c.id), { class: 'tab' });
+      b.dataset.hint = `cat-${c.id}`;   // pointer hints (hints.ts)
       n.setAttribute('aria-hidden', 'true');
       b.setAttribute('role', 'tab');
       this.catBtns.set(c.id, { b, n });
@@ -204,6 +208,7 @@ export class Shop {
       this.syncSuggest();
     }, { class: 'btn ghost sg-toggle' });
     this.buyAll = button([this.buyAllText, this.buyAllPrice], () => this.doBuyAll(), { class: 'btn sg-buyall' });
+    this.buyAll.dataset.hint = 'buy-all';
     this.quick = h('div', { class: 'quick suggest' },
       h('div', { class: 'sg-head' }, this.sgToggle, this.buyAll),
       this.coach,
@@ -224,13 +229,22 @@ export class Shop {
         h('div', { class: 'shop-tools' }, h('span', { class: 'qty-label', text: 'Buy', attrs: { 'aria-hidden': 'true' } }), this.qtySeg, h('span', { class: 'tools-gap' }), this.sortBtn)),
       this.body);
     this.qtyTools = [this.el.querySelector('.shop-tools') as HTMLElement];   // quantity selector (and the sort toggle beside it)
+    this.qm = new QuartermasterPanel(ctx);
   }
 
+  /** What this Prestige offers (progression.ts content pool; Unlock everything offers all). */
+  private pool(ui: UiState): ContentPool { return contentPool(ui, { unlockAll: this.f.unlockAll }); }
+  /** The sim's shop without cross-system entries whose parts the pool does not offer yet. */
+  private pooled(ui: UiState): ShopEntry[] { return poolShop(ui.shop, this.pool(ui)); }
+  private qmHere(): boolean { return this.f.quartermaster && (this.cat === 'chassis' || this.cat === 'hardpoints'); }
+
   private get f(): Features { return this.ctx.features(); }
+  /** The category and tree chip on show (pointer hints chain through them). */
+  view(): { cat: string; tree: string } { return { cat: this.cat, tree: this.tree }; }
 
   /** Progressive reveal: categories, the Suggested card and the quantity tools (GameUi, every UiState). */
   setFeatures(f: Features): void {
-    const key = `${f.elements}${f.hardpoints}${f.cross}${f.cores}${f.bulk}${f.chassisAll}`;
+    const key = `${f.elements}${f.hardpoints}${f.cross}${f.cores}${f.bulk}${f.chassisAll}${f.quartermaster}`;
     if (key === this.revealKey) return;
     this.revealKey = key;
     const cats = this.shownCats(f);
@@ -282,7 +296,7 @@ export class Shop {
   private doBuyAll(): void {
     const ui = this.ui;
     if (!ui) return;
-    const plan = planBuyAll(cheapestAffordable(ui.shop), ui.run.scrap, this.qty);
+    const plan = planBuyAll(cheapestAffordable(this.pooled(ui)), ui.run.scrap, this.qty);
     if (!plan.cmds.length) return;
     this.expectBulk(null);
     for (const c of plan.cmds) this.ctx.host.send(c.count === 1 ? { type: 'buy', node: c.node } : { type: 'buy', node: c.node, count: c.count });
@@ -305,7 +319,7 @@ export class Shop {
     if (!p) return;
     if (performance.now() > p.until && !p.timer) { this.pendingBulk = null; return; }
     let any = false;
-    for (const e of events) if (e.type === Ev.Purchase) { p.events.push(e); any = true; }
+    for (const e of events) if (e.type === Ev.Purchase && e.data?.via !== 'quartermaster') { p.events.push(e); any = true; }   // automatic buys are not the player's
     if (!any || p.timer) return;
     // Buy all sends up to three commands; give them a moment to land in the same summary
     p.timer = window.setTimeout(() => {
@@ -364,7 +378,7 @@ export class Shop {
 
   private entriesFor(ui: UiState, chip: string): ShopEntry[] {
     if (chip.startsWith('slot:')) return [];
-    if (this.cat === 'cross') return ui.shop.filter((e) => e.tree === chip);
+    if (this.cat === 'cross') return this.pooled(ui).filter((e) => e.tree === chip);
     if (this.cat === 'cores') return chip === 'exotic' ? ui.shop.filter((e) => e.kind === 'exotic') : chip === 'doctrine' ? ui.shop.filter((e) => e.kind === 'doctrine' && e.currency === 'cores' && e.cost > 0) : [];
     const t = TREE_BY_ID.get(chip as TreeId);
     if (!t) return [];
@@ -411,7 +425,7 @@ export class Shop {
     this.syncQty();
     this.ui = ui;
     // open slots first: a new weapon system or element is the biggest step change there is
-    const slots = openSlots(ui).filter((x) => this.f[x.cat]);   // a slot's chip waits for its category (progression.ts)
+    const slots = openSlots(ui).filter((x) => this.f[x.cat] && this.pickList(ui, x.cat === 'elements').some((id) => x.cat === 'elements' || !ui.mountBlocked?.[id as HardpointId]));   // a slot's chip waits for its category (progression.ts) and for something to offer
     const sk = slots.map((x) => `${x.cat}:${x.slot}`).join(',');
     if (sk !== this.slotKey) {
       this.slotKey = sk;
@@ -419,7 +433,7 @@ export class Shop {
         () => this.open(x.cat, `slot:${x.slot}`), { class: 'btn chip quick slot-chip' })));
     }
     // quick chips + Buy all (the Suggested card waits for the 'bulk' reveal)
-    const sugg = cheapestAffordable(ui.shop);
+    const sugg = cheapestAffordable(this.pooled(ui));
     this.quickList.sync(sugg, (e) => e.node);
     show(this.quick, this.f.bulk);
     const empty = this.quickList.rows.size === 0;
@@ -448,6 +462,7 @@ export class Shop {
       text(this.nextEta, next.eta !== null && next.eta > 0 ? `~${fmtDuration(next.eta)}` : '');
       attr(this.nextChip, 'aria-label', `Next upgrade: ${e.name}, ${fmtNum(e.cost)} Scrap${next.eta ? `, affordable in about ${fmtDuration(next.eta)}` : ''}. Opens its tree.`);
     }
+    if (this.qmHere()) this.qm.update(ui);
     const coach = prefs().buyCoach < COACH_BUYS && !empty;
     show(this.coach, coach);
     this.quickRow.classList.toggle('coach', coach);
@@ -474,6 +489,7 @@ export class Shop {
       for (const c of chips) {
         const n = h('span', { class: 'count' });
         const b = button([c.empty ? icon('plus', 'ico tiny') : null, c.label, n], () => this.setTree(c.id), { class: `chip tree-chip${c.empty ? ' empty' : ''}` });
+        if (c.empty) b.dataset.hint = 'slot-chip';
         b.setAttribute('role', 'tab');
         this.treeBtns.set(c.id, { b, n });
         this.treeRow.appendChild(b);
@@ -542,7 +558,7 @@ export class Shop {
     }
 
     if (this.cat === 'cross') {
-      const list = this.sorted(ui.shop.filter((e) => e.tree === chip));
+      const list = this.sorted(this.pooled(ui).filter((e) => e.tree === chip));
       if (list.length) out.push({ t: 'head', text: chip === 'fusion' ? 'Fusions' : chip === 'link' ? 'Linkages' : 'Infusions', spend: this.f.bulk ? chip : undefined });
       if (!list.length) out.push({ t: 'note', text: chip === 'fusion' ? 'Fusions appear when two elements are attuned (Triads need three, from Ascension II).' : chip === 'link' ? 'Linkages appear when two systems are mounted (the primary counts), or a hardpoint pairs with Bastion or Reactor.' : 'Infusions appear when a mounted hardpoint meets an attuned element.' });
       for (const e of list) out.push({ t: 'node', e });
@@ -642,17 +658,27 @@ export class Shop {
       else host.appendChild(it.make());
     }
     for (const k of [...this.rows.keys()]) if (!used.has(k)) this.rows.delete(k);
+    if (this.qmHere()) { frag.insertBefore(this.qm.el, frag.firstChild); this.qm.update(ui); }
     this.body.replaceChildren(frag);
   }
 
   /** Attune / mount picker for an open slot (the Upgrades slot chip and the Build screen's Mount button). */
   slotPicker(isEl: boolean, slot: number, onDone?: () => void): HTMLElement {
     const ui = this.ctx.state() ?? this.ui!;
-    const wrap = h('div', { class: 'slot-picker' },
+    const wrap = h('div', { class: 'slot-picker', data: { hint: 'slot-picker' } },
       h('p', { class: 'note', text: isEl ? 'Attune an element to this slot. Attunements lock for the rest of this Prestige.' : 'Mount a weapon system in this slot. Mounts lock for this Prestige (a Refit costs 3 Cores). At most four systems ever: one always sits out.' }));
-    const pool = contentPool(ui, { unlockAll: this.f.unlockAll });   // what this Prestige offers (progression.ts)
-    const list = isEl ? ELEMENTS.filter((e) => pool.elements.includes(e) && !ui.build.attunements.includes(e)) : HARDPOINTS.filter((hp) => pool.hardpoints.includes(hp) && !ui.build.hardpoints.includes(hp));
+    // "New" until first seen here: a system the latest Prestige added to the pool (listed first)
+    const fresh = new Set(this.f.unlockAll ? [] : newInPool(this.pool(ui), new Set(prefs().contentSeen)));
+    const offered = this.pickList(ui, isEl);   // what this Prestige offers (progression.ts content pool)
+    const list = [...offered.filter((id) => fresh.has(id)), ...offered.filter((id) => !fresh.has(id))];
+    if (!list.length) {
+      const later = !this.f.unlockAll && (ui.meta.prestigeCount | 0) < POOL_COMPLETE_AT;
+      wrap.appendChild(h('p', { class: 'note', text: later ? `Nothing else to ${isEl ? 'attune' : 'mount'} yet: new ${isEl ? 'elements' : 'weapon systems'} join with later Prestiges.` : `Every ${isEl ? 'element' : 'weapon system'} is already in use.` }));
+    }
+    const seenNow = list.filter((id) => fresh.has(id));
+    if (seenNow.length) setPref('contentSeen', [...new Set([...prefs().contentSeen, ...seenNow])]);
     for (const id of list) {
+      const tag = fresh.has(id) ? h('span', { class: 'tag new-tag', text: 'New' }) : null;
       const name = TREE_LABEL[id as TreeId] ?? titleCase(id);
       const blurb = isEl ? ELEMENT_BLURB[id as ElementId] : HARDPOINT_BLURB[id as HardpointId];
       // Frame free mount / Trial rule: shown with the reason instead of a Mount button that would fail
@@ -660,11 +686,11 @@ export class Shop {
       const borrowed = !isEl && (ui.extraSystems ?? []).some((x) => x.system === id && x.via === 'borrowed');
       if (blocked) {
         wrap.appendChild(h('div', { class: `pick-card ${id} blocked` },
-          h('div', { class: 'pick-main' }, h('div', { class: 'pick-name', text: name }), h('p', { class: 'pick-blurb', text: blocked }))));
+          h('div', { class: 'pick-main' }, h('div', { class: 'pick-name' }, name, tag), h('p', { class: 'pick-blurb', text: blocked }))));
         continue;
       }
       wrap.appendChild(h('div', { class: `pick-card ${id}` },
-        h('div', { class: 'pick-main' }, h('div', { class: 'pick-name', text: name }), h('p', { class: 'pick-blurb', text: borrowed ? `Borrowed now (tier 1). Mounting it here opens its full tree and Doctrines. ${blurb}` : blurb })),
+        h('div', { class: 'pick-main' }, h('div', { class: 'pick-name' }, name, tag), h('p', { class: 'pick-blurb', text: borrowed ? `Borrowed now (tier 1). Mounting it here opens its full tree and Doctrines. ${blurb}` : blurb })),
         button(isEl ? 'Attune' : 'Mount', async () => {
           if (!(await confirmDialog(`${isEl ? 'Attune' : 'Mount'} ${name}?`, `${name} ${isEl ? 'is attuned' : 'is mounted'} for the rest of this Prestige.`, isEl ? 'Attune' : 'Mount'))) return;
           this.ctx.host.send(isEl ? { type: 'attune', slot, element: id as ElementId } : { type: 'mount_hardpoint', slot, system: id as HardpointId });
@@ -674,6 +700,12 @@ export class Shop {
         }, { class: 'btn primary' })));
     }
     return wrap;
+  }
+
+  /** Ids a slot picker offers: in the content pool and not already in a slot. */
+  private pickList(ui: UiState, isEl: boolean): string[] {
+    const pool = this.pool(ui);
+    return isEl ? ELEMENTS.filter((e) => pool.elements.includes(e) && !ui.build.attunements.includes(e)) : HARDPOINTS.filter((hp) => pool.hardpoints.includes(hp) && !ui.build.hardpoints.includes(hp));
   }
 
   private refitList(ui: UiState): HTMLElement {
@@ -699,7 +731,8 @@ export class Shop {
     if (!old) return;
     const body = h('div', { class: 'slot-picker' }, h('p', { class: 'note', text: `Replace ${TREE_LABEL[old]} for ${REFIT_CORES} Cores. You get back 60% of the Scrap spent in ${TREE_LABEL[old]}; its ranks, Doctrine and Linkages are lost.` }));
     const m = openModal({ title: `Refit slot ${slot + 1}`, body });
-    for (const hp of HARDPOINTS.filter((x) => !ui.build.hardpoints.includes(x) && !ui.mountBlocked?.[x])) {
+    const pool = this.pool(ui);   // a Refit offers what a mount would (progression.ts content pool)
+    for (const hp of HARDPOINTS.filter((x) => pool.hardpoints.includes(x) && !ui.build.hardpoints.includes(x) && !ui.mountBlocked?.[x])) {
       body.appendChild(h('div', { class: 'pick-card' },
         h('div', { class: 'pick-main' }, h('div', { class: 'pick-name', text: TREE_LABEL[hp] }), h('p', { class: 'pick-blurb', text: HARDPOINT_BLURB[hp] })),
         button('Refit', async () => {

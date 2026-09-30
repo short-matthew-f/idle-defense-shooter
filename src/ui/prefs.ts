@@ -38,12 +38,25 @@ export interface Prefs {
   tabsVisited: string[];
   /** The reveal bookkeeping was initialised on this device (an existing save starts with what it has marked read). */
   revealInit: boolean;
+  /** Content-pool ids (progression.ts CONTENT_POOL) already seen in a picker: a later one reads "New" until then. */
+  contentSeen: string[];
+  /** The content-pool bookkeeping was initialised on this device (what an existing save already offers counts as seen). */
+  contentInit: boolean;
+  /** First-Prestige ceremony (ceremony.ts): the guided first Echo spend is running on the Prestige tab. */
+  echoGuide: boolean;
+  /** Pointer hints (pointer.ts / hints.ts): Settings → "Show pointer hints". */
+  pointerHints: boolean;
+  /** Pointer hints retired (hints.ts ids). Presentation only. */
+  hintsDone: string[];
+  /** The hint bookkeeping was initialised on this device (an existing save starts with its passed stages retired). */
+  hintsInit: boolean;
 }
 
 const KEY = 'citadel.prefs.v1';
 const DEFAULTS: Prefs = { onboarded: false, bloom: true, affordableFirst: false, panelOpen: true, shopCategory: 'chassis', shopTree: 'ballistics', activeTrial: null, buyCoach: 0, buyQty: 1, suggestOpen: true,
   soundMaster: 0.71, soundSfx: 0.8, soundMusic: 0.55, soundMuted: false, musicOn: true, touchCal: null,
-  unlockAll: false, coachSeen: [], tabsVisited: [], revealInit: false };
+  unlockAll: false, coachSeen: [], tabsVisited: [], revealInit: false, contentSeen: [], contentInit: false, echoGuide: false,
+  pointerHints: true, hintsDone: [], hintsInit: false };
 
 let cache: Prefs | null = null;
 
@@ -52,7 +65,7 @@ export function prefs(): Prefs {
   let stored: Partial<Prefs> = {};
   try { stored = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<Prefs>; } catch { /* private mode / blocked */ }
   cache = { ...DEFAULTS, ...stored };
-  for (const k of ['coachSeen', 'tabsVisited'] as const) if (!Array.isArray(cache[k])) cache[k] = [];
+  for (const k of ['coachSeen', 'tabsVisited', 'contentSeen', 'hintsDone'] as const) if (!Array.isArray(cache[k])) cache[k] = [];
   return cache;
 }
 

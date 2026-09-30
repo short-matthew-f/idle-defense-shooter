@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { performance } from 'node:perf_hooks';
-import { AudioDirector } from '../../src/audio/director';
+import { AudioDirector, QM_TICK_LEVEL, QM_TICK_SECONDS } from '../../src/audio/director';
 import { VOICE_CAP, type SoundOut } from '../../src/audio/engine';
 import { Admission } from '../../src/audio/mixer';
 import { SFX, SFX_IDS, SFX_INDEX, type SfxId, type SfxParams } from '../../src/audio/sfx/index';
@@ -95,6 +95,21 @@ describe('audio director: events → sounds', () => {
     d.onEvents(Array.from({ length: 12 }, (_, i) => ev(Ev.Purchase, 'ballistics.damage', { a: 4 + i })));
     expect(o.sfxLog.map((s) => s.id)).toEqual(['purchase', 'purchase_bulk']);
     expect(o.sfxLog[1].p.n).toBe(8);
+  });
+
+  it('Quartermaster buys (data.via) never play the purchase sound: at most one soft tick per QM_TICK_SECONDS', () => {
+    const o = new FakeOut();
+    const d = new AudioDirector(() => o);
+    const qm = (n: number): SimEvent[] => Array.from({ length: n }, (_, i) => ev(Ev.Purchase, 'ballistics.damage', { a: 4 + i, data: { via: 'quartermaster' } }));
+    d.onEvents(qm(8));
+    o.t = 1; d.onEvents(qm(3));
+    o.t = 1 + QM_TICK_SECONDS; d.onEvents(qm(1));
+    expect(o.sfxLog.map((s) => s.id)).toEqual(['purchase', 'purchase']);
+    expect(o.sfxLog.every((s) => s.p.level === QM_TICK_LEVEL)).toBe(true);
+    // a player buy in the same batch as automatic ones plays as one player purchase
+    o.t = 100; d.onEvents([...qm(5), ev(Ev.Purchase, 'ballistics.damage', { a: 2 })]);
+    expect(o.sfxLog[2].id).toBe('purchase');
+    expect(o.sfxLog[2].p.level).toBeUndefined();
   });
 
   it('a long chain plays as a rising melody in key, with timbre by src', () => {

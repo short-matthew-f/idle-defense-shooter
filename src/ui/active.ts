@@ -19,15 +19,21 @@ import type { UiCtx } from './ctx';
 
 const O = ACTIVE.overcharge;
 
-/** Coach lines (the coach is wired elsewhere; these are the strings). */
-export const COACH_OVERCHARGE_UNLOCK = 'Overcharge online: your shots fill the ring. When it glows, press and hold, then let go as the arc reaches the bright band.';
-export const COACH_OVERCHARGE_READY = 'Overcharge ready: hold the button (or the tower) and release in the bright band.';
-export const COACH_SALVAGE = 'Salvage crates drift to the tower. Tap them for a Scrap burst; quick taps chain up to ×3. Missed crates still pay a little.';
-export const COACH_ASSIST = 'Tap an enemy: the tower fires a bonus shot at it.';
-
-/** Overcharge unlocked for the UI (progression feature `overcharge`): the same rule as the sim (systems/active.ts). */
-export function overchargeUnlocked(ui: UiState): boolean {
+/**
+ * Overcharge unlocked by the ladder rule (progression feature `overcharge`, UNLOCKS.overcharge.wave; the sim's own rule in
+ * systems/active.ts, reported as UiState.active.overcharge.unlocked). tests/app/active-tap.test.ts keeps the two equal.
+ * The coach lines for the active edge live in coach.ts ('salvage', 'overcharge').
+ */
+export function overchargeUnlocked(ui: Pick<UiState, 'meta' | 'run'>): boolean {
   return Math.max(ui.meta.deepestEver | 0, ui.run.deepestCleared | 0) >= O.unlockWave;
+}
+
+/**
+ * The button shows when the sim has unlocked Overcharge AND the ladder reveals it (ctx.features().overcharge). They agree
+ * by wave; "Unlock everything" reveals the feature early, but a button the sim would ignore stays hidden until wave 12.
+ */
+export function overchargeShown(a: UiState['active'], featureOn: boolean): boolean {
+  return !!a && a.overcharge.unlocked && featureOn;
 }
 
 /** Where the hold is relative to the window: 'early' | 'perfect' | 'late' (pure; tests). */
@@ -104,9 +110,9 @@ export class ActiveWidget {
 
   update(ui: UiState): void {
     const a = ui.active;
-    this.unlocked = !!a && overchargeUnlocked(ui);
+    this.unlocked = overchargeShown(a, this.ctx.features().overcharge);
     show(this.el, this.unlocked);
-    if (!a || !this.unlocked) return;
+    if (!a || !this.unlocked) { if (this.charging) this.stopAnim(); return; }
     const oc = a.overcharge;
     this.ready = oc.ready;
     const f = oc.meterMax > 0 ? Math.max(0, Math.min(1, oc.meter / oc.meterMax)) : 0;

@@ -79,6 +79,27 @@ const enemyScreen = (page) => page.evaluate(() => {
   const p = c.app.camera.toScreen(best.x, best.y); const r = c.app.canvas.getBoundingClientRect();
   return { sx: r.left + p.x, sy: r.top + p.y, wx: best.x, wy: best.y };
 });
+// Active edge (app/active-tap.ts): every enemy tap also fires an assist shot, which can kill a weak enemy in the tick
+// its designation lands. The designation checks first spend the assist on another enemy (the enemy nearest the tower,
+// at least 60 world units from `avoid`), so the taps that follow run inside the assist cooldown and designate exactly
+// as before; the prime tap itself checks that a tap fires the assist. Returns { cd: the assist cooldown seen (s), x, y:
+// the primed enemy (world) }, or { cd: -1 } when no enemy qualified.
+const primeAssist = async (page, avoid, touch) => {
+  const p = await page.evaluate((av) => {
+    const c = window.__citadel, s = c.app.snapshot; if (!s || s.instances.buffer.byteLength === 0) return null;
+    let best = null;
+    for (let i = 0; i < s.instanceCount; i++) { const o = i * 12; if (s.instances[o + 9] !== 4) continue; const x = s.instances[o], y = s.instances[o + 1]; if (av.some((a) => Math.hypot(a.x - x, a.y - y) < 60)) continue; const d = Math.hypot(x, y); if (d < 60 || d > 460) continue; if (!best || d < best.d) best = { x, y, d }; }
+    if (!best) return null;
+    const q = c.app.camera.toScreen(best.x, best.y), r = c.app.canvas.getBoundingClientRect();
+    const sx = r.left + q.x, sy = r.top + q.y;
+    return document.elementFromPoint(sx, sy) === c.app.canvas ? { sx, sy, x: best.x, y: best.y } : null;
+  }, avoid);
+  if (!p) return { cd: -1 };
+  if (touch) await page.touchscreen.tap(p.sx, p.sy); else await page.mouse.click(p.sx, p.sy);
+  let cd = 0;
+  for (let k = 0; k < 10 && cd <= 0; k++) { await page.waitForTimeout(100); cd = await page.evaluate(() => window.__citadel.game.latestUi()?.active?.assistCooldown ?? 0); }
+  return { cd, x: p.x, y: p.y };
+};
 const attachLogs = (page, errors) => {
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}`));
@@ -135,14 +156,16 @@ async function desktop() {
   await waitUi(page, (u) => u.phase === 'combat', 60000, 'combat for tap');
   let e = null; for (let k = 0; k < 40 && !e; k++) { e = await enemyScreen(page); if (!e) await page.waitForTimeout(250); }
   const cmdBefore = await page.evaluate(() => window.__citadel.game.cmdErrors.length);
-  if (e) { await page.mouse.click(e.sx, e.sy); await page.waitForTimeout(350); }
+  const assistCd = e ? (await primeAssist(page, [{ x: e.wx, y: e.wy }], false)).cd : -1;
+  if (e) { const e1 = (await enemyScreen(page)) ?? e; await page.mouse.click(e1.sx, e1.sy); await page.waitForTimeout(350); }
   const designated = await page.evaluate(() => {
     const s = window.__citadel.app.snapshot; const F = 12; let n = 0;
     for (let i = 0; i < s.instanceCount; i++) { const o = i * F; if ((s.instances[o + 9] === 5 && s.instances[o + 5] === 1 && Math.abs(s.instances[o + 6] - 0.3) < 1e-3) || (s.instances[o + 9] === 7 && s.instances[o + 11] === 1)) n++; }
     return n;
   });
   const cmdAfterTap = await page.evaluate(() => window.__citadel.game.cmdErrors.slice());
-  check('tap designates an enemy (designate_at)', !!e && cmdAfterTap.length === cmdBefore && designated >= 1, { enemy: e, marks: designated });
+  check('tap designates an enemy (designate_at)', !!e && cmdAfterTap.length === cmdBefore && designated >= 1, { enemy: e, marks: designated, assistCd });
+  if (assistCd >= 0) check('an enemy tap fires an assist shot (assist cooldown starts)', assistCd > 0, { assistCd });
 
   // hold / right-click a slot opens the picker; slot Hunter Mark unless the loadout already has it
   const slots = page.locator('.ability-row .btn.ability');
@@ -237,7 +260,12 @@ async function desktop() {
   await page.waitForTimeout(1500);
   await skipOnboarding(page);
   const reloaded = await waitUi(page, (u) => u.wave >= 1, 60000, 'reload after import');
-  check('import restores the run', reloaded.cp === preImport.cp && reloaded.deepest === preImport.deepest && reloaded.scrap >= preImport.scrap * 0.5, { before: { cp: preImport.cp, deepest: preImport.deepest }, after: { cp: reloaded.cp, deepest: reloaded.deepest } });
+  // Compare with what the export string holds, not with a UiState read after it: at ?fast=8 the sim keeps playing
+  // between the export and that read (kills, first clears, salvage crates paying at the tower), so its Scrap / checkpoint
+  // can be ahead of the save being imported.
+  const saved = JSON.parse(Buffer.from(exported.slice('CITADEL1:'.length), 'base64').toString('utf8'));
+  const sv = { cp: saved.run.checkpoint, deepest: saved.run.deepestCleared, scrap: saved.run.scrap };
+  check('import restores the run', reloaded.cp === sv.cp && reloaded.deepest === sv.deepest && reloaded.scrap >= sv.scrap - 1e-6, { saved: sv, afterExport: { cp: preImport.cp, deepest: preImport.deepest, scrap: preImport.scrap }, reloaded: { cp: reloaded.cp, deepest: reloaded.deepest, scrap: reloaded.scrap } });
   await page.waitForTimeout(3000);
   const allCmdErrors = await page.evaluate(() => window.__citadel.game.cmdErrors.slice());
   const simErrors = await page.evaluate(() => window.__citadel.game.simErrors.slice());
@@ -491,15 +519,29 @@ async function reach() {
   for (let k = 0; k < 60 && two.length < 2; k++) { two = await targets(); if (two.length < 2) await page.waitForTimeout(250); }
   await page.evaluate(() => window.__citadel.game.setFast(1));
   const cmdBefore = await page.evaluate(() => window.__citadel.game.cmdErrors.length);
+  // spend the assist first (see primeAssist): a prime tap that designates a third enemy is replaced by the second tap
+  const toWorld = (q) => page.evaluate((t) => { const c = window.__citadel, r = c.app.canvas.getBoundingClientRect(); return c.app.camera.toWorld((t.sx - r.left) * c.app.camera.viewW / r.width, (t.sy - r.top) * c.app.camera.viewH / r.height, { x: 0, y: 0 }); }, q);
+  const prime = await primeAssist(page, await Promise.all(two.slice(0, 2).map(toWorld)), true);
+  if (prime.cd > 0) {
+    // the enemies moved during the prime: aim at where they are drawn now, never at the primed enemy
+    const fresh = [];
+    for (const q of await targets()) { const w = await toWorld(q); if (Math.hypot(w.x - prime.x, w.y - prime.y) >= 60) fresh.push(q); }
+    if (fresh.length >= 2) two = fresh;
+  }
   for (const e of two.slice(0, 2)) { await page.touchscreen.tap(e.sx, e.sy); await page.waitForTimeout(250); }
+  const lastTapAt = Date.now() - 250;
   await page.waitForTimeout(400);
   const r4 = await rs();
   const chip = ((await page.locator('.desig-chip').textContent()) ?? '').trim();
   const reticles = await page.evaluate(() => { const s = window.__citadel.app.snapshot; let k = 0; for (let i = 0; i < s.instanceCount; i++) { const o = i * 12; if (s.instances[o + 9] === 7 && s.instances[o + 11] === 1) k++; } return k; });
   await page.screenshot({ path: `${OUT}/phone-reach-two-designators.png` });
   const cmdErrs = await page.evaluate((n0) => window.__citadel.game.cmdErrors.slice(n0), cmdBefore);
-  check('reach: two taps designate two enemies (both reticles, HUD shows 2 designators)', two.length >= 2 && r4.des?.slots === 2 && r4.des?.live === 2 && reticles >= 2 && /2\/2/.test(chip) && cmdErrs.length === 0, { taps: two.length, des: r4.des, reticles, chip, cmdErrs });
-  // re-tap the enemy nearest the last tap: its designation clears (it may have moved: aim at its drawn position)
+  check('reach: two taps designate two enemies (both reticles, HUD shows 2 designators)', two.length >= 2 && r4.des?.slots === 2 && r4.des?.live === 2 && reticles >= 2 && /2\/2/.test(chip) && cmdErrs.length === 0, { taps: two.length, des: r4.des, reticles, chip, cmdErrs, assistCd: prime.cd });
+  // re-tap the enemy nearest the last tap: its designation clears (it may have moved: aim at its drawn position).
+  // Only a lone re-tap toggles (a re-tap within 900 ms on a designated enemy is an assist tap that keeps the designation:
+  // app/active-tap.ts REPEAT_MS), so let 950 ms pass since the last tap, then read the aim point and tap at once (read
+  // before the wait, the enemy walks off it; a longer wait gives the gun time to kill both designated enemies).
+  await page.waitForTimeout(Math.max(0, 950 - (Date.now() - lastTapAt)));
   const again = await page.evaluate((t) => {
     const c = window.__citadel, s = c.app.snapshot, r = c.app.canvas.getBoundingClientRect();
     let best = null;
@@ -507,7 +549,6 @@ async function reach() {
     return best;
   }, two[1]);
   const before = await rs();
-  await page.waitForTimeout(1000);   // a lone re-tap (rapid re-taps are assist taps that keep the designation: app/active-tap.ts)
   if (again) await page.touchscreen.tap(again.sx, again.sy);
   await page.waitForTimeout(300);
   const r5 = await rs();

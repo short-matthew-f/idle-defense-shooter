@@ -19,6 +19,7 @@ export const EV_NAMES = [
   'Tower hit', 'Tower death', 'Barrier break', 'Second Core', 'Cast', 'Counter scored', 'Heal',
   'Purchase', 'Doctrine chosen', 'Mounted', 'Attuned', 'Anomaly picked', 'Core drop', 'Scrap gain',
   'Checkpoint', 'Attempt start', 'Prestige', 'Ascend', 'Fx', 'Codex', 'Chain',
+  'Boon offer', 'Boon picked', 'Quartermaster',
 ] as const;
 export const EV_KILL: number = Ev.Kill;
 const WINDOW_TICKS = 15 * 60;

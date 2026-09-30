@@ -4,11 +4,13 @@
  */
 import { describe, expect, it } from 'vitest';
 import { INSTANCE_FLOATS, SALVAGE_MARK, Shape, TOWER_RADIUS } from '../../src/sim/core/types';
-import { TapRouter, holdOnTower, REPEAT_MS, TOWER_HOLD_PX } from '../../src/app/active-tap';
-import { CRATE_REACH_PX, nearestCrate, tapReach } from '../../src/app/pick';
+import { TapRouter, holdOnTower, REPEAT_MS, SAME_ENEMY_WU, TOWER_HOLD_PX } from '../../src/app/active-tap';
+import { CRATE_REACH_PX, nearestCrate, reticleAt, tapReach } from '../../src/app/pick';
 import { FieldOverlay, isCrate } from '../../src/app/overlay';
 import { ACTIVE } from '../../src/sim/data/active';
-import { holdZone, overchargeUnlocked } from '../../src/ui/active';
+import { holdZone, overchargeShown, overchargeUnlocked } from '../../src/ui/active';
+import { UNLOCKS } from '../../src/ui/progression';
+import { RETICLE_MARK } from '../../src/sim/core/types';
 
 const SCALE = 0.36;   // CSS px per world unit on a 390-wide phone
 
@@ -30,6 +32,26 @@ describe('tap routing', () => {
     expect(r.route(null, { x: 106, y: 2 }, false, SCALE, 1600)).toMatchObject({ assist: true, designate: false });
     expect(r.route(null, { x: 106, y: 2 }, false, SCALE, 1600 + REPEAT_MS + 1)).toMatchObject({ designate: true });   // a lone tap: toggles as before
     expect(r.route(null, { x: -200, y: 0 }, false, SCALE, 1700 + REPEAT_MS)).toMatchObject({ designate: true });   // another enemy
+  });
+  it('two quick taps on two nearby enemies designate both (e2e reach: two designators)', () => {
+    const r = new TapRouter();
+    // 60 world units apart is ~21 CSS px on a phone: inside REPEAT_PX, but a different enemy
+    expect(r.route(null, { x: 0, y: -400 }, false, SCALE, 1000)).toMatchObject({ assist: true, designate: true });
+    expect(r.route(null, { x: 60, y: -400 }, false, SCALE, 1250)).toMatchObject({ assist: true, designate: true });
+    // the same enemy re-tapped quickly: drawn with its reticle (moved further than SAME_ENEMY_WU), or barely moved
+    expect(r.route(null, { x: 60 + SAME_ENEMY_WU + 10, y: -400 }, false, SCALE, 1500, true)).toMatchObject({ designate: false });
+    expect(r.route(null, { x: 60 + SAME_ENEMY_WU + 14, y: -400 }, false, SCALE, 1700)).toMatchObject({ designate: false });
+  });
+  it('a crate loses to an enemy the tap is nearer to (a drifting crate never steals a designation)', () => {
+    const r = new TapRouter();
+    expect(r.route({ x: 30, y: 0, dist: 30 }, { x: 2, y: 0, dist: 2 }, false, SCALE, 0)).toMatchObject({ kind: 'enemy', designate: true });
+    expect(r.route({ x: 3, y: 0, dist: 3 }, { x: 40, y: 0, dist: 40 }, false, SCALE, 5000)).toEqual({ kind: 'collect', x: 3, y: 0 });
+  });
+  it('the unlock ladder gates the assist (tapAssist) and tap-collecting (salvage)', () => {
+    const r = new TapRouter();
+    const off = { assist: false, salvage: false };
+    expect(r.route({ x: 3, y: 0, dist: 3 }, { x: 40, y: 0, dist: 40 }, false, SCALE, 0, false, off)).toEqual({ kind: 'enemy', x: 40, y: 0, assist: false, designate: true });
+    expect(r.route({ x: 3, y: 0, dist: 3 }, null, false, SCALE, 5000, false, off)).toEqual({ kind: 'field' });
   });
   it('with an ability armed the tap is the cast (no assist, no collect); empty ground is a plain field tap', () => {
     const r = new TapRouter();
@@ -72,6 +94,19 @@ describe('UI helpers', () => {
     expect(overchargeUnlocked(ui(0, 11))).toBe(false);
     expect(overchargeUnlocked(ui(ACTIVE.overcharge.unlockWave, 0))).toBe(true);
     expect(overchargeUnlocked(ui(0, ACTIVE.overcharge.unlockWave))).toBe(true);
+  });
+  it('the Overcharge button follows the sim unlock AND the ladder feature; both unlock at the same wave', () => {
+    expect(UNLOCKS.overcharge.wave).toBe(ACTIVE.overcharge.unlockWave);
+    const a = (unlocked: boolean) => ({ overcharge: { unlocked } }) as never;
+    expect(overchargeShown(a(true), true)).toBe(true);
+    expect(overchargeShown(a(true), false)).toBe(false);
+    expect(overchargeShown(a(false), true)).toBe(false);   // Unlock everything before wave 12: the sim would ignore it
+    expect(overchargeShown(undefined, true)).toBe(false);
+  });
+  it('reticleAt finds a designated enemy by its reticle ring', () => {
+    const f = inst([{ x: 50, y: 60, r: 14, layer: 7, shape: Shape.Ring, aux1: RETICLE_MARK }, { x: 0, y: 0, r: 9, layer: 4, shape: Shape.Diamond }]);
+    expect(reticleAt(f, 2, 50, 60)).toBe(true);
+    expect(reticleAt(f, 2, 0, 0)).toBe(false);
   });
   it('hold zones follow the window', () => {
     expect(holdZone(0.2)).toBe('early');

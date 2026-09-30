@@ -5,11 +5,13 @@
 import '../styles/prestige.css';
 import type { UiState } from '@sim/core/types';
 import type { PrestigeNodeDef } from '@sim/data/schema';
-import { h, holdRepeat, text, disable, show, attr } from './dom';
+import { button, h, holdRepeat, text, disable, show, attr } from './dom';
 import { icon } from './icons';
 import { fmtNum, nextRankCost } from './format';
 import { PRESTIGE_NODES } from './content';
 import type { UiCtx } from './ctx';
+import { ECHO_GUIDE_TEXT, echoGuideDone, echoGuideOn, echoGuidePicks, endEchoGuide } from './ceremony';
+import { markCoachSeen } from './coach';
 
 export const LAYERS: { layer: 1 | 2 | 3 | 4; name: string; wave: number; blurb: string }[] = [
   { layer: 1, name: 'Prestige I: Inheritance', wave: 20, blurb: 'Compress content you have mastered.' },
@@ -25,10 +27,16 @@ export class PrestigeShop {
   private readonly echoes = h('span', { class: 'echo-val' });
   private readonly rows: Row[] = [];
   private readonly layerEls: { el: HTMLElement; lock: HTMLElement; wave: number }[] = [];
+  /** First-Prestige guide (ceremony.ts): an inline coach line; the affordable Layer I picks get the class `guide`. */
+  private readonly guide: HTMLElement;
   readonly el: HTMLElement;
 
   constructor(private readonly ctx: UiCtx) {
-    this.el = h('div', { class: 'pshop' }, h('div', { class: 'pr-gain' }, icon('echo', 'ico'), this.echoes, h('span', { class: 'dim', text: ' Echoes' })));
+    const ok = button('Got it', () => { endEchoGuide(); markCoachSeen(['echoes']); const ui = this.ctx.state(); if (ui) this.update(ui); }, { class: 'btn small coach-ok' });
+    this.guide = h('div', { class: 'coach-banner ps-guide', attrs: { role: 'status', 'aria-live': 'polite' } },
+      h('span', { class: 'coach-ico' }, icon('echo', 'ico')), h('span', { class: 'coach-text', text: ECHO_GUIDE_TEXT }), ok);
+    this.guide.hidden = true;
+    this.el = h('div', { class: 'pshop' }, this.guide, h('div', { class: 'pr-gain' }, icon('echo', 'ico'), this.echoes, h('span', { class: 'dim', text: ' Echoes' })));
     for (const L of LAYERS) {
       const lock = h('p', { class: 'node-lock', text: `Opens when your deepest-ever wave reaches ${L.wave}.` });
       const sec = h('section', { class: 'player' }, h('h3', { class: 'sec-title' }, L.name, h('span', { class: 'sec-sub', text: L.blurb })), lock);
@@ -57,6 +65,11 @@ export class PrestigeShop {
     const m = ui.meta;
     text(this.echoes, fmtNum(m.echoes));
     for (const L of this.layerEls) { const open = m.deepestEver >= L.wave; show(L.lock, !open); L.el.classList.toggle('closed', !open); }
+    // guided first Echo spend: never buys, only points (ends on Got it, or once nothing in Layer I is affordable)
+    if (echoGuideOn() && (echoGuideDone(ui) || this.ctx.features().unlockAll)) { endEchoGuide(); markCoachSeen(['echoes']); }
+    const guideOn = echoGuideOn();
+    const picks = new Set(guideOn ? echoGuidePicks(ui) : []);
+    show(this.guide, guideOn);
     for (const r of this.rows) {
       const rank = m.prestigeRanks[r.def.id] | 0;
       const open = m.deepestEver >= (LAYERS[r.def.layer - 1]?.wave ?? 0);
@@ -68,6 +81,7 @@ export class PrestigeShop {
       const can = open && !maxed && m.echoes >= cost;
       disable(r.btn, !can);
       r.el.classList.toggle('affordable', can);
+      r.el.classList.toggle('guide', picks.has(r.def.id));
       r.el.classList.toggle('maxed', maxed);
       attr(r.btn, 'aria-label', maxed ? `${r.def.name}: max rank` : `Buy ${r.def.name} for ${fmtNum(cost)} Echoes`);
     }

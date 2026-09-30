@@ -4,7 +4,7 @@ import {
   BULK_ROWS, BULK_ROWS_MIN_WAVE, CONTENT_POOL, FEATURE_IDS, STAGE_WAVES, STAGE7_WAVE, STARTER_NODES, UNLOCKS, affordableRows, allFeatures, bestWave, contentPool, features,
   stageOf, stageOfFeature, starterPick, type FeatureId, type Features, type ProgressState, type StarterState,
 } from '../../src/ui/progression';
-import { COACH, initialSeen, pendingCoach, staleWith, unlockedCoach } from '../../src/ui/coach';
+import { COACH, activeCoachLive, initialSeen, pendingCoach, staleWith, unlockedCoach } from '../../src/ui/coach';
 import { tabBadges, tabReachable, tabsShown, type BadgeState } from '../../src/ui/shell-logic';
 import { ELEMENTS, HARDPOINTS } from '../../src/ui/content';
 
@@ -154,14 +154,13 @@ describe('unlockAll (master switch; alias showEverything)', () => {
     }
     expect(on(allFeatures())).toEqual([...FEATURE_IDS]);
   });
-  it('contentPool: phase 1 offers everything; owned ids are always offered', () => {
+  it('contentPool: the starters at Prestige 0; owned ids are always offered', () => {
     expect(Object.keys(CONTENT_POOL.elements).sort()).toEqual([...ELEMENTS].sort());
     expect(Object.keys(CONTENT_POOL.hardpoints).sort()).toEqual([...HARDPOINTS].sort());
+    expect(contentPool(state(0))).toEqual({ elements: ['fire', 'lightning', 'poison'], hardpoints: ['ordnance', 'drones'] });
     const p = contentPool(state(0, { build: { attunements: ['frost'], hardpoints: ['gravitics'] } }));
     expect(p.elements).toEqual([...ELEMENTS]);
-    expect(p.hardpoints).toEqual([...HARDPOINTS]);
-    expect(p.elements).toContain('frost');
-    expect(p.hardpoints).toContain('gravitics');
+    expect(p.hardpoints).toEqual(['ordnance', 'drones', 'gravitics']);
   });
 });
 
@@ -213,7 +212,19 @@ describe('coach banners', () => {
     expect(initialSeen(features(state(0)), 0)).toEqual([]);
     const deep = features(state(62, { prestige: 3 }));
     expect(initialSeen(deep, 7).sort()).toEqual(COACH.map((m) => m.id).sort());
-    expect(unlockedCoach(features(state(6))).map((m) => m.id)).toEqual(['start', 'checkpoint', 'elements']);
+    expect(unlockedCoach(features(state(6))).map((m) => m.id)).toEqual(['start', 'checkpoint', 'elements', 'salvage']);
+  });
+  it('active-edge explainers (salvage, Overcharge) show only while their subject is live, after the stage messages', () => {
+    const read5 = new Set(['start', 'checkpoint']);
+    expect(pendingCoach(features(state(4)), new Set(['start']), { boonOffer: false, draft: false, crate: true })).toBeNull();   // not revealed yet
+    expect(pendingCoach(features(state(5)), read5, { boonOffer: false, draft: false, crate: true })?.id).toBe('salvage');
+    expect(pendingCoach(features(state(5)), new Set(['start']), { boonOffer: false, draft: false, crate: true })?.id).toBe('checkpoint');   // stage first
+    expect(pendingCoach(features(state(12)), new Set([...staleWith('abilities'), 'salvage']), { boonOffer: false, draft: false, overchargeReady: true })?.id).toBe('overcharge');
+    expect(pendingCoach(features(state(12)), new Set([...staleWith('abilities'), 'salvage']))).toBeNull();
+    expect(staleWith('salvage')).toEqual(['salvage']);
+    expect(activeCoachLive({ crates: 2, overcharge: { ready: false } })).toEqual({ crate: true, overchargeReady: false });
+    expect(activeCoachLive(undefined)).toEqual({ crate: false, overchargeReady: false });
+    for (const id of ['salvage', 'overcharge']) expect(COACH.find((m) => m.id === id)!.text.length).toBeLessThanOrEqual(80);
   });
 });
 

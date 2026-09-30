@@ -60,6 +60,7 @@ export class AbilityBar {
       const key = h('span', { class: 'ab-key', text: String(i + 1) });
       const el = button([ico, cost, key], () => { if (!lp.consumed()) this.press(i); }, { class: 'btn ability' });
       const lp = longPress(el, 480, () => this.openPicker(i));
+      el.dataset.hint = `ability-${i}`;   // pointer hints (hints.ts)
       return { el, ico, cost, key, ability: undefined };
     });
     this.row.replaceChildren(...this.slots.map((s) => s.el));

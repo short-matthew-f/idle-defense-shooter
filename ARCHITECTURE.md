@@ -135,8 +135,9 @@ cannot overwrite it) and pay through `World.addScrap`. Events: `Ev.Assist` / `Ev
 Hits (srcTag `assist` / `overcharge`, source `ability`); `Kill → Ev.SalvageDrop → Ev.SalvageCollect` (src `salvage.tap` /
 `salvage.passive`). `UiState.active` carries the cooldown, chain and meter. Crates are drawn as layer-7 Diamonds with
 `aux1 = SALVAGE_MARK`; `app/pick.ts nearestCrate` and `app/overlay.ts` find them by that mark (like the reticle).
-The app routes taps (`app/active-tap.ts`): crate → collect; enemy → assist + `designate_at` (rapid re-taps skip the
-designation toggle); a hold claimed on the tower (`Input.onHoldStart`) charges Overcharge. UI: `src/ui/active.ts`.
+The app routes taps (`app/active-tap.ts`): crate → collect (unless an enemy is nearer the tap); enemy → assist +
+`designate_at` (rapid re-taps of the same enemy skip the designation toggle); a hold claimed on the tower
+(`Input.onHoldStart`) charges Overcharge. Gated by the unlock ladder (`tapAssist`, `salvage`, `overcharge`). UI: `src/ui/active.ts`.
 
 ## Economy constants (design §17) — implement in `economy/curves.ts`
 

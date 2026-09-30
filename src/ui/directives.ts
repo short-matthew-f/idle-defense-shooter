@@ -12,6 +12,7 @@ import { ACTIONS, ACT_KINDS, CONDITIONS, COND_KINDS, MAX_CONDITIONS, SYSTEM_LABE
 import { ABILITY_BY_ID, FRAME_BY_ID, TREE_BY_ID, TREE_LABEL, nodeName } from './content';
 import { confirmDialog } from './modal';
 import type { UiCtx } from './ctx';
+import { contentPool } from './progression';
 
 export type AutoTab = 'directives' | 'targeting' | 'queue' | 'blueprints';
 const TABS: { id: AutoTab; label: string }[] = [
@@ -21,10 +22,11 @@ const TABS: { id: AutoTab; label: string }[] = [
 function rank(ui: UiState, id: string): number { return ui.meta.prestigeRanks[`prestige.${id}`] | 0; }
 function clone<T>(v: T): T { return JSON.parse(JSON.stringify(v)) as T; }
 
-function paramInput(spec: ParamSpec, value: unknown, onChange: (v: string | number) => void, labelPrefix: string): HTMLElement {
+function paramInput(spec: ParamSpec, value: unknown, onChange: (v: string | number) => void, labelPrefix: string, allow?: (v: string) => boolean): HTMLElement {
   const label = `${labelPrefix} ${spec.label}`;
   if (spec.type === 'enum') {
-    const sel = h('select', { class: 'select', attrs: { 'aria-label': label } }, ...(spec.options ?? []).map((o) => h('option', { attrs: { value: o.value }, text: o.label })));
+    const opts = (spec.options ?? []).filter((o) => !allow || allow(o.value) || o.value === String(value));
+    const sel = h('select', { class: 'select', attrs: { 'aria-label': label } }, ...opts.map((o) => h('option', { attrs: { value: o.value }, text: o.label })));
     sel.value = String(value);
     sel.addEventListener('change', () => onChange(sel.value));
     return sel;
@@ -176,7 +178,11 @@ export class DirectivesPanel {
         ...ACT_KINDS.map((k) => h('option', { attrs: { value: k, ...(ACTIONS[k].autonomy && !autonomy && a.kind !== k ? { disabled: '' } : {}) }, text: ACTIONS[k].label + (ACTIONS[k].autonomy ? ' (Autonomy)' : '') })));
       kindSel.value = a.kind;
       kindSel.addEventListener('change', () => { d.action = defaultAction(kindSel.value as ActKind) as DirectiveAction; renderAct(); changed(); });
-      act.append(h('span', { class: 'kw do', text: 'DO' }), kindSel, ...ACTIONS[a.kind].params.map((p) => paramInput(p, (a as unknown as Record<string, unknown>)[p.key], (v) => { (a as unknown as Record<string, unknown>)[p.key] = v; changed(); }, 'Action')));
+      // a weapon-system picker offers the primary and what this Prestige's content pool offers (progression.ts)
+      const u = this.ctx.state();
+      const pool = u ? contentPool(u, { unlockAll: this.ctx.features().unlockAll }).hardpoints as string[] : null;
+      const allowSystem = (v: string): boolean => !pool || v === 'primary' || pool.includes(v);
+      act.append(h('span', { class: 'kw do', text: 'DO' }), kindSel, ...ACTIONS[a.kind].params.map((p) => paramInput(p, (a as unknown as Record<string, unknown>)[p.key], (v) => { (a as unknown as Record<string, unknown>)[p.key] = v; changed(); }, 'Action', p.key === 'system' ? allowSystem : undefined)));
     };
     renderAct();
     wrap.append(conds, act);

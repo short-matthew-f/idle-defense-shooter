@@ -69,3 +69,6 @@ Read [`ARCHITECTURE.md`](ARCHITECTURE.md) first. The short version:
 
 Balance history and current acceptance status: [`docs/BALANCE.md`](docs/BALANCE.md) and
 `sim-out/BASELINE.md` (generated).
+
+How a new player meets the game (the unlock ladder, which weapons and elements each Prestige offers, the
+first-Prestige ceremony, the Quartermaster, Unlock everything, and how to test it): [`docs/ONBOARDING.md`](docs/ONBOARDING.md).

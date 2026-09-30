@@ -1,0 +1,49 @@
+/*
+ * Pointer ring (src/ui/pointer.ts): a soft pulsing halo drawn just OUTSIDE the control a coach banner is about (a 6 px
+ * gap, so the control itself stays readable), with an optional few-word label that fades. Never takes a tap.
+ * Above the screens (7), the tab bar (9) and the toasts (8); below modals (20).
+ */
+#ui > .hint-layer { position: fixed; inset: 0; z-index: 15; pointer-events: none !important; overflow: hidden; }
+.hint-layer * { pointer-events: none !important; }
+/* reads the safe-area insets (env()) for the ring math */
+.hint-probe {
+  position: absolute; left: 0; top: 0; width: 0; height: 0; visibility: hidden;
+  padding: var(--safe-top, 0px) var(--safe-right, 0px) var(--safe-bottom, 0px) var(--safe-left, 0px);
+}
+
+.hint-ring {
+  position: absolute; left: 0; top: 0; box-sizing: border-box; border-radius: 14px;
+  border: 2px solid color-mix(in srgb, var(--accent) 88%, white);
+  /* a thin dark keyline outside and inside keeps the ring readable over bright buttons and over the arena */
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(0, 0, 0, 0.45), 0 0 14px 1px color-mix(in srgb, var(--accent) 35%, transparent);
+  will-change: transform;
+}
+.hint-ring::after {
+  content: ''; position: absolute; inset: -2px; border-radius: inherit;
+  border: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  animation: hint-halo 1.8s ease-out infinite;
+}
+.hint-ring.in { animation: hint-in 0.3s ease-out; }
+/* opacity only: the ring is placed with transform, so a scale here would scale its position too */
+@keyframes hint-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes hint-halo {
+  0% { opacity: 0.9; inset: -2px; }
+  70%, 100% { opacity: 0; inset: -12px; }
+}
+
+.hint-label {
+  position: absolute; left: 0; top: 0; max-width: min(260px, calc(100vw - 32px)); padding: 3px 10px; border-radius: 999px;
+  background: var(--bg-2); border: 1px solid color-mix(in srgb, var(--accent) 60%, var(--line-2)); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  color: var(--text); font: 700 14px/20px var(--font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: opacity 0.6s ease;
+}
+.hint-label.faded { opacity: 0; }
+
+/* reduced motion (the OS, or Settings → Graphics → Reduced motion): a static, thicker ring; the label just disappears */
+.hint-layer.still .hint-ring { border-width: 3px; animation: none; }
+.hint-layer.still .hint-ring::after { display: none; }
+.hint-layer.still .hint-label { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .hint-ring { border-width: 3px; }
+  .hint-ring::after { display: none; }
+}

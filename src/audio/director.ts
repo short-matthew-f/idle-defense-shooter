@@ -34,6 +34,9 @@ export const CHAIN_NOTES_PER_SECOND = 7;
 /** New ordinary (priority < 5) sounds per event batch (one batch per frame). */
 export const LOW_PER_BATCH = 2;
 const MAX_CANDIDATES = 64;
+/** Quartermaster auto-buys (Purchase with data.via 'quartermaster'): a soft tick, rate-limited, never the purchase sound. */
+export const QM_TICK_SECONDS = 4;
+export const QM_TICK_LEVEL = 0.25;
 
 const clampPan = (x: number): number => Math.max(-1, Math.min(1, x / ARENA_RADIUS));
 
@@ -94,7 +97,7 @@ export class AudioDirector {
     const cands = this.cands;
     cands.length = 0;
     this.lowLeft = LOW_PER_BATCH;
-    let purchases = 0, minRank = 1e9, checkpoint = false;
+    let purchases = 0, minRank = 1e9, checkpoint = false, autoBuys = 0;
     const recordLinksBefore = (id: number): void => {
       while (li < nLinks && links![li * 3] < id) { this.chain.record(links![li * 3], links![li * 3 + 1], true, links![li * 3 + 2] === 1); li++; }
     };
@@ -104,7 +107,12 @@ export class AudioDirector {
       const cont = e.type === Ev.Kill && this.chain.isHit(e.cause);
       const depth = this.chain.record(e.id, e.cause, false, cont);
       if (!o) continue;
-      if (e.type === Ev.Purchase) { purchases++; minRank = Math.min(minRank, e.a | 0); continue; }
+      if (e.type === Ev.Purchase) {
+        // Quartermaster buys (data.via) are not the player's: no purchase sound, at most a soft tick (quartermasterTick)
+        if (e.data?.via === 'quartermaster') autoBuys++;
+        else { purchases++; minRank = Math.min(minRank, e.a | 0); }
+        continue;
+      }
       this.react(o, e, depth, checkpoint);
     }
     recordLinksBefore(Number.MAX_SAFE_INTEGER);
@@ -112,6 +120,7 @@ export class AudioDirector {
     const now = o.now();
     if (digest) this.digest(o, digest, nLinks, now);
     if (purchases > 0) this.purchase(o, purchases, minRank);
+    else if (autoBuys > 0) this.quartermasterTick(o, now);
     this.playChain(o, now);
   }
 
@@ -226,6 +235,14 @@ export class AudioDirector {
     const deg = Math.max(0, Math.min(10, minRank - 1));
     if (n === 1) this.play(o, 'purchase', 0, { pitch: scaleNote(o.key.root + 24, pent, deg) });
     else this.play(o, 'purchase_bulk', 0, { n: Math.min(8, n), size: Math.min(8, deg) });
+  }
+
+  /** Automatic (Quartermaster) buys: one quiet, low tick at most every QM_TICK_SECONDS, whatever the number of ranks. */
+  private lastQmTick = -1e9;
+  private quartermasterTick(o: SoundOut, now: number): void {
+    if (now - this.lastQmTick < QM_TICK_SECONDS) return;
+    this.lastQmTick = now;
+    this.play(o, 'purchase', 0, { level: QM_TICK_LEVEL, pitch: scaleNote(o.key.root + 12, pentatonicFor(o.key.mode), 0) });
   }
 
   /** The chain melody: the deepest candidates within budget, as a rising figure on the music's 32nd-note grid. */

@@ -82,6 +82,7 @@ export class Shell {
         () => this.onTab(t.id), { class: `tab-btn t-${t.id}`, title: t.hint });
       b.setAttribute('role', 'tab');
       b.dataset.tab = t.id;
+      b.dataset.hint = `tab-${t.id}`;   // pointer hints (hints.ts)
       badge.hidden = true;
       this.tabBtns.set(t.id, { b, badge });
       this.tabbar.appendChild(b);

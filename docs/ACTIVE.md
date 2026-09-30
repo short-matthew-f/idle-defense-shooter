@@ -83,9 +83,10 @@ Details the sim enforces (`systems/active.ts`):
 
 | Gesture | Result |
 | --- | --- |
-| tap near a crate (≥ 44 px) | collect it (crates win over enemies: they are gone in seconds) |
+| tap near a crate (≥ 44 px) | collect it (crates win in open ground: they are gone in seconds), unless the tap is on an enemy nearer to it than the crate: then the enemy tap below (a drifting crate never steals a designation) |
 | tap an enemy | assist shot **and** designation (`designate_at`, unchanged) |
-| tap the same enemy again within 0.9 s (≤ 48 px) | assist shot only: hammering never toggles the designation off |
+| tap the *same* enemy again within 0.9 s (≤ 48 px, and it is drawn with its reticle or moved ≤ 16 world units) | assist shot only: hammering never toggles the designation off |
+| quick taps on two different enemies | each designates (two designators: both), as before |
 | a lone tap on a designated enemy | clears it, as before |
 | tap with an ability armed | casts it (unchanged; no assist) |
 | hold on the tower (Overcharge ready) | charge; lift to fire |
@@ -93,12 +94,20 @@ Details the sim enforces (`systems/active.ts`):
 | Overcharge button (bottom-right, over the arena) | press-and-hold / release; keyboard Enter or O |
 
 The button sits at the bottom-right of the arena, level with the ability row, and moves above the row when three or
-four ability slots make the row wide. It is hidden until Overcharge unlocks (`overchargeUnlocked(ui)` in
-`src/ui/active.ts`, the same rule as the sim). Its ring shows the meter; while charging, a white arc sweeps once per
+four ability slots make the row wide. It shows when the sim has unlocked Overcharge (`UiState.active.overcharge.unlocked`)
+**and** the unlock ladder reveals it (`ctx.features().overcharge`, src/ui/progression.ts; `overchargeShown` in
+`src/ui/active.ts`). Both unlock at wave 12 (a unit test keeps `UNLOCKS.overcharge.wave` equal to
+`ACTIVE.overcharge.unlockWave`); "Unlock everything" reveals the feature early, but the button stays hidden until the sim
+would accept a charge. The tower hold needs the same feature. The ladder also gates the taps (`app/active-tap.ts`
+`TapGates`): `tapAssist` (wave 0) for assist shots, `salvage` (the first boss, wave 5) for tap-collecting; on waves 2–4
+crates already drift in and pay the passive 40%, and a tap near one is an ordinary field / enemy tap. Its ring shows the meter; while charging, a white arc sweeps once per
 2.2 s and the timing window is the bright band; the label reads …, NOW, LATE. The arc follows the sim's hold (UiState,
 extrapolated at most 0.15 s between updates), so on a slow device where the sim lags the wall clock, the button, the
-in-world ring and the sim's timing agree. The `Ev.Overcharge` event carries `data.hold` (s) for the Inspector and tests. Coach strings are exported from
-`src/ui/active.ts` (`COACH_OVERCHARGE_UNLOCK`, `COACH_OVERCHARGE_READY`, `COACH_SALVAGE`, `COACH_ASSIST`).
+in-world ring and the sim's timing agree. The `Ev.Overcharge` event carries `data.hold` (s) for the Inspector and tests. Coach lines (src/ui/coach.ts, live
+explainers: shown only while their subject is on screen, after any unread stage message, and kept up until "Got it"):
+`salvage` "Glowing crates: tap them for bonus Scrap. Quick taps chain." while a crate is on the field (from the wave-5
+reveal), `overcharge` "Overcharge is full: hold the glowing button, let go in the bright band." when the meter is first
+ready. The assist needs none: the stage-0 line already has the player tapping.
 
 ## Presentation
 
@@ -109,9 +118,10 @@ in-world ring and the sim's timing agree. The `Ev.Overcharge` event carries `dat
 - Overcharge: 12 meter pips around the tower (a glow when full), a charge ring growing toward a target band while
   charging, the beam (22 ticks), a shockwave and, on a perfect release, a camera punch (scaled to 0 by reduced motion).
 - Floaters: "+1.2K ×2" rising from a collected crate (DOM, client px via the camera); passive collects show a small dim
-  "+N". Under reduced motion they fade in place. No toasts. The floater anchor is a zero-size fixed box with
-  `pointer-events: none !important` (a full-screen layer under `#ui` would get `#ui > * { pointer-events: auto }` and
-  swallow every tap: found in the phone check).
+  "+N". Under reduced motion they fade in place. No toasts. The floater anchor is a zero-size fixed box appended to
+  `#ui`; base.css gives every direct child of `#ui` `pointer-events: auto` (`#ui > *`, specificity 1-0-0), so its rule
+  is written `#ui > .salvage-floaters { pointer-events: none }` (1-1-0) and wins on specificity whatever the stylesheet
+  order (a plain `.salvage-floaters` rule loses, and the layer swallowed canvas taps: found in the phone check).
 - Sounds (`src/audio/sfx/active.ts`): `assist` crack, `salvage_pluck` (one pentatonic step up per chain link),
   `salvage_passive` tick, `overcharge_thump` (bigger on a perfect release).
 

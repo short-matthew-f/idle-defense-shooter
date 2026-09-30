@@ -14,6 +14,7 @@
  */
 import type { ElementId, HardpointId } from '@sim/core/ids';
 import type { ShopEntry, UiState } from '@sim/core/types';
+import { CHASSIS_LINKAGES, FUSIONS, INFUSIONS, TRIADS, WEAPON_LINKAGES } from '@sim/data/index';
 import { etaSeconds, nextPurchase } from './advice';
 
 // ---------------------------------------------------------------- the table
@@ -83,7 +84,7 @@ export const UNLOCKS: Readonly<Record<FeatureId, Unlock>> = {
   frame: W(STAGE7_WAVE, 'Build → Frame'),
   automation: W(null, 'More → Automation (Directives, Autocast, Blueprints)'),
   trials: W(null, 'More → Trials'),
-  quartermaster: W(null, 'Quartermaster (wired by another system)'),
+  quartermaster: W(null, 'Quartermaster card at the top of Upgrades (Chassis, Hardpoints); a coach line offers to turn it on'),
 };
 
 /** The three stage-0 stats (the most basic of Ballistics and Bastion), with first-contact names. */
@@ -215,18 +216,74 @@ export function allFeatures(): Features {
 // ---------------------------------------------------------------- content pool
 
 /**
- * Prestiges needed before an element / weapon system is OFFERED in a slot picker. Phase 1: everything at 0
- * (all offered). Phase 2 plan: starter elements fire / lightning / poison and starter weapons ordnance / drones
- * stay at 0, the rest move to 1+. Anything owned (attuned, mounted, run by the Frame or borrowed) is always offered.
+ * THE content pool: Prestiges needed before an element / weapon system is OFFERED (slot pickers, Refit, Blueprints,
+ * Directive system pickers; Fusions / Linkages / Infusions follow their parts, see poolAllows). UI only: the sim
+ * accepts any attune / mount command. One new system per early Prestige, each a "New" moment (docs/ONBOARDING.md):
+ *
+ *   P0  fire, lightning, poison · ordnance, drones   the starters: 3 elements for 2 attunement slots (waves 5, 25), 2 weapons
+ *   P1  + frost                                       Superconductivity, Thermal Shock, Cryotoxin become possible
+ *   P2  + blade (Orbital Blade)                       the second hardpoint slot (wave 30, reached from P1 on) becomes a choice
+ *   P3  + laser (Laser Polygon)                       in time for the third hardpoint slot (wave 55; P3 reaches ~61)
+ *   P4  + gravitics                                   everything offered
+ *
+ * Anything owned (attuned, mounted, run by the Frame or borrowed) is always offered, whatever the Prestige count
+ * (existing saves keep what they use); Unlock everything offers all of it.
  */
 export const CONTENT_POOL: { readonly elements: Readonly<Record<ElementId, number>>; readonly hardpoints: Readonly<Record<HardpointId, number>> } = {
-  elements: { fire: 0, lightning: 0, poison: 0, frost: 0 },
-  hardpoints: { ordnance: 0, drones: 0, blade: 0, laser: 0, gravitics: 0 },
+  elements: { fire: 0, lightning: 0, poison: 0, frost: 1 },
+  hardpoints: { ordnance: 0, drones: 0, blade: 2, laser: 3, gravitics: 4 },
 };
 export const STARTER_ELEMENTS: readonly ElementId[] = ['fire', 'lightning', 'poison'];
 export const STARTER_HARDPOINTS: readonly HardpointId[] = ['ordnance', 'drones'];
+/** The Prestige count at which every id is offered. */
+export const POOL_COMPLETE_AT = Math.max(...Object.values(CONTENT_POOL.elements), ...Object.values(CONTENT_POOL.hardpoints));
 
 export interface ContentPool { elements: ElementId[]; hardpoints: HardpointId[] }
+
+/** Content ids (elements, then hardpoints) a Prestige to `pc` adds to the pool (empty for 0 and past POOL_COMPLETE_AT). */
+export function poolAddedAt(pc: number): string[] {
+  if (pc <= 0) return [];
+  return [...Object.entries(CONTENT_POOL.elements), ...Object.entries(CONTENT_POOL.hardpoints)].filter(([, n]) => n === pc).map(([id]) => id);
+}
+
+/** Pool ids that arrived with a Prestige (not starters) and have not been seen in a picker yet ("New" badges). */
+export function newInPool(pool: ContentPool, seen: ReadonlySet<string>): string[] {
+  const late = (id: string): boolean => ((CONTENT_POOL.elements as Record<string, number>)[id] ?? (CONTENT_POOL.hardpoints as Record<string, number>)[id] ?? 0) > 0;
+  return [...pool.elements, ...pool.hardpoints].filter((id) => late(id) && !seen.has(id));
+}
+
+/** Elements / systems each cross-system node needs (Fusions and Triads: elements; Linkages and Infusions: their parts). */
+const CROSS_PARTS: ReadonlyMap<string, readonly string[]> = new Map<string, readonly string[]>([
+  ...[...FUSIONS, ...TRIADS].map((f) => [f.node.id, f.elements] as [string, readonly string[]]),
+  ...WEAPON_LINKAGES.map((l) => [l.node.id, l.pair.filter((p) => p !== 'primary')] as [string, readonly string[]]),
+  ...CHASSIS_LINKAGES.map((l) => [l.node.id, [l.pair[1]]] as [string, readonly string[]]),
+  ...INFUSIONS.map((i) => [i.node.id, [i.system, i.element]] as [string, readonly string[]]),
+]);
+
+/**
+ * Whether a shop entry belongs to the offered pool. Only Fusions, Triads, Linkages and Infusions are filtered: they
+ * show once every element / system they need is in the pool (so a Fusion needs BOTH elements). An entry with a rank
+ * always shows. Everything else (chassis, owned trees) passes.
+ */
+export function poolAllows(e: Pick<ShopEntry, 'node' | 'rank'>, pool: ContentPool): boolean {
+  if (e.rank > 0) return true;
+  const parts = CROSS_PARTS.get(e.node);
+  if (!parts) return true;
+  const inPool = new Set<string>([...pool.elements, ...pool.hardpoints]);
+  return parts.every((p) => inPool.has(p));
+}
+
+/** `shop` without the cross-system entries the pool does not offer yet (poolAllows). */
+export function poolShop<T extends Pick<ShopEntry, 'node' | 'rank'>>(shop: readonly T[], pool: ContentPool): T[] {
+  return shop.filter((e) => poolAllows(e, pool));
+}
+
+/** Whether a Blueprint's systems are all offered at Prestige count `pc` (it is loaded at the next Prestige start). */
+export function blueprintInPool(bp: { hardpoints: readonly string[]; attunements: readonly string[] }, pc: number, opts: FeatureOpts = {}): boolean {
+  if (masterOn(opts)) return true;
+  const pool = contentPool({ run: { deepestCleared: 0 }, meta: { deepestEver: 0, prestigeCount: pc } });
+  return bp.hardpoints.every((h) => (pool.hardpoints as string[]).includes(h)) && bp.attunements.every((e) => (pool.elements as string[]).includes(e));
+}
 
 /** Which element and hardpoint ids the slot pickers offer (data order). unlockAll offers everything. */
 export function contentPool(s: ProgressState, opts: FeatureOpts = {}): ContentPool {

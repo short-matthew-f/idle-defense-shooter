@@ -26,9 +26,12 @@ import { TrialsPanel, activeTrial, trialName } from './trials';
 import { helpPanel, settingsPanel } from './settings';
 import { Feed } from './feed';
 import { DeathCard } from './death';
-import { CoachBanner, initialSeen, markCoachSeen } from './coach';
+import { CoachBanner, activeCoachLive, initialSeen, markCoachSeen } from './coach';
 import { StarterPanel } from './starter';
-import { features, stageOf, type Features } from './progression';
+import { HintDriver } from './pointer';
+import { contentPool, features, newInPool, stageOf, type Features } from './progression';
+import { QM_COACH_ID, QM_COACH_TEXT, echoGuideOn, newContentCoach } from './ceremony';
+import type { CoachExtra } from './coach';
 import { tabsShown, TABS } from './shell-logic';
 import { prefs, setPref } from './prefs';
 import { showOfflineReturn } from './offline';
@@ -73,6 +76,8 @@ export class GameUi {
   private readonly showAll = (() => { try { return new URLSearchParams(location.search).get('showall') === '1'; } catch { return false; } })();
   private readonly starter: StarterPanel;
   private readonly coach = new CoachBanner();
+  /** Pointer hints: a ring on the control the coach banner is about (pointer.ts, hints.ts). */
+  private readonly hints: HintDriver;
 
   constructor(root: HTMLElement, readonly host: UiHost) {
     this.ctx = {
@@ -143,6 +148,17 @@ export class GameUi {
         more: { el: this.more.el, onShow: (sub) => this.more.enter(sub), onHide: () => this.more.hide() },
       },
     });
+    this.hints = new HintDriver(root, {
+      nav: () => ({ screen: (['upgrades', 'build', 'prestige', 'more'] as const).find((s) => this.shell.isShown(s)) ?? null, battle: this.shell.battleVisible }),
+      shop: () => this.shop.view(),
+      coach: () => (this.coach.el.hidden ? null : this.coach.el.dataset.coach ?? null),   // ladder lines and extras alike
+      blocked: () => anyModalOpen() || this.death.visible,
+      armed: () => this.abilities.arming.armed,
+      boonChip: () => !this.boonOffer.chip.hidden,
+      draftWaiting: () => this.draft.pending,
+    });
+    const layout = this.shell.onLayout;
+    this.shell.onLayout = () => { layout?.(); this.hints.pointer.schedule(); };
     window.addEventListener('keydown', (e) => this.onKey(e));
   }
 
@@ -172,7 +188,35 @@ export class GameUi {
     this.shop.setFeatures(f);
     this.hud.setFeatures(f);
     this.abilities.setVisible(f.abilities);
-    this.coach.update(f, { boonOffer: !!ui.run.boonOffer?.length, draft: !!ui.run.pendingDraft?.length });
+    this.coach.update(f, { boonOffer: !!ui.run.boonOffer?.length, draft: !!ui.run.pendingDraft?.length, ...activeCoachLive(ui.active) },
+      this.postPrestigeCoach(ui, f), echoGuideOn() ? ['machine'] : []);
+  }
+
+  /**
+   * Coach lines after a Prestige (ceremony.ts), behind the ladder's own ('machine' waits for the Echo guide): what the
+   * content pool just added (progression.ts), then the Quartermaster with a "Turn on" button (the sim starts it off).
+   */
+  private postPrestigeCoach(ui: UiState, f: Features): CoachExtra[] {
+    if (f.unlockAll) return [];
+    const p = prefs();
+    const pool = contentPool(ui);
+    if (!p.contentInit) {
+      // first run on this device: what the save already offers is not "New"
+      setPref('contentInit', true);
+      setPref('contentSeen', [...new Set([...p.contentSeen, ...pool.elements, ...pool.hardpoints])]);
+    }
+    const out: CoachExtra[] = [];
+    const fresh = newContentCoach(newInPool(pool, new Set(prefs().contentSeen)));
+    if (fresh) out.push(fresh);
+    const q = ui.quartermaster;
+    if (q?.on && !p.coachSeen.includes(QM_COACH_ID)) markCoachSeen([QM_COACH_ID]);   // switched on from its card: never re-offer
+    else if (f.quartermaster && q?.unlocked && !q.on) {
+      out.push({ id: QM_COACH_ID, icon: 'blueprint', text: QM_COACH_TEXT, action: { label: 'Turn on', run: () => {
+        this.host.send({ type: 'set_quartermaster', on: true });
+        this.feed.toast('Quartermaster on: its card is at the top of Upgrades', 'good');
+      } } });
+    }
+    return out;
   }
 
   update(ui: UiState): void {
@@ -207,6 +251,7 @@ export class GameUi {
     this.codex.update(ui);
     this.directives.update(ui);
     this.trials.update(ui);
+    this.hints.update(ui, this.feats);
   }
 
   onEvents(events: readonly SimEvent[]): void {
@@ -217,7 +262,7 @@ export class GameUi {
     for (const e of events) {
       if (e.type === Ev.TowerDeath && this.latest) this.death.show(e.a || this.latest.run.wave, this.latest, e.data);
       else if (e.type === Ev.WaveClear || e.type === Ev.Prestige || e.type === Ev.Ascend) this.death.hide();
-      else if (e.type === Ev.Purchase) this.shop.noteBuy();
+      else if (e.type === Ev.Purchase && e.data?.via !== 'quartermaster') this.shop.noteBuy();   // automatic buys are not the player's
     }
     if (events.some((e) => (e.type === Ev.ScrapGain && e.src === 'offline') || e.type === Ev.Prestige || e.type === Ev.Ascend)) this.hud.resetRate();
     if (this.pendingOffline) {

@@ -12,6 +12,8 @@ import { ANOMALY_BY_ID, FRAME_BY_ID, FRAMES, TREES, TREE_LABEL } from './content
 import type { FrameDef } from '@sim/data/schema';
 import { confirmDialog, openModal } from './modal';
 import type { UiCtx } from './ctx';
+import { openCeremony, useCeremony } from './ceremony';
+import { blueprintInPool } from './progression';
 
 type PrestigeCmd = Extract<Command, { type: 'prestige' }>;
 
@@ -22,6 +24,8 @@ export function openPrestige(ctx: UiCtx): void {
   if (!ui) return;
   // Reachability: the sim refuses a Prestige during a Trial; say so instead of a dialog that fails
   if (ui.activeTrial) { ctx.toast('Finish or leave the Trial first (More → Trials, or End on the Battle screen)', 'warn'); return; }
+  // the first Prestige is a story beat, not a form (ceremony.ts); later ones use this modal unchanged
+  if (useCeremony(ui, ctx.features().unlockAll)) { openCeremony(ctx); return; }
   const echoes = ui.forecast?.echoesNow ?? echoesFor(ui.run.deepestCleared, ui.run.threatDial);
   const frames = (ui.meta.unlockedFrames.length ? ui.meta.unlockedFrames : ['standard' as FrameId]);
   let frame: FrameId = frames.includes(ui.build.frame) ? ui.build.frame : frames[0];
@@ -59,7 +63,11 @@ export function openPrestige(ctx: UiCtx): void {
 
   if (ui.meta.blueprints.length) {
     const sel = h('select', { class: 'select', attrs: { 'aria-label': 'Blueprint' } }, h('option', { attrs: { value: '' }, text: 'No blueprint' }),
-      ...ui.meta.blueprints.map((b, i) => h('option', { attrs: { value: String(i) }, text: `${b.name} (${FRAME_BY_ID.get(b.frame)?.name ?? b.frame})` })));
+      // content pool (progression.ts): a Blueprint naming a system the next Prestige does not offer yet cannot be loaded
+      ...ui.meta.blueprints.map((b, i) => {
+        const ok = blueprintInPool(b, (ui.meta.prestigeCount | 0) + 1, { unlockAll: ctx.features().unlockAll });
+        return h('option', { attrs: { value: String(i), ...(ok ? {} : { disabled: '' }) }, text: `${b.name} (${FRAME_BY_ID.get(b.frame)?.name ?? b.frame})${ok ? '' : ' · needs a later Prestige'}` });
+      }));
     sel.addEventListener('change', () => {
       blueprint = sel.value === '' ? undefined : Number(sel.value);
       const bp = blueprint !== undefined ? ui.meta.blueprints[blueprint] : null;

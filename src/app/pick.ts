@@ -5,7 +5,7 @@
  * sim uses (center within max(PICK_RADIUS, radius + 8)) and returns that enemy's drawn position,
  * which armed ability casts snap to.
  */
-import { INSTANCE_FLOATS, SALVAGE_MARK, Shape } from '@sim/core/types';
+import { INSTANCE_FLOATS, RETICLE_MARK, SALVAGE_MARK, Shape } from '@sim/core/types';
 
 export const ENEMY_LAYER = 4;
 export const PICK_RADIUS = 24;
@@ -54,4 +54,18 @@ export function nearestCrate(instances: Float32Array, count: number, x: number, 
     if (d <= Math.max(minReach, instances[o + 2]) && (!best || d < best.dist)) best = { x: instances[o], y: instances[o + 1], dist: d };
   }
   return best;
+}
+
+/**
+ * Is the enemy drawn at (x, y) designated (or Hunter-marked)? The sim draws its reticle as a layer-7 Ring tagged
+ * RETICLE_MARK centred on the enemy (core/snapshot.ts); `tol` absorbs the frame between the pick and the ring.
+ */
+export function reticleAt(instances: Float32Array, count: number, x: number, y: number, tol = 2): boolean {
+  const n = Math.min(count, Math.floor(instances.length / INSTANCE_FLOATS));
+  for (let i = 0; i < n; i++) {
+    const o = i * INSTANCE_FLOATS;
+    if (instances[o + 9] !== CRATE_LAYER || instances[o + 4] !== Shape.Ring || instances[o + 11] !== RETICLE_MARK) continue;
+    if (Math.hypot(instances[o] - x, instances[o + 1] - y) <= tol) return true;
+  }
+  return false;
 }
