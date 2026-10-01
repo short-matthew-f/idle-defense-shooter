@@ -40,7 +40,8 @@ export class AbilityBar {
   readonly el: HTMLElement;
   readonly arming = new AbilityArming();
   readonly row = h('div', { class: 'ability-row', attrs: { role: 'toolbar', 'aria-label': 'Tactical abilities' } });
-  private readonly hint = h('div', { class: 'arm-hint', attrs: { role: 'status' } });
+  /** The armed hint ("… armed: tap the field" + Cancel); the overlay lanes place it on a landscape phone (lanes.ts). */
+  readonly hint = h('div', { class: 'arm-hint', attrs: { role: 'status' } });
   private readonly hintText = h('span');
   private slots: Slot[] = [];
   private slotKey = '';

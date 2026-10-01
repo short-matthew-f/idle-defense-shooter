@@ -18,7 +18,6 @@
   box-shadow: var(--shadow); animation: boon-in 0.2s ease-out;
 }
 @keyframes boon-in { from { opacity: 0; } to { opacity: 1; } }
-body.arming .boon-offer { --boon-bottom: 140px; }
 .bo-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .bo-card {
   position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; min-height: var(--touch); margin: 0;
@@ -64,6 +63,9 @@ body.arming .boon-offer { --boon-bottom: 140px; }
   .boon-offer { padding: 5px; }
 }
 .bo-foot { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+/* a card capped by the overlay lanes scrolls: Take / Reroll / Decline stay in view at its bottom edge */
+.bo-foot { position: sticky; bottom: 0; z-index: 1; background: rgb(14, 18, 26); }
+body.shell-rail .boon-offer:not(.narrow) .bo-foot { position: static; background: none; }
 .bo-heading { flex: 1; min-width: 0; display: flex; flex-direction: column; padding-left: 4px; font-size: 14px; line-height: 17px; }
 .bo-title { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bo-q { color: var(--text-dim); }
@@ -73,17 +75,14 @@ body.arming .boon-offer { --boon-bottom: 140px; }
 .bo-ico-alt { display: none; }
 .btn.bo-collapse { flex: none; }
 
-/* the offer set aside: a pulsing chip under the active row (top-left of the arena) */
-.arena-top > .btn.ctl.boon-chip {
-  align-self: flex-start; border-color: var(--accent); color: var(--text); gap: 6px; animation: pulse 1.8s infinite; --warn: var(--accent);
+/* the offer set aside: a pulsing chip beside the active row, under the top bar (top-left of the arena) */
+.arena-strip > .btn.ctl.boon-chip {
+  flex: none; border-color: var(--accent); color: var(--text); gap: 6px; animation: pulse 1.8s infinite; --warn: var(--accent);
 }
 .boon-chip > .ico { color: var(--accent); }
 .boon-chip .count:empty { display: none; }
 
-/* overlays keep clear of the open card */
-body.boon-open .arena-top { bottom: calc(var(--boon-h) + var(--boon-bottom) + 8px); }
-body.shell-phone.tab-battle.boon-open .toast-layer { bottom: calc(var(--tab-h) + var(--boon-h) + var(--boon-bottom) + 8px); }
-body.shell-desktop.boon-open .toast-layer { bottom: calc(var(--boon-h) + var(--boon-bottom) + 8px); }
+/* the overlay lanes (lanes.ts) keep the banners, toasts and the death card clear of the open card */
 
 /* landscape phone: the card sits bottom-right (the abilities are a column on the left), buttons in a column */
 body.shell-rail { --boon-bottom: calc(var(--safe-bottom) + 8px); }
@@ -107,12 +106,17 @@ body.shell-rail .bo-rare-meta { display: inline-flex; }
 body.shell-rail .bo-card .tag.rare { display: none; }
 body.shell-rail .boon-offer { padding: 5px; }
 body.shell-rail .bo-ico-alt { display: inline-block; }
-body.shell-rail.boon-open .arena-top { bottom: 12px; right: calc(var(--safe-right) + min(620px, calc(100% - 120px)) + 20px); }
-body.shell-rail.boon-open .toast-layer { bottom: calc(var(--safe-bottom) + var(--boon-h) + 16px); }
-body.shell-rail.arming .boon-offer { --boon-bottom: calc(var(--safe-bottom) + 8px); }
+/* landscape phone, the side lane narrower than the wide card (lanes.ts): the portrait layout, foot under the cards */
+body.shell-rail .boon-offer.narrow { display: block; }
+body.shell-rail .boon-offer.narrow .bo-foot { width: auto; margin-top: 6px; }
+body.shell-rail .boon-offer.narrow:not(.thin) .bo-foot { display: flex; }
+body.shell-rail .boon-offer.narrow:not(.thin) .bo-heading { justify-content: flex-start; padding-left: 4px; }
+/* very narrow: one card per row */
+.boon-offer.thin .bo-cards { grid-template-columns: minmax(0, 1fr); }
+.boon-offer.thin .bo-short { -webkit-line-clamp: 2; }
 
 /* ---------------------------------------------------------------- active row (under the top bar) */
-.arena-strip { display: flex; align-items: flex-start; gap: 8px; align-self: stretch; pointer-events: none !important; min-width: 0; }
+.arena-strip { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; align-self: stretch; pointer-events: none !important; min-width: 0; }
 .arena-strip > * { pointer-events: auto; }
 .arena-strip > .battle-controls { margin-left: auto; }
 .btn.ctl.boon-row { flex: none; padding: 0 10px 0 6px; gap: 6px; }

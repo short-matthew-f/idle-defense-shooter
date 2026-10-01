@@ -114,7 +114,7 @@ export class Shell {
     });
     // border-box: the safe-area insets are padding, so a notch / rotation change must re-measure the bars too
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => this.relayout()) : null;
-    for (const el of [parts.topbar, parts.abilities, this.tabbar]) ro?.observe(el, { box: 'border-box' });
+    for (const el of [parts.topbar, parts.abilities, parts.battle.querySelector('.starter'), this.tabbar]) if (el) ro?.observe(el, { box: 'border-box' });
     window.addEventListener('resize', () => this.relayout());
     this.relayout();
     this.apply();
@@ -275,7 +275,8 @@ export class Shell {
     const tabH = layout === 'phone' ? Math.ceil(bar.height) : 0;
     r.setProperty('--tab-h', `${tabH}px`);
     const railW = layout === 'rail' ? Math.ceil(bar.width) : 0;
-    const ab = this.parts.abilities.getBoundingClientRect();
+    // the ability row (never the armed hint above it: arming must not move the arena) or the first-session Upgrade panel
+    const ab = this.dockBox();
     const abilities = layout === 'desktop' ? (ab.height ? Math.ceil(ab.height) + 24 : 0) : layout === 'rail' ? (ab.width ? Math.ceil(ab.width) + 16 : 0) : 0;
     const dock = layout === 'phone' ? this.dockPx(tabH) : 0;
     this.lastDock = dock;
@@ -298,9 +299,26 @@ export class Shell {
       const r = st.getBoundingClientRect();
       if (r.height > 0) return Math.max(0, Math.ceil(vh - r.bottom + STARTER_CONTENT + DOCK_GAP - tabH));
     }
-    const ab = this.parts.abilities.getBoundingClientRect();
-    if (ab.height > 0 && !this.parts.abilities.hidden) return Math.max(0, Math.ceil(vh - ab.top - tabH + DOCK_GAP));
+    const row = this.parts.abilities.querySelector('.ability-row');
+    const ab = row && !row.closest('[hidden]') ? row.getBoundingClientRect() : null;
+    if (ab && ab.height > 0) return Math.max(0, Math.ceil(vh - ab.top - tabH + DOCK_GAP));
     return 0;
+  }
+
+  /**
+   * Desktop and landscape phone: the box of the controls docked over the arena's edge (the ability row, or the
+   * first-session Upgrade panel, whichever is larger), for the camera insets. Zero size when neither shows. The panel
+   * counts as its button and line (STARTER_CONTENT, as on phones), so its stat list appearing never refits the arena.
+   */
+  private dockBox(): { width: number; height: number } {
+    let w = 0, hh = 0;
+    for (const el of [this.parts.abilities.querySelector('.ability-row'), this.parts.battle.querySelector('.starter')]) {
+      if (!el || el.closest('[hidden]')) continue;
+      const r = el.getBoundingClientRect();
+      if (!(r.width > 0)) continue;
+      w = Math.max(w, r.width); hh = Math.max(hh, el.classList.contains('starter') ? STARTER_CONTENT : r.height);
+    }
+    return { width: w, height: hh };
   }
 
   /** Badges and the status strip (10 Hz). */

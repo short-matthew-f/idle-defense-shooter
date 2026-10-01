@@ -10,7 +10,8 @@
  *                thicker ring, no pulse.
  *   ringBox      pure: target rect → ring box (≥ 44 px, inside the safe area); labelSpots lists where the label may go
  *                (never over the ring, inside the safe area, the roomier side first); the Pointer takes the first spot that
- *                covers no text or control, else shows no label (the banner has the sentence). Tested.
+ *                covers no text or control and stays off the tower's hold zone, else shows no label (the banner has the
+ *                sentence). Tested.
  *   HintDriver   glue: gathers the hint context from the live UI each tick, asks hints.ts `nextHint`, points, and
  *                retires hints (prefs.hintsDone) when their condition ends or their final target is tapped. "Got it" on
  *                a banner only snoozes the ring pointing for it (SNOOZE_MS): it comes back until the hint completes.
@@ -19,6 +20,7 @@ import '../styles/pointer.css';
 import type { UiState } from '@sim/core/types';
 import { gfxSettings, onGfxChange, reducedMotion, systemReducedMotion } from '@render/quality';
 import { h } from './dom';
+import type { ArenaGeom } from './host';
 import { prefs, setPref } from './prefs';
 import { ABILITIES, ABILITY_BY_ID } from './content';
 import { STARTER_NODES, features as featuresOf, stageOf, starterPick, type Features } from './progression';
@@ -116,12 +118,70 @@ const TARGETS = new Map<string, Resolver>([
 /** Map a hint key to a selector or resolver (for controls whose module has no `data-hint`). */
 export function registerHintTarget(key: string, r: Resolver): void { TARGETS.set(key, r); }
 
-/** "Tap the field": a spot in the upper-middle of the arena (clear of the tower at its centre). */
+/** Where the arena is drawn (GameUi wires UiHost.arena): the field spot, and the tower the label keeps clear of. */
+let arenaSource: () => ArenaGeom | null = () => null;
+export function setArenaSource(f: () => ArenaGeom | null): void { arenaSource = f; }
+
+/**
+ * "Tap the field": a spot of open arena halfway between the tower's hold zone and the rim, above the tower first, else
+ * beside it (the first one no overlay sits on: the field must be tappable there). Without an arena: the upper-middle of
+ * Battle.
+ */
 function fieldSpot(): Rect | null {
+  const s = 72;
+  const a = arenaSource();
+  if (a && a.r > a.hold + s) {
+    const d = a.hold + (a.r - a.hold) * 0.5;
+    const spots = [-90, -135, -45, 180, 0, 135, 45, 90].map((deg) => {
+      const t = (deg * Math.PI) / 180;
+      return { left: a.cx + Math.cos(t) * d - s / 2, top: a.cy + Math.sin(t) * d - s / 2, width: s, height: s };
+    });
+    const vw = window.innerWidth, vh = window.innerHeight;
+    // the ring around the spot (RING_PAD each side) must sit on open field: inside the screen, off every bar and overlay
+    // (else the spot it overlaps least)
+    const taken = occupied();
+    const cost = (r: Rect): number => {
+      const L = r.left - RING_PAD, T = r.top - RING_PAD, R = r.left + r.width + RING_PAD, B = r.top + r.height + RING_PAD;
+      if (L < 0 || T < 0 || R > vw || B > vh) return Infinity;
+      let a = 0;
+      for (const b of taken) a += Math.max(0, Math.min(R, b.right) - Math.max(L, b.left)) * Math.max(0, Math.min(B, b.bottom) - Math.max(T, b.top));
+      return a;
+    };
+    let best = spots[0], bc = Infinity;
+    for (const r of spots) { const c = cost(r); if (c < bc) { bc = c; best = r; } if (c === 0) break; }
+    return best;
+  }
   const b = document.querySelector('.battle-layer')?.getBoundingClientRect();
   if (!b || b.width <= 0 || b.height <= 0) return null;
-  const s = 72;
   return { left: b.left + b.width / 2 - s / 2, top: b.top + b.height * 0.28 - s / 2, width: s, height: s };
+}
+
+/**
+ * What the "tap the field" ring and the hint label keep off: the bars, the docked controls and every overlay on Battle
+ * (several pass taps through their surface, so a hit test alone would not see them).
+ */
+const FIELD_OCCUPIERS = '.topbar, .tabbar, .boss-bar, .arena-strip > *, .starter, .ability-row, .arm-hint, .oc-wrap, .boon-offer, .death-card, .toast-layer .coach-banner, .toast-layer .toast';
+
+/** The on-screen boxes of FIELD_OCCUPIERS. */
+function occupied(): DOMRect[] {
+  const out: DOMRect[] = [];
+  for (const e of document.querySelectorAll(FIELD_OCCUPIERS)) {
+    if (e.closest('[hidden]')) continue;
+    const b = e.getBoundingClientRect();
+    if (b.width <= 0 || b.height <= 0) continue;
+    const s = getComputedStyle(e);
+    if (s.visibility === 'hidden' || s.display === 'none') continue;
+    out.push(b);
+  }
+  return out;
+}
+
+/** The tower's hold zone as a box (a label never sits on it), or null. */
+function towerBox(): { left: number; top: number; width: number; height: number } | null {
+  const a = arenaSource();
+  if (!a || !(a.r > 0)) return null;
+  const r = a.hold + 4;
+  return { left: a.cx - r, top: a.cy - r, width: 2 * r, height: 2 * r };
 }
 
 const isRect = (v: unknown): v is Rect => !!v && typeof (v as Rect).width === 'number' && !(v instanceof Element);
@@ -157,6 +217,7 @@ function onText(el: Element, x: number, y: number): boolean {
  */
 function covers(b: { left: number; top: number; width: number; height: number }): boolean {
   const area = b.width * b.height;
+  for (const o of occupied()) if (o.left < b.left + b.width && o.right > b.left && o.top < b.top + b.height && o.bottom > b.top) return true;
   for (const fy of [0.15, 0.5, 0.85]) for (const fx of [0.05, 0.3, 0.5, 0.7, 0.95]) {
     const x = b.left + b.width * fx, y = b.top + b.height * fy;
     const hit = document.elementFromPoint(x, y);
@@ -295,7 +356,9 @@ export class Pointer {
       if (moved || this.label.hidden) {
         this.label.hidden = false;
         const lw = this.label.offsetWidth, lh = this.label.offsetHeight;
-        const spot = labelSpots(box, lw, lh, vw, vh, safe).find((p) => !covers({ left: p.left, top: p.top, width: lw, height: lh }));
+        const tower = towerBox();
+        const onTower = (p: LabelBox): boolean => !!tower && p.left < tower.left + tower.width && p.left + lw > tower.left && p.top < tower.top + tower.height && p.top + lh > tower.top;
+        const spot = labelSpots(box, lw, lh, vw, vh, safe).find((p) => !onTower(p) && !covers({ left: p.left, top: p.top, width: lw, height: lh }));
         if (spot) { this.label.style.transform = `translate(${spot.left}px, ${spot.top}px)`; this.label.dataset.side = spot.side; } else this.label.hidden = true;
       }
     }

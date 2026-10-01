@@ -12,7 +12,7 @@ import { sectorIndexForWave } from '@sim/data/sectors';
 import { SimClient } from './sim-client';
 import { TickPacer, offlineSecondsOnReturn, HIDDEN_OFFLINE_AFTER_S } from './pacing';
 import { CRATE_REACH_PX, nearestCrate, nearestEnemy, reticleAt, tapReach } from './pick';
-import { TapRouter, holdOnTower } from './active-tap';
+import { TapRouter, TOWER_HOLD_PX, holdOnTower } from './active-tap';
 import { TOWER_RADIUS } from '@sim/core/types';
 import { FieldOverlay } from './overlay';
 import { parseCal } from './touch-cal';
@@ -134,6 +134,15 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
     install: promptInstall,
     saveNow: () => { if (ready) client.requestSave(); },
     touch,
+    arena: () => {
+      const c = app.camera, r = app.canvas.getBoundingClientRect();
+      if (!(r.width > 0) || !(r.height > 0)) return null;
+      const sx = r.width / c.viewW, sy = r.height / c.viewH, s = c.scale;
+      return {
+        cx: r.left + (c.centerPx - c.x * s) * sx, cy: r.top + (c.centerPy - c.y * s) * sy,
+        r: c.arenaRadius * s * sx, hold: Math.max(TOWER_HOLD_PX, TOWER_RADIUS * s + 10) * sx,
+      };
+    },
   };
 
   const ui = new GameUi(uiRoot, host);

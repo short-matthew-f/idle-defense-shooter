@@ -139,6 +139,17 @@ The app routes taps (`app/active-tap.ts`): crate → collect (unless an enemy is
 `designate_at` (rapid re-taps of the same enemy skip the designation toggle); a hold claimed on the tower
 (`Input.onHoldStart`) charges Overcharge. Gated by the unlock ladder (`tapAssist`, `salvage`, `overcharge`). UI: `src/ui/active.ts`.
 
+## Overlays on Battle (`src/ui/lanes.ts`)
+
+Every transient overlay over the arena (coach banner, toasts, boon offer, death card, the armed hint on a landscape
+phone) is placed by one manager, `OverlayLanes`, never by per-element offsets: it measures the tower's hold zone
+(`UiHost.arena`), the dock (Upgrade button, ability row and armed hint, Overcharge) and the arena-top column (boss bar,
+run controls), and stacks the overlays in priority order (offer > coach > death card > toasts) into the free bands under
+and above the tower (and, on a landscape phone, the side lane left of the arena). What does not fit shrinks (a one-line
+banner, a folded death card) or waits (toasts queue in `Feed`). Overlay surfaces pass taps through to the field; only
+their controls take taps. A new overlay goes through the lanes, and `tests/e2e/overlap.mjs` (run by `npm run e2e`)
+checks that no overlay covers the tower, the dock, the HUD, the tab bar or another overlay.
+
 ## Economy constants (design §17) — implement in `economy/curves.ts`
 
 These are the design's starting shapes. The tuned constants (e.g. EnemyHP base 6 and growth 1.14, Scrap

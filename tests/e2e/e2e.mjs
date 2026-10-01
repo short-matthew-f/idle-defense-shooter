@@ -18,17 +18,23 @@
 //   phone touch       (docs/TOUCH.md) More → Help → Touch test: the canvas marker lands on the tap; calibration with honest
 //                     taps says "accurate" and stores nothing; a synthetic 40 px pointer offset (taps read 40 px below the
 //                     finger) is measured, calibrated away (prefs touchCal), survives a reload, and Reset restores identity
+//   phone overlays    (src/ui/lanes.ts, overlap.mjs) at 393×852 (DPR 2, notch insets) and 375×667: crafted saves at stage 0,
+//                     stage 4 and after the first Prestige with every overlay up at once (coach banner, three toasts, the boon
+//                     offer or its chip, the pointer ring, the armed hint, a boss bar with its tell, the death card): no overlay
+//                     covers the tower, the Upgrade / ability / Overcharge buttons, the HUD, the tab bar, the coach buttons or
+//                     another overlay; none leaves the safe area; no overlay surface over the arena eats taps
 // Exit code 1 on any failed check.
 //
 // Environment: PLAYWRIGHT_DIR (a directory holding the `playwright` package; default: the global npm root),
 // CHROMIUM (browser executable; default: Playwright's own), E2E_URL (skip the preview server and test this URL),
 // E2E_OUT (screenshots; default tests/e2e/out), E2E_SKIP_DESKTOP=1 / E2E_SKIP_PHONE=1 / E2E_SKIP_REACH=1 / E2E_SKIP_TOUCH=1 /
-// E2E_SKIP_ONBOARD=1. The walkthroughs that need every tab run with ?showall=1 (Unlock everything for the session).
+// E2E_SKIP_ONBOARD=1 / E2E_SKIP_OVERLAYS=1. The walkthroughs that need every tab run with ?showall=1 (Unlock everything for the session).
 import { createRequire } from 'node:module';
 import { spawn, execSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { auditOverlays } from './overlap.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const OUT = process.env.E2E_OUT ?? join(ROOT, 'tests', 'e2e', 'out');
@@ -114,6 +120,7 @@ try {
   if (!process.env.E2E_SKIP_REACH) await reach();
   if (!process.env.E2E_SKIP_ONBOARD) await onboard();
   if (!process.env.E2E_SKIP_TOUCH) await touchCheck();
+  if (!process.env.E2E_SKIP_OVERLAYS) await overlays();
 } catch (e) {
   check('no exceptions', false, String(e && e.stack || e));
 } finally {
@@ -794,3 +801,78 @@ async function touchCheck() {
   check('touch: no console errors', consoleErrors.length === 0, consoleErrors.slice(0, 5));
   await ctx.close();
 }
+
+// ================================================================ phone: overlays never block anything major (src/ui/lanes.ts)
+async function overlays() {
+  // crafted saves: the overlays that can be up at once, at the stages where they first pile up
+  const LADDER = ['start', 'checkpoint', 'elements', 'build', 'abilities', 'boons', 'anomalies', 'bulk', 'prestige', 'machine', 'salvage', 'overcharge'];
+  const OFFER = "s.run.boonOffer = ['iron_skin', 'thick_plating', 'miser']; s.run.boonOfferKind = 'boss'; s.run.boonOfferSeq = 3; s.run.boonOfferWave = 11; ";
+  const combos = [
+    { id: 'stage0', mut: `${OFFER}s.run.scrap = 60;`, prefs: null, toasts: true },
+    { id: 'stage4', mut: `${OFFER}s.run.deepestCleared = 14; s.meta.deepestEver = 14; s.run.checkpoint = 10; s.run.wave = 11; s.run.scrap = 900;`,
+      prefs: { revealInit: true, hintsInit: true, coachSeen: LADDER.slice(0, LADDER.indexOf('abilities')), tabsVisited: ['battle', 'upgrades', 'build', 'more'] }, toasts: true, boss: true, arm: true },
+    { id: 'prestige1', mut: `${OFFER}s.meta.prestigeCount = 1; s.meta.deepestEver = 28; s.run.deepestCleared = 10; s.run.checkpoint = 10; s.run.wave = 11; s.run.scrap = 500;`,
+      prefs: { revealInit: true, hintsInit: true, contentInit: true, contentSeen: ['fire', 'lightning', 'poison', 'frost', 'ordnance', 'drones'], coachSeen: [...LADDER], tabsVisited: ['battle', 'upgrades', 'build', 'prestige', 'more'] }, toasts: true, boss: true, chip: true },
+  ];
+  const viewports = [
+    { id: '393', viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, safe: { top: 59, bottom: 34 } },
+    { id: '375', viewport: { width: 375, height: 667 }, deviceScaleFactor: 2, safe: { top: 20, bottom: 0 } },
+  ];
+  const HARD = new Set(['cover', 'pair', 'clip', 'centre', 'deadtap']);
+  for (const vp of viewports) {
+    const ctx = await browser.newContext({ viewport: vp.viewport, deviceScaleFactor: vp.deviceScaleFactor, hasTouch: true, isMobile: true });
+    await ctx.route('**/favicon.ico', (r) => r.fulfill({ status: 204, body: '' }));
+    // an iPhone's notch and home indicator (Chromium reports no safe-area insets): the CSS tokens every inset reads
+    await ctx.addInitScript((s) => {
+      const put = () => { const st = document.createElement('style'); st.textContent = `:root{--safe-top:${s.top}px!important;--safe-bottom:${s.bottom}px!important}`; document.head.appendChild(st); };
+      if (document.head) put(); else document.addEventListener('DOMContentLoaded', put);
+    }, vp.safe);
+    const page = await ctx.newPage();
+    const errors = [];
+    attachLogs(page, errors);
+    const ready = () => page.waitForFunction(() => !!window.__citadel?.game?.ready, null, { timeout: 60000 });
+    await page.goto(`${BASE}?fast=1`);
+    await ready();
+    const fresh = await page.evaluate(() => window.__citadel.game.client.requestSave());
+    for (const c of combos) {
+      const save = await page.evaluate(({ s, mut }) => { new Function('s', mut)(s); s.savedAtMs = Date.now(); return s; }, { s: fresh, mut: c.mut });
+      await page.goto(`${BASE}icons/icon-192.png`);
+      await page.evaluate(async ({ save, prefs }) => {
+        localStorage.clear();
+        if (prefs) localStorage.setItem('citadel.prefs.v1', JSON.stringify(prefs));
+        await new Promise((res, rej) => {
+          const r = indexedDB.open('citadel', 1);
+          r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('saves')) r.result.createObjectStore('saves'); };
+          r.onsuccess = () => { const t = r.result.transaction('saves', 'readwrite'); t.objectStore('saves').put(save, 'main'); t.oncomplete = () => { r.result.close(); res(); }; t.onerror = () => rej(t.error); };
+          r.onerror = () => rej(r.error);
+        });
+      }, { save, prefs: c.prefs });
+      await page.goto(`${BASE}?fast=1`);
+      await ready();
+      await page.waitForFunction(() => !!document.querySelector('.boon-offer:not([hidden])'), null, { timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(800);
+      await page.evaluate((c) => {
+        const G = window.__citadel.game, ui = G.ui;
+        if (c.chip) document.querySelector('.boon-offer .bo-collapse')?.click();
+        // a boss wave's bar with its tell (the HUD's own BossBar fed the live state with a boss on: a real boss wave is minutes away)
+        if (c.boss) { const bb = ui.hud.bossBar, orig = bb.update.bind(bb); bb.update = (u) => orig({ ...u, wave: { ...u.wave, isBoss: true, bossId: 'breaker', bossMaxHp: 1000, bossHp: 640, bossPhase: 1, bossPhaseMarks: [0.66, 0.33], weakPointOpen: true, tellActive: 'repulsor_pulse', tellTicksLeft: 80 } }); }
+        if (c.arm) { const s = G.latestUi(), i = s.build.abilities.findIndex((a) => a); if (i >= 0) { ui.abilities.arming.press(i, { ability: s.build.abilities[i], ready: true, targeted: 'point' }); ui.abilities['renderArmed'](); } }
+        if (c.toasts) for (const [m, k] of [['Checkpoint: wave 10 cleared', 'good'], ['Hardpoint slot open: mount a weapon system (Build or Upgrades)', 'good'], ['+1 Core', 'core']]) ui.feed.toast(m, k, 60000);
+      }, c);
+      await page.waitForTimeout(700);
+      const states = [['combo', null], ['death', () => page.evaluate(() => { const G = window.__citadel.game; G.ui.death.show(G.latestUi().run.wave, G.latestUi(), {}); })]];
+      for (const [label, act] of states) {
+        if (act) { await act(); await page.waitForTimeout(600); }
+        const r = await page.evaluate(auditOverlays, {});
+        const hard = r.findings.filter((f) => HARD.has(f.kind));
+        await page.screenshot({ path: `${OUT}/phone-overlays-${vp.id}-${c.id}-${label}.png` });
+        const names = r.overlays.map((o) => o.name);
+        check(`overlays ${vp.id} ${c.id} ${label}: nothing major is covered (tower, dock, HUD, tab bar, each other, safe area, dead taps)`, hard.length === 0 && names.length >= 3,
+          hard.length ? hard : { overlays: names, arena: r.arena });
+      }
+    }
+    check(`overlays ${vp.id}: zero console errors`, errors.length === 0, errors);
+    await ctx.close();
+  }
+}
+

@@ -30,6 +30,13 @@ export interface TouchHost {
   setCalibration(c: TouchCal | null): void;
 }
 
+/**
+ * Where the arena is drawn now, in client CSS px (the camera's fit and pan; no shake or punch): its centre, its radius,
+ * and the tower's hold radius (a touch there charges Overcharge; app/active-tap.ts holdOnTower). The overlay lanes keep
+ * every transient overlay off the tower (lanes.ts).
+ */
+export interface ArenaGeom { cx: number; cy: number; r: number; hold: number }
+
 export interface UiHost {
   send(cmd: Command): void;
   inspect(enemyIndex: number, gen: number): Promise<{ chain: SimEvent[]; sentence: string }>;
@@ -51,4 +58,6 @@ export interface UiHost {
   saveNow(): void;
   /** Touch test and tap calibration. */
   touch: TouchHost;
+  /** The arena on screen (null before the first frame). Optional: hosts without an arena (tests) leave it out. */
+  arena?(): ArenaGeom | null;
 }

@@ -85,31 +85,34 @@ body.shell-rail .desig-label { display: none; }
 .trial-banner > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .trial-banner .btn.ctl { border-color: transparent; background: rgba(0, 0, 0, 0.25); }
 
-/* Boss bar: over the top of the arena during boss waves */
+/* Boss bar: over the top of the arena during boss waves; one slim row (name, health + phase, weak point), the tell under it */
 .boss-bar {
-  width: 100%; max-width: 560px; margin: 0 auto; padding: 6px 10px 8px; border-radius: 12px; background: rgba(14, 18, 26, 0.9);
-  border: 1px solid color-mix(in srgb, var(--bad) 55%, var(--line)); display: grid; gap: 6px; backdrop-filter: blur(4px);
+  width: 100%; max-width: 560px; margin: 0 auto; padding: 5px 8px; border-radius: 12px; background: rgba(14, 18, 26, 0.9);
+  border: 1px solid color-mix(in srgb, var(--bad) 55%, var(--line)); display: grid; gap: 5px; backdrop-filter: blur(4px);
 }
 .boss-head { display: flex; align-items: center; gap: 8px; font-size: 14px; min-width: 0; }
 .boss-head .ico { color: var(--bad); flex: none; }
-.boss-name { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.boss-phase { color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.boss-name { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; max-width: 42%; }
+.boss-head > .bar.boss-hp { flex: 1 1 96px; min-width: 96px; }
 .weak-flag {
-  margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 10px;
+  flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 10px;
   background: var(--ok); color: #03170c; font-weight: 700; white-space: nowrap;
 }
+/* narrow screens: the weak-point flag is its icon (the bar's green ring says it too), so the name and health keep their room */
+@media (max-width: 480px) { .weak-flag { padding: 1px 5px; } .weak-flag .wf-label { display: none; } }
 .bar.boss-hp { height: 18px; --c: var(--bad); }
 .bar.boss-hp .bar-label { line-height: 18px; }
 .boss-bar.weak-open .bar.boss-hp { box-shadow: 0 0 0 2px var(--ok); }
 .boss-marks { position: absolute; inset: 0; pointer-events: none; }
 .boss-marks i { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #fff; box-shadow: 0 0 2px #000; }
 .tell {
-  display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--warn);
-  border: 2px dashed var(--warn); border-radius: var(--radius-s); padding: 4px 8px; animation: pulse 0.8s infinite;
+  position: relative; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--warn);
+  border: 2px dashed var(--warn); border-radius: var(--radius-s); padding: 3px 8px 7px; animation: pulse 0.8s infinite;
 }
 .tell-ico { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--bg-3); flex: none; }
-.tell-text { flex: 1; min-width: 0; }
-.tell-window { width: 72px; height: 8px; border-radius: 4px; background: var(--bg-3); overflow: hidden; flex: none; }
+.tell-text { flex: 1; min-width: 0; line-height: 18px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+/* the shrinking window: a thin strip along the bottom of the banner (the text keeps the whole width) */
+.tell-window { position: absolute; left: 8px; right: 8px; bottom: 2px; height: 3px; border-radius: 2px; background: var(--bg-3); overflow: hidden; }
 .tell-fill { height: 100%; width: calc(var(--win, 1) * 100%); background: var(--warn); }
 button.tell { width: 100%; min-height: var(--touch); background: color-mix(in srgb, var(--warn) 8%, transparent); text-align: left; cursor: pointer; font: inherit; font-size: 14px; font-weight: 600; color: var(--warn); }
 button.tell[data-action='cast'] { background: color-mix(in srgb, var(--warn) 18%, transparent); }

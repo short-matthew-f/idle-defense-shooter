@@ -10,9 +10,15 @@
 .coach-ico .ico { width: 20px; height: 20px; }
 .coach-text { flex: 1; min-width: 0; }
 .btn.coach-ok { flex: none; }
-.toast-layer .coach-banner { pointer-events: auto; }
+/* over the arena only the buttons take taps (a tap on the sentence reaches the field), except a one-line banner's text */
+.toast-layer .coach-banner { pointer-events: none; }
+.toast-layer .coach-banner .btn { pointer-events: auto; }
 /* phones: coach lines belong to the Battle screen (they wait there while a full-screen tab is open) */
 body.shell-phone:not(.tab-battle) .coach-banner, body.shell-rail:not(.tab-battle) .coach-banner { display: none; }
-/* landscape phone with the Upgrade panel at the bottom left: toasts and coach lines move right of it */
-body.shell-rail.starter-on .toast-layer { left: calc(50% + 170px); max-width: calc(100% - 360px); }
-body.shell-rail.starter-on .coach-banner { width: min(420px, calc(100vw - 380px)); }
+/* one line: an info-only line after a few seconds, or when the lane is short (tap the text for the whole sentence) */
+.coach-banner.compact { padding: 4px 4px 4px 8px; gap: 8px; }
+.coach-banner.compact .coach-ico { width: 28px; height: 28px; }
+.coach-banner.compact .coach-ico .ico { width: 18px; height: 18px; }
+.coach-banner.compact .coach-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; pointer-events: auto; }
+.coach-banner.compact .btn { position: relative; min-height: 36px; height: 36px; }
+.coach-banner.compact .btn::after { content: ''; position: absolute; inset: -4px 0; }

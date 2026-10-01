@@ -33,6 +33,7 @@ body.shell-desktop .abilities { bottom: calc(16px + var(--safe-bottom)); }
 .ab-key { position: absolute; top: -6px; left: -2px; z-index: 3; font-size: 12px; color: var(--text-faint); font-weight: 700; }
 @media (hover: none) { .ab-key { display: none; } }
 .arm-hint {
+  width: max-content; max-width: calc(100vw - 32px);
   display: flex; align-items: center; gap: 10px; padding: 0 4px 0 14px; border-radius: 24px;
   background: var(--bg-1); border: 1px solid var(--accent); font-size: 14px; font-weight: 600; box-shadow: var(--shadow);
 }

@@ -3,7 +3,10 @@
  * what happens next, and offers three purchases that could help (open slot, Doctrine fork, best
  * affordable buys, or what you are saving toward with an ETA). It names the killer from the Ev.TowerDeath
  * payload and the source of most damage taken this attempt (UiState.run.attemptDamageTaken). Non-modal: the machine restarts on
- * its own; the card stays until dismissed, the next wave is cleared, or the next death replaces it.
+ * its own; the card stays until dismissed, the next wave is cleared, or the next death replaces it. The overlay lanes place it
+ * (lanes.ts: under the tower when there is room, else above it; never on it) and fold it to its headline when neither has
+ * room; left alone for DEATH_SHRINK_MS it folds itself so the next attempt has its arena back. A tap on the headline (or
+ * the chevron) unfolds it.
  */
 import '../styles/death.css';
 import type { SimEvent, UiState } from '@sim/core/types';
@@ -14,6 +17,9 @@ import { damageSourceName, deathHeadline, killerName, suggestPurchases, topDamag
 import { BOSS_BY_ID, TREE_LABEL } from './content';
 import type { UiCtx } from './ctx';
 import { STARTER_IDS, contentPool, poolShop } from './progression';
+
+/** The card folds to its headline after this long without a touch (ms). */
+export const DEATH_SHRINK_MS = 10000;
 
 export class DeathCard {
   readonly el: HTMLElement;
@@ -27,12 +33,46 @@ export class DeathCard {
   private bought = new Set<string>();
   /** Open the upgrades panel at a category / tree. */
   reveal: (cat: Category, tree?: string) => void = () => {};
+  private readonly fold: HTMLButtonElement;
+  private foldTimer = 0;
+  /** The player asked for the whole card (a tap on a headline the lanes folded): the lanes give it their roomiest slot. */
+  wantFull = false;
+  /** Called when the card opens, folds or unfolds (the overlay lanes re-fit). */
+  onChange: (() => void) | null = null;
 
   constructor(private readonly ctx: UiCtx, private readonly rate: () => number) {
     const close = button(icon('close'), () => this.hide(), { class: 'btn icon-btn ghost dc-close', label: 'Dismiss' });
+    this.fold = button(icon('down'), () => (this.folded || this.el.classList.contains('lane-folded') ? this.unfold() : this.setFolded(true)), { class: 'btn icon-btn ghost dc-fold', label: 'Show what could help' });
     this.el = h('section', { class: 'death-card', attrs: { role: 'status', 'aria-live': 'polite', 'aria-label': 'Tower destroyed' } },
-      h('div', { class: 'dc-head' }, icon('skull', 'ico'), this.title, close), this.sub, this.cause, this.lead, this.list);
+      h('div', { class: 'dc-head' }, icon('skull', 'ico'), this.title, this.fold, close), this.sub, this.cause, this.lead, this.list);
     this.el.hidden = true;
+    this.title.addEventListener('click', () => { if (this.folded || this.el.classList.contains('lane-folded')) this.unfold(); });
+    // reading or using it keeps it open
+    for (const ev of ['pointerdown', 'wheel', 'focusin', 'scroll'] as const) this.el.addEventListener(ev, () => this.arm(), { passive: true });
+  }
+
+  /** Folded to its headline (it was left alone for DEATH_SHRINK_MS, or folded by the chevron). */
+  get folded(): boolean { return this.el.classList.contains('folded'); }
+
+  private setFolded(on: boolean): void {
+    this.el.classList.toggle('folded', on);
+    this.fold.setAttribute('aria-expanded', on ? 'false' : 'true');
+    this.fold.setAttribute('aria-label', on ? 'Show what could help' : 'Fold to the headline');
+    if (on) this.wantFull = false;
+    if (!on) this.arm(); else clearTimeout(this.foldTimer);
+    this.onChange?.();
+  }
+
+  /** The player asked for the whole card (folded by its timer, the chevron, or the lanes). */
+  private unfold(): void {
+    this.wantFull = this.el.classList.contains('lane-folded') || this.wantFull;
+    this.setFolded(false);
+  }
+
+  /** (Re)start the fold timer. */
+  private arm(): void {
+    clearTimeout(this.foldTimer);
+    if (!this.el.hidden && !this.folded) this.foldTimer = window.setTimeout(() => this.setFolded(true), DEATH_SHRINK_MS);
   }
 
   get visible(): boolean { return !this.el.hidden; }
@@ -49,10 +89,12 @@ export class DeathCard {
     this.bought.clear();
     this.key = '';
     this.el.hidden = false;
+    this.wantFull = false;
+    this.setFolded(false);
     this.update(ui);
   }
 
-  hide(): void { this.el.hidden = true; }
+  hide(): void { this.el.hidden = true; clearTimeout(this.foldTimer); this.wantFull = false; this.onChange?.(); }
 
   /** "Most damage this attempt: The Breaker (62%)" from the attempt's damage-taken ledger. */
   private showCause(ui: UiState): void {

@@ -277,7 +277,7 @@ export class BossBar {
   private readonly phase = h('span', { class: 'boss-phase' });
   private readonly bar = new Bar('boss-hp', 'Boss health');
   private readonly marks = h('div', { class: 'boss-marks' });
-  private readonly weak = h('span', { class: 'weak-flag' }, icon('target', 'ico tiny'), 'Weak point open');
+  private readonly weak = h('span', { class: 'weak-flag', attrs: { 'aria-label': 'Weak point open' } }, icon('target', 'ico tiny'), h('span', { class: 'wf-label', text: 'Weak point' }));
   private readonly tell = h('button', { type: 'button', class: 'tell' });
   private readonly tellIcon = h('span', { class: 'tell-ico' });
   private readonly tellText = h('span', { class: 'tell-text' });
@@ -293,7 +293,9 @@ export class BossBar {
     this.tell.append(this.tellIcon, this.tellText, this.tellWin);
     this.tell.addEventListener('click', () => { if (this.tellId) onTell(this.tellId); });
     this.el = h('div', { class: 'boss-bar', attrs: { role: 'group', 'aria-label': 'Boss' } },
-      h('div', { class: 'boss-head' }, icon('skull', 'ico tiny'), this.name, this.phase, this.weak), this.bar.el, this.tell);
+      // one slim row (name, health with the phase, weak-point flag) and the tell under it: the bar floats over the top of
+      // the arena, so it stays low (the overlay lanes keep its column above the tower: lanes.ts)
+      h('div', { class: 'boss-head' }, icon('skull', 'ico tiny'), this.name, this.bar.el, this.weak), this.tell);
     this.el.hidden = true;
   }
 
@@ -306,7 +308,8 @@ export class BossBar {
     text(this.name, def?.name ?? 'Boss');
     const phaseName = def?.phases[w.bossPhase]?.name;
     text(this.phase, `Phase ${w.bossPhase + 1}${phaseName ? ` · ${phaseName}` : ''}`);
-    this.bar.set(w.bossHp / w.bossMaxHp, `${fmtNum(w.bossHp)} / ${fmtNum(w.bossMaxHp)}`);
+    this.bar.set(w.bossHp / w.bossMaxHp, `P${w.bossPhase + 1} · ${fmtNum(w.bossHp)} / ${fmtNum(w.bossMaxHp)}`);
+    attr(this.bar.el, 'title', `${this.phase.textContent}: ${fmtNum(w.bossHp)} / ${fmtNum(w.bossMaxHp)}`);
     const mk = w.bossPhaseMarks.join(',');
     if (mk !== this.marksKey) {
       this.marksKey = mk;

@@ -40,13 +40,6 @@ body.shell-desktop .starter { bottom: calc(16px + var(--safe-bottom)); }
 .st-item .st-rank { display: none; }
 .st-item .price { display: inline-flex; align-items: center; gap: 3px; color: var(--scrap); font-variant-numeric: tabular-nums; }
 
-/* the rest of Battle makes room: toasts and a boon offer sit above the panel */
+/* the rest of Battle makes room: the overlay lanes (lanes.ts) keep the boon offer, banners and toasts above the panel */
 body.starter-on { --boon-bottom: 150px; }
-body.shell-phone.tab-battle.starter-on .toast-layer { bottom: calc(var(--tab-h) + 156px); }
-body.shell-desktop.starter-on .toast-layer { bottom: 164px; }
-/* a boon offer sits above the panel; toasts and coach banners above the offer */
-body.shell-phone.tab-battle.starter-on.boon-open .toast-layer { bottom: calc(var(--tab-h) + var(--boon-h) + var(--boon-bottom) + 8px); }
-body.shell-desktop.starter-on.boon-open .toast-layer { bottom: calc(var(--boon-h) + var(--boon-bottom) + 8px); }
-body.starter-on.boon-open .arena-top { bottom: calc(var(--boon-h) + var(--boon-bottom) + 8px); }
-body.starter-on .arena-top { bottom: 156px; }
 body.shell-rail.starter-on { --boon-bottom: calc(var(--safe-bottom) + 8px); }

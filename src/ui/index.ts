@@ -28,7 +28,8 @@ import { Feed } from './feed';
 import { DeathCard } from './death';
 import { CoachBanner, activeCoachLive, initialSeen, markCoachSeen } from './coach';
 import { StarterPanel } from './starter';
-import { HintDriver } from './pointer';
+import { HintDriver, setArenaSource } from './pointer';
+import { OverlayLanes } from './lanes';
 import { contentPool, features, newInPool, stageOf, type Features } from './progression';
 import { QM_COACH_ID, QM_COACH_TEXT, echoGuideOn, newContentCoach } from './ceremony';
 import type { CoachExtra } from './coach';
@@ -78,6 +79,8 @@ export class GameUi {
   private readonly coach = new CoachBanner();
   /** Pointer hints: a ring on the control the coach banner is about (pointer.ts, hints.ts). */
   private readonly hints: HintDriver;
+  /** Where the transient overlays go on Battle (lanes.ts): clear of the tower, the dock, the HUD and each other. */
+  readonly lanes: OverlayLanes;
 
   constructor(root: HTMLElement, readonly host: UiHost) {
     this.ctx = {
@@ -130,7 +133,8 @@ export class GameUi {
     };
 
     const battle = h('div', { class: 'battle-layer' },
-      h('div', { class: 'arena-top' }, this.hud.bossBar.el, h('div', { class: 'arena-strip' }, this.boonRow.el, this.hud.controls), this.boonOffer.chip, this.death.el),
+      h('div', { class: 'arena-top' }, this.hud.bossBar.el, h('div', { class: 'arena-strip' }, this.boonRow.el, this.boonOffer.chip, this.hud.controls)),
+      this.death.el,
       this.boonOffer.el,
       this.starter.el,
       this.abilities.el,
@@ -157,8 +161,13 @@ export class GameUi {
       boonChip: () => !this.boonOffer.chip.hidden,
       draftWaiting: () => this.draft.pending,
     });
+    this.lanes = new OverlayLanes({
+      battle, arenaTop: battle.querySelector<HTMLElement>('.arena-top')!, death: this.death, offer: this.boonOffer.el,
+      coach: this.coach, feed: this.feed, starter: this.starter.el, row: this.abilities.row, armHint: this.abilities.hint, oc: this.active.el,
+    }, { arena: () => host.arena?.() ?? null, layout: () => this.shell.layout, battleVisible: () => this.shell.battleVisible });
+    setArenaSource(() => host.arena?.() ?? null);
     const layout = this.shell.onLayout;
-    this.shell.onLayout = () => { layout?.(); this.hints.pointer.schedule(); };
+    this.shell.onLayout = () => { layout?.(); this.lanes.schedule(); this.hints.pointer.schedule(); };
     window.addEventListener('keydown', (e) => this.onKey(e));
   }
 
@@ -251,6 +260,7 @@ export class GameUi {
     this.codex.update(ui);
     this.directives.update(ui);
     this.trials.update(ui);
+    this.lanes.apply();   // before the pointer: its label keeps clear of where the overlays now are
     this.hints.update(ui, this.feats);
   }
 

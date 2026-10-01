@@ -111,18 +111,34 @@ body.shell-phone:not(.tab-battle) :is(.topbar, .battle-layer), body.shell-rail:n
 }
 body.shell-rail .arena-top { left: 12px; bottom: 12px; }
 .arena-top > .boss-bar { align-self: stretch; }
-.arena-top > .death-card { align-self: center; }
+/* the death card: placed by the overlay lanes (lanes.ts), under or above the tower; this is its unmanaged default */
+.battle-layer > .death-card { position: absolute; z-index: 4; top: 52px; left: 50%; transform: translateX(-50%); width: min(400px, calc(100% - 24px)); max-height: 60%; }
+/* Only controls take taps over the arena: the surfaces of the floating panels pass taps through to the field. */
+.battle-layer > :is(.starter, .abilities, .oc-wrap, .boon-offer), .arena-top > .boss-bar, .arena-strip > .battle-controls { pointer-events: none; }
+:is(.starter, .abilities, .oc-wrap, .boon-offer, .boss-bar, .battle-controls) :is(button, [role="button"]) { pointer-events: auto; }
 
-/* toasts: above the abilities on Battle, above the tab bar elsewhere */
-.toast-layer {
-  position: absolute; z-index: 8; left: 50%; transform: translateX(-50%); bottom: calc(var(--tab-h) + 96px);
-  width: max-content; max-width: calc(100% - 24px); pointer-events: none !important;
+/*
+ * Toasts and coach banners. On Battle the overlay lanes (src/ui/lanes.ts) place the banner and the feed (and the boon
+ * offer, the armed hint on a landscape phone, the arena-top column's height) inline, clear of the tower, the dock and each
+ * other. These are the defaults when nothing manages them: above the tab bar on a phone screen.
+ */
+.toast-layer { position: absolute; z-index: 8; inset: 0; pointer-events: none !important; }
+.toast-layer > .feed, .toast-layer > .coach-banner {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--tab-h) + 96px); margin: 0;
+  width: max-content; max-width: calc(100% - 24px);
 }
-body.shell-phone:not(.tab-battle) .toast-layer { bottom: calc(var(--tab-h) + 16px); }
-body.shell-phone.tab-battle.arming .toast-layer { bottom: calc(var(--tab-h) + 150px); }
-body.shell-rail .toast-layer { left: calc(50% + var(--rail-w) / 2); bottom: calc(var(--safe-bottom) + 16px); }
-body.shell-desktop .toast-layer { left: calc((100% - var(--panel-w)) / 2); bottom: 104px; }
-body.shell-desktop.panel-closed .toast-layer { left: 50%; }
+.toast-layer > .coach-banner { width: min(420px, calc(100vw - 32px)); }
+body.shell-phone:not(.tab-battle) .toast-layer > .feed { bottom: calc(var(--tab-h) + 16px); }
+body.shell-rail .toast-layer > .feed { left: calc(50% + var(--rail-w) / 2); bottom: calc(var(--safe-bottom) + 16px); }
+body.shell-desktop .toast-layer > :is(.feed, .coach-banner) { left: calc((100% - var(--panel-w)) / 2); bottom: 104px; }
+body.shell-desktop.panel-closed .toast-layer > :is(.feed, .coach-banner) { left: 50%; }
+/* the lanes found no room for it right now: it waits (a coach banner, the death card) */
+.lane-wait { display: none !important; }
+/* the lanes' probe for the safe-area insets */
+.lane-probe {
+  position: absolute; left: 0; top: 0; width: 0; height: 0; visibility: hidden; pointer-events: none !important;
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+}
 
 /* ---------------------------------------------------------------- progressive reveal (progression.ts) */
 /* stage 0: no tab bar; the Battle overlay keeps clear of the home indicator instead */
