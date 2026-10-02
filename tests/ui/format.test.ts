@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fmtNum, fmtDuration, fmtRate, fmtPct, substituteDesc, echoesFor, offlineEstimate, nextRankCost, titleCase } from '../../src/ui/format';
+import { fmtNum, fmtDuration, fmtRate, fmtPct, substituteDesc, echoesFor, offlineEstimate, nextRankCost, titleCase, splitDesc } from '../../src/ui/format';
 
 describe('fmtNum', () => {
   it('keeps small integers', () => {
@@ -59,5 +59,16 @@ describe('misc', () => {
     expect(nextRankCost({ flat: [2, 4, 8] }, 5)).toBe(8);
     expect(nextRankCost({ cores: 2 }, 0)).toBe(2);
     expect(titleCase('prestige.seed_capital')).toBe('Seed Capital');
+  });
+});
+
+describe('splitDesc (the headline effect a row shows before it is unfolded)', () => {
+  it('keeps the first sentence without a closing parenthetical', () => {
+    expect(splitDesc('+16% primary damage per rank (base 10 per shot).')).toEqual({ headline: '+16% primary damage per rank', more: true });
+    expect(splitDesc('Burn lasts 3 s; +0.2 s per rank. Reapplying refreshes the duration.')).toEqual({ headline: 'Burn lasts 3 s; +0.2 s per rank', more: true });
+  });
+  it('a one-sentence description is all headline (a decimal point is not a sentence end)', () => {
+    expect(splitDesc('Heavy Round impacts stagger elites for 0.6 s and interrupt boss casts.')).toEqual({ headline: 'Heavy Round impacts stagger elites for 0.6 s and interrupt boss casts', more: false });
+    expect(splitDesc('Hardpoint cooldowns (reloads, pulses) and ability cooldowns −1% per rank.').headline).toBe('Hardpoint cooldowns (reloads, pulses) and ability cooldowns −1% per rank');
   });
 });

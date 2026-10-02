@@ -132,17 +132,18 @@ export function boonsSection(ui: UiState, openOffer: () => void): HTMLElement {
   const cap = r.boonCap || 4;
   const list = h('div', { class: 'bs-list boon-list' });
   if (r.boonOffer && r.boonOffer.length) {
-    list.appendChild(button([icon('boon', 'ico'), h('span', { class: 'bs-name', text: `A boon offer is waiting: ${r.boonOffer.map((id) => boonName(id)).join(', ')}` }), icon('right', 'ico tiny chev')],
+    list.appendChild(button([icon('boon', 'ico'), h('span', { class: 'bs-main' }, h('span', { class: 'bs-name', text: 'A boon offer is waiting' }), h('span', { class: 'bs-sub', text: r.boonOffer.map((id) => boonName(id)).join(' · ') })), icon('right', 'ico tiny chev')],
       openOffer, { class: 'btn bs-draft boon-waiting' }));
   }
   active.forEach((id, i) => {
     const note = active.length >= cap && i === 0 ? 'Oldest: the next pick replaces it unless you choose another.' : null;
     list.appendChild(boonRowEl(boonView(id, needsBuild(ui)), note));
   });
-  if (!active.length) list.appendChild(h('div', { class: 'bs-socket', text: r.mode === 'patrol' ? 'No active boons. Offers come at the start of an attempt and after each boss, in Push.' : 'No active boons. Offers come at the start of every retry and after each boss.' }));
+  // nothing active: say when offers come (not while one is waiting right above)
+  if (!active.length && !r.boonOffer?.length) list.appendChild(h('div', { class: 'bs-socket', text: r.mode === 'patrol' ? 'No active boons. Offers come at the start of an attempt and after each boss, in Push.' : 'No active boons. Offers come at the start of every retry and after each boss.' }));
   return h('section', { class: 'bs-section' },
     h('h3', { class: 'sec-title' }, `Active boons · ${active.length}/${cap}`,
-      h('span', { class: 'sec-sub', text: 'This attempt only: boons end with it (death, restart, Prestige, or a reload). At the cap a new pick replaces the oldest.' })),
+      h('span', { class: 'sec-sub', text: 'This attempt only; at the cap a new pick replaces the oldest.' })),
     list);
 }
 

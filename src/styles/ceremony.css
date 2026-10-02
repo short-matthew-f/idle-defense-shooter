@@ -24,8 +24,6 @@
 .tag.new-tag { margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 12px; font-weight: 700; vertical-align: middle;
   background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); }
 
-/* Quartermaster card at the top of Upgrades */
-.shop-body > .qm-card { margin: 8px 0 4px; }
 /* the guide line lives on the Prestige tab: phones hide toast-layer coach lines off Battle (coach.css), not this one */
 body .pshop .coach-banner.ps-guide:not([hidden]) { display: flex; }
 .btn.coach-act { flex: none; }

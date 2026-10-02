@@ -63,6 +63,19 @@ export function substituteDesc(desc: string, v: number | undefined, op: 'add' | 
   return desc.split('{v}').join(fmtPerRank(v, op));
 }
 
+/**
+ * A node description's headline effect and whether more follows (pure): its first sentence, without a closing
+ * parenthetical. "+16% primary damage per rank (base 10 per shot)." → "+16% primary damage per rank"; "Burn lasts
+ * 3 s; +0.2 s per rank. Reapplying refreshes the duration." → "Burn lasts 3 s; +0.2 s per rank". The full text shows on tap.
+ */
+export function splitDesc(desc: string): { headline: string; more: boolean } {
+  const d = desc.trim();
+  const end = d.search(/[.!?] /);   // a sentence end (decimals like "0.6 s" have no space after the point)
+  let headline = (end > 0 ? d.slice(0, end) : d).replace(/[.!?]$/, '');
+  headline = headline.replace(/\s\([^()]*\)$/, '');
+  return { headline, more: headline.length < d.replace(/[.!?]$/, '').length };
+}
+
 /** snake_case / dotted ids → "Title Case" (fallback names). */
 export function titleCase(id: string): string {
   return id.replace(/^[a-z]+\./, '').replace(/[_.+-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim();

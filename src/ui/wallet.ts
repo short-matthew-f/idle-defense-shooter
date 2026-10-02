@@ -1,12 +1,13 @@
 /**
  * Wallet: how much of each currency the player has, wherever they can spend it.
  *
- *   WalletBar    one slim bar pinned at the top of the tab screens, under the status strip on a phone (or at the top
- *                of the desktop side panel). It lives in the shell's `.screens` column OUTSIDE each screen's scroller,
- *                so it never scrolls away (no position: sticky, which overflow containers and iOS standalone break).
+ *   WalletBar    the left of the one top row on the tab screens (the compact "Battle ›" button on its right on a phone;
+ *                alone at the top of the desktop side panel). It lives in the shell's `.screens` column OUTSIDE each
+ *                screen's scroller, so it never scrolls away (no position: sticky, which overflow containers and iOS
+ *                standalone break).
  *                It shows only what the screen in view spends (walletCurrencies): Upgrades Scrap (+ Cores),
  *                Build Cores, Prestige Echoes (+ Stars on Ascension), More → Automation Scrap (the Upgrade Queue).
- *                While it shows Scrap the status strip drops its own Scrap figure (body.wallet-scrap): one place.
+ *                While it shows anything the status strip beside it is only the Battle button (body.wallet-shown).
  *   walletChip   "You have ◆ 12 Cores" for the header of a dialog that spends (draft, Refit, Doctrine change,
  *                Prestige / Ascend confirmations). Live: updateLiveWallets(ui) refreshes every chip on screen.
  *
@@ -159,7 +160,7 @@ class Figure {
   }
 }
 
-/** The pinned bar on the tab screens (Shell puts it under the status strip, outside every scroller). */
+/** The pinned balances on the tab screens (Shell puts them in the top row, outside every scroller). */
 export class WalletBar {
   readonly el: HTMLElement;
   private readonly figs = new Map<Currency, Figure>();
@@ -184,8 +185,23 @@ export class WalletBar {
       for (const [c, fig] of this.figs) show(fig.el, list.includes(c));
       show(this.el, list.length > 0);
       document.body.classList.toggle('wallet-scrap', list.includes('scrap'));
+      document.body.classList.toggle('wallet-shown', list.length > 0);   // the top row's Battle button goes compact beside it (shell.css)
     }
     for (const c of list) this.figs.get(c)!.update(ui);
+    // a crowded top row drops the currency names (the icons stay) rather than wrap: re-measured when it can change
+    const fit = `${key}|${list.map((c) => this.figs.get(c)!.el.textContent?.length ?? 0).join(',')}|${typeof window === 'undefined' ? 0 : window.innerWidth}|${document.body.className.includes('tab-upgrades')}`;
+    if (fit !== this.fitKey) { this.fitKey = fit; if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(() => this.fit()); }
+  }
+  private fitKey = '';
+  /** `.tight` on the top row while the figures would wrap to a second line with their names. */
+  private fit(): void {
+    const row = this.el.parentElement;
+    if (!row) return;
+    row.classList.remove('tight');
+    const items = [...this.figs.values()].filter((f) => !f.el.hidden).map((f) => f.el);
+    if (!items.length || this.el.offsetParent === null) return;
+    // wrapped onto two lines, or one figure (with the Quartermaster's bank) wider than its room
+    if (items.some((el) => el.offsetTop !== items[0].offsetTop) || this.el.scrollWidth > this.el.clientWidth + 1) row.classList.add('tight');
   }
 }
 

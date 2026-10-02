@@ -1,15 +1,16 @@
 /* Build screen: the Prestige's commitments. */
 .build { display: flex; flex-direction: column; gap: 6px; }
-.bs-frame { background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 14px; padding: 14px 16px; }
-.bs-frame-head { display: flex; gap: 12px; align-items: center; }
-.bs-frame-head .ico { color: var(--accent); }
+.bs-frame { background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px 12px; }
+.bs-frame-head { display: flex; gap: 10px; align-items: center; }
+.bs-frame-head .ico { color: var(--text-dim); }
+.bs-frame-id { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .bs-frame-label { font-size: 14px; color: var(--text-dim); }
-.bs-frame-name { font-size: 20px; font-weight: 800; line-height: 1.2; }
-.bs-frame-trait { margin: 10px 0 6px; font-size: 15px; line-height: 1.45; }
-.bs-frame-caps { margin: 0; font-size: 14px; color: var(--accent); }
+.bs-frame-name { font-size: 18px; font-weight: 800; line-height: 1.2; }
+.bs-frame-trait { margin: 6px 0 4px; font-size: 15px; line-height: 1.4; }
+.bs-frame-caps { margin: 0; font-size: 14px; color: var(--text-dim); }
 .bs-section .sec-title { margin-top: 18px; }
 .bs-list { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
-.bs-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); min-height: 68px; }
+.bs-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); min-height: 64px; }
 .bs-ico { flex: none; width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: var(--bg-3); color: var(--text-dim); }
 .bs-num { font-weight: 800; font-size: 16px; color: var(--text); }
 .bs-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -17,7 +18,11 @@
 .bs-sub { font-size: 14px; color: var(--text-dim); line-height: 1.4; }
 .bs-act { display: flex; gap: 6px; flex: none; align-items: center; }
 .bs-act .btn.small .chev { margin-right: -4px; }
-.bs-row.open .bs-ico { color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--bg-3)); outline: 1px dashed var(--accent); outline-offset: -1px; }
+.bs-row.open .bs-ico { color: var(--text); background: var(--bg-3); outline: 1px dashed var(--line-2); outline-offset: -1px; }
+/* a slot's blurb: one line (the tree has the rest) */
+.bs-row.slot .bs-sub { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* "3 trees without a Doctrine yet": opens to their rows */
+.btn.fold-btn.bs-fold { margin: 8px 0; }
 .bs-row.locked .bs-name { color: var(--text-dim); }
 .bs-row.locked .bs-ico { color: var(--text-faint); background: var(--bg-2); }
 .bs-row.chosen .bs-ico { color: var(--ok); }
@@ -37,7 +42,7 @@
 .bs-core-row .price { font-weight: 700; font-size: 15px; }
 .bs-core-row .price.short { opacity: 0.5; }
 .chev { color: var(--text-faint); flex: none; }
-.bs-doc { color: var(--accent); font-weight: 600; }
+.bs-doc { color: var(--text); font-weight: 600; }
 .btn.bs-draft .bs-name { flex: 1; }
 /* Reachability: slot numbers on ability rows, the Autocast switch, stacked actions on narrow rows */
 .bs-num-inline { color: var(--text-dim); font-weight: 700; }

@@ -151,6 +151,13 @@ banner, a folded death card) or waits (toasts queue in `Feed`). Overlay surfaces
 their controls take taps. A new overlay goes through the lanes, and `tests/e2e/overlap.mjs` (run by `npm run e2e`)
 checks that no overlay covers the tower, the dock, the HUD, the tab bar or another overlay.
 
+## Tab screens (`src/ui/shell.ts`)
+
+Every tab screen shares one top row outside its scroller (`.screen-top`: the wallet, an optional control such as the
+Upgrades quantity chip, and the Battle button); a screen pins at most its own segmented control below it and scrolls
+everything else. Dots mark decisions only (an empty slot, an open fork, a draft or offer), never affordability (the tab
+bar's count). Rules and measurements: `docs/ONBOARDING.md` ("Calm spending screens").
+
 ## Economy constants (design §17) — implement in `economy/curves.ts`
 
 These are the design's starting shapes. The tuned constants (e.g. EnemyHP base 6 and growth 1.14, Scrap

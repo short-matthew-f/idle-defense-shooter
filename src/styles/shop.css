@@ -1,126 +1,161 @@
-/* Upgrades screen: pinned Suggested card, category segmented control, tree chips, a roomy scrolling list. */
+/*
+ * Upgrades screen: only the category tabs are pinned (the shell's top row above them holds the wallet, the quantity
+ * chip and the Battle button); the Suggested line, decision rows, tree chips and the rows scroll as one list.
+ * One accent: the primary action (Buy all) and the selected state. Dots mean "a decision is waiting" (--warn).
+ */
 
-/* Suggested card: header (chevron + title, Buy all), a first-run explainer, then the chips in one
-   horizontally scrolling row whose right edge fades so more chips read as "scroll" */
+/* the buy-quantity chip (shell top row, Upgrades only): one tap cycles ×1 → ×10 → Max */
+.btn.qty-chip {
+  flex: none; gap: 5px; min-height: var(--touch); padding: 0 12px; border-radius: 22px; background: var(--bg-2); border-color: var(--line-2);
+}
+.qty-k { font-size: 14px; font-weight: 600; color: var(--text-dim); }
+.qty-val { font-size: 15px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+body:not(.tab-upgrades) .btn.qty-chip { display: none; }
+/* a narrow phone: "×10" alone (its label says "Buy quantity"), so the wallet keeps one line */
+@media (max-width: 385px) { .qty-k { display: none; } .btn.qty-chip { padding: 0 10px; min-width: 52px; } }
+
+/* Suggested: one line ("Suggested 3 · Buy all ◆53"); the chevron opens the chips (and, for the first purchases, a sentence) */
 .quick.suggest {
-  flex: none; margin: 8px var(--gutter) 10px; padding: 2px 0 10px; min-width: 0;
+  margin: 12px 0 10px; padding: 4px; min-width: 0;
   background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px;
 }
-.quick.suggest.collapsed { padding-bottom: 2px; }
-/* narrow side columns (landscape rail, desktop panel): Buy all wraps under the title instead of squeezing it */
-.sg-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 0 6px 0 2px; min-width: 0; }
-.btn.sg-toggle { flex: 1 0 auto; justify-content: flex-start; gap: 8px; padding: 0 8px; font-size: 15px; font-weight: 700; color: var(--text); }
+.sg-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+.btn.sg-toggle { flex: 1 0 auto; justify-content: flex-start; gap: 8px; padding: 0 10px; font-size: 15px; font-weight: 700; color: var(--text); }
 .btn.sg-toggle:hover:not(:disabled) { background: transparent; }
 .sg-chev { flex: none; color: var(--text-dim); transition: transform 0.15s; }
 .suggest.collapsed .sg-chev { transform: rotate(-90deg); }
 .sg-count { font-size: 14px; font-weight: 600; color: var(--text-dim); }
-.btn.sg-buyall {
-  flex: none; margin-left: auto; max-width: 100%; min-height: var(--touch); padding: 0 12px; font-size: 14px; gap: 6px;
-  border-color: var(--accent); background: color-mix(in srgb, var(--accent) 20%, var(--bg-3));
-}
-.btn.sg-buyall .price { color: var(--text); font-weight: 700; }
-.sg-explain { margin: 0 12px 8px; font-size: 14px; line-height: 1.35; color: var(--text-dim); }
-.suggest.collapsed .sg-explain, .suggest.collapsed .sg-body { display: none; }
+.btn.sg-buyall { flex: none; margin-left: auto; max-width: 100%; min-height: var(--touch); padding: 0 14px; font-size: 15px; gap: 6px; }
+.btn.sg-buyall .price { font-weight: 800; }
+.btn.sg-buyall .price .ico { color: currentColor; }
+.sg-none { flex: 1; padding: 0 10px; font-size: 14px; color: var(--text-dim); line-height: var(--touch); }
+.sg-head > .next-chip { flex: 1 1 auto; min-width: 0; justify-content: flex-start; border-color: transparent; background: transparent; }
+.sg-explain { margin: 2px 10px 8px; font-size: 14px; line-height: 1.35; color: var(--text-dim); }
+.suggest.collapsed .sg-explain, .suggest.collapsed .sg-body, .suggest.empty .sg-body { display: none; }
 .sg-body {
-  display: flex; align-items: center; gap: 8px; padding: 0 36px 0 12px; min-width: 0;
+  display: flex; align-items: center; gap: 8px; padding: 2px 36px 4px 6px; min-width: 0;
   overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
   -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
   mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
 }
 .sg-body::-webkit-scrollbar { display: none; }
 .quick-row { display: flex; gap: 8px; flex: none; }
-.quick.empty .quick-row::after { content: 'Nothing affordable yet'; font-size: 14px; color: var(--text-faint); white-space: nowrap; line-height: var(--touch); }
 .chip.quick { gap: 6px; padding: 0 14px; }
 .chip.quick .price { color: var(--text); font-weight: 700; }
 .qc-name { max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
 .qc-rank { font-size: 14px; font-weight: 500; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .qc-rank:empty { display: none; }
-.qc-count { font-size: 14px; font-weight: 700; color: var(--accent); }
+.qc-count { font-size: 14px; font-weight: 700; color: var(--text-dim); }
 /* first-run hint: a calm accent outline on the cheapest chip (no pulsing) */
 .quick-row.coach .chip.quick:first-child { border-color: var(--accent); }
-.quick-row.slots:empty { display: none; }
-.btn.chip.slot-chip { border-style: dashed; border-color: var(--accent); color: var(--accent); }
-.btn.chip.next-chip { border-style: dashed; color: var(--text-dim); font-weight: 600; }
+.btn.chip.next-chip { color: var(--text-dim); font-weight: 600; }
 .next-chip .qc-next { font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); }
+.next-chip .qc-name { color: var(--text); }
 .next-chip .qc-eta { font-size: 14px; color: var(--text-dim); font-weight: 400; }
 .next-chip .qc-eta:empty { display: none; }
 
-/* toolbar: quantity selector (×1 · ×10 · Max) and the sort toggle */
-.shop-tools { flex: none; display: flex; align-items: center; gap: 8px; padding: 0 var(--gutter) 10px; }
-.qty-label { font-size: 14px; color: var(--text-dim); }
-.qty-seg { display: flex; gap: 2px; padding: 2px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; }
-.qty-opt {
-  min-height: var(--touch); min-width: 52px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent;
-  color: var(--text-dim); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; touch-action: manipulation;
-}
-.qty-opt.on { background: color-mix(in srgb, var(--accent) 24%, var(--bg-4)); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent); }
-.tools-gap { flex: 1; }
-
-/* section head with the per-tree "Spend here" button */
-.sec-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
-.sec-head .sec-title { flex: 1 1 auto; min-width: 0; }
-.btn.spend-btn {
-  flex: none; flex-direction: column; align-items: flex-end; justify-content: center; gap: 0; min-height: 48px; max-width: 190px;
-  margin: 12px 0 6px; padding: 3px 12px; line-height: 1.2; border-color: color-mix(in srgb, var(--accent) 55%, var(--line-2));
-}
-.spend-title { font-size: 14px; font-weight: 700; }
-.spend-line { font-size: 14px; font-weight: 600; color: var(--text-dim); font-variant-numeric: tabular-nums; }
-.btn.spend-btn:not(:disabled) .spend-line { color: var(--scrap); }
-
 .shop { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.shop-side { flex: none; display: flex; flex-direction: column; min-width: 0; }
-/* landscape phone: the pinned part becomes a scrolling side column beside the list */
-body.shell-rail .shop { flex-direction: row; }
-body.shell-rail .shop-side { width: 300px; overflow-y: auto; border-right: 1px solid var(--line); padding-bottom: 12px; overscroll-behavior: contain; }
-body.shell-rail .cat-tabs { flex-wrap: wrap; }
-body.shell-rail .cat-tabs .tab { flex: 1 1 30%; }
-body.shell-rail .tree-chips { flex-wrap: wrap; }
-body.shell-rail .shop-sub { align-items: flex-start; }
-body.shell-rail .shop-tools { flex-wrap: wrap; }
-body.shell-rail .shop-body { border-top: 0; }
-.shop-head { flex: none; padding: 0 var(--gutter) 8px; }
-/* the five categories as a segmented control (widths follow the labels so "Hardpoints" fits at 360 px) */
-.cat-tabs { display: flex; gap: 2px; padding: 3px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; }
+/* the pinned part: the five categories as a segmented control (widths follow the labels so "Hardpoints" fits at 360 px) */
+.shop-head { flex: none; padding: 8px var(--gutter) 10px; }
+.cat-tabs { display: flex; gap: 2px; padding: 2px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; }
 .cat-tabs .tab {
-  position: relative; flex: 1 1 auto; justify-content: center; min-height: var(--touch); padding: 0 4px; border: 0; border-radius: 9px;
+  position: relative; flex: 1 1 auto; justify-content: center; min-height: var(--touch); padding: 0 4px; border: 0; border-radius: 10px;
   font-size: 14px; letter-spacing: -0.02em; color: var(--text-dim);
 }
 @media (max-width: 380px) { .shop-head { padding-left: 8px; padding-right: 8px; } .cat-tabs .tab { padding: 0 2px; } }
 .cat-tabs .tab.active { background: var(--bg-4); color: var(--text); border: 0; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06); }
-.cat-tabs .tab .count { position: absolute; top: 6px; right: 3px; min-width: 8px; width: 8px; height: 8px; padding: 0; font-size: 0; line-height: 0; border-radius: 50%; }
-.sort-btn { flex: none; }
-.shop-sub { flex: none; display: flex; align-items: center; gap: 8px; padding: 0 var(--gutter) 10px; }
-.tree-chips { flex: 1; min-width: 0; }
+/* a decision waits in this category (an empty slot, an open fork) */
+.cat-dot, .chip-dot, .dr-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
+.cat-dot { position: absolute; top: 7px; right: 4px; }
+
 .shop-body {
-  flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--gutter) 28px; border-top: 1px solid var(--line);
+  position: relative; flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--gutter) 28px; border-top: 1px solid var(--line);
   overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
 }
+/* landscape phone: Suggested, decisions and tree chips in a left column, the rows beside them (one scroller) */
+body.shell-rail .cat-tabs .tab { padding: 0 8px; }
+body.shell-rail .shop-body { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); column-gap: 16px; align-content: start; align-items: start; }
+body.shell-rail .shop-body > :is(.quick, .shop-decisions, .shop-sub) { grid-column: 1; }
+body.shell-rail .shop-body > .shop-list { grid-column: 2; grid-row: 1 / span 4; }
+body.shell-rail .tree-chips { flex-wrap: wrap; }
+body.shell-rail .tree-chips.more { -webkit-mask-image: none; mask-image: none; padding-right: 0; }
 
-.node { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--line); }
+/* decision rows: an empty slot of this category, this tree's open Doctrine fork */
+.shop-decisions { display: flex; flex-direction: column; gap: 8px; margin: 0 0 10px; }
+.btn.decision-row {
+  width: 100%; justify-content: flex-start; gap: 12px; min-height: 56px; padding: 6px 12px; text-align: left; white-space: normal; font-weight: 400;
+  background: var(--bg-2); border: 1px dashed var(--line-2); border-radius: 12px;
+}
+.btn.decision-row.on { border-style: solid; background: var(--bg-3); }
+.dr-ico { color: var(--text-dim); }
+.dr-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.dr-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.dr-sub { font-size: 14px; color: var(--text-dim); line-height: 1.3; }
+.decision-row .chev { color: var(--text-faint); }
+
+/* tree chips and the sort toggle: the head of the list (it scrolls with it) */
+.shop-sub { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; }
+.tree-chips { flex: 1; min-width: 0; }
+.tree-chips.more {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); padding-right: 24px;
+}
+.sort-btn { flex: none; color: var(--text-dim); }
+.sort-btn.on { color: var(--text); }
+.tree-chip .count { background: var(--bg-4); color: var(--text-dim); font-weight: 700; }
+.chip.tree-chip.active .count { background: var(--bg-0); color: var(--text); }
+
+/* section heads: a quiet label, with the per-tree "Spend here" (and, without tree chips, the sort toggle) on the right */
+.sec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sec-head .sec-title { flex: 1 1 auto; min-width: 0; }
+.sec-head > .sort-btn { margin-top: 8px; }
+.btn.spend-btn {
+  flex: none; flex-direction: column; align-items: flex-end; justify-content: center; gap: 0; min-height: 48px; max-width: 190px;
+  margin: 12px 0 6px; padding: 3px 12px; line-height: 1.2;
+}
+.spend-title { font-size: 14px; font-weight: 700; }
+.spend-line { font-size: 14px; font-weight: 600; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.btn.spend-btn:not(:disabled) .spend-line { color: var(--scrap); }
+.shop-section:first-child .sec-title { margin-top: 12px; }
+/* the Quartermaster card under a one-line summary (open while it is off; folded once on) */
+.qm-fold { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 4px; }
+.qm-fold-btn .ico:first-child { color: var(--scrap); }
+.qmf-state { color: var(--text-dim); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.qm-fold-btn .fold-label { flex: none; }
+.qmf-chev { display: inline-flex; }
+
+/* node rows: name + rank, the headline effect on one line (the row body unfolds the rest), the price on the button */
+.node { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .node-main { min-width: 0; }
+.node.expandable .node-main { cursor: pointer; border-radius: 6px; min-height: var(--touch); display: flex; flex-direction: column; justify-content: center; }
 .node-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .node-name { font-weight: 700; font-size: 15px; }
 .node-rank { font-size: 14px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
-.node-desc { margin: 3px 0 0; font-size: 14px; color: var(--text-dim); line-height: 1.4; }
-.node-lock { margin: 4px 0 0; font-size: 14px; color: var(--warn); }
+.node-chev { align-self: center; color: var(--text-faint); transition: transform 0.15s; }
+.node.open .node-chev { transform: rotate(180deg); }
+.node-desc { margin: 3px 0 0; font-size: 14px; color: var(--text-dim); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.node.open .node-desc { display: block; }
+.node-lock { margin: 4px 0 0; font-size: 14px; color: var(--text-dim); }
 .node-lock::before { content: '🔒︎ '; }
 .node.k-exotic .node-name { color: var(--cores); }
-.node.k-mechanic .node-name, .node.t3 .node-name { color: color-mix(in srgb, var(--accent) 70%, var(--text)); }
-.node.maxed .node-name { color: var(--ok); }
-.node.maxed .btn.buy { opacity: 0.7; }
-.btn.buy { min-width: 96px; max-width: 132px; min-height: 44px; justify-content: flex-end; padding: 0 14px; font-size: 15px; }
+.node.locked .node-name { color: var(--text-dim); }
+.btn.buy { min-width: 96px; max-width: 132px; min-height: 44px; justify-content: flex-end; padding: 0 14px; font-size: 15px; font-weight: 700; }
+.node.affordable .btn.buy:not(:disabled) { background: var(--bg-4); border-color: color-mix(in srgb, var(--text) 22%, var(--line-2)); }
 /* ×10 / Max: the count on a small first line, the price below */
 .btn.buy.bulk { flex-direction: column; align-items: flex-end; justify-content: center; gap: 0; min-height: 48px; padding: 3px 12px; line-height: 1.2; }
-.buy-count { font-size: 14px; font-weight: 700; color: var(--accent); white-space: nowrap; }
-.btn.buy:disabled .buy-count { color: var(--text-dim); }
-.btn.buy:disabled { opacity: 0.62; }
-.node.affordable .btn.buy { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 20%, var(--bg-3)); }
-.shop-section:first-child .sec-title { margin-top: 12px; }
+.buy-count { font-size: 14px; font-weight: 700; color: var(--text-dim); white-space: nowrap; }
+.btn.buy:disabled { opacity: 0.55; }
+.node.maxed .btn.buy { opacity: 0.6; }
 
-.fork { margin: 6px 0 10px; }
-.fork-title { font-weight: 700; margin: 12px 0 6px; }
-.fork-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
-.doctrine { background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+/* folded rows: "3 locked · Show", "5 maxed · Show" (the fold button itself: controls.css) */
+.shop-fold { margin: 12px 0 0; }
+.fold-body .node:last-child { border-bottom: 0; }
+
+/* Doctrine forks: unchanged cards, tighter */
+.fork { margin: 4px 0 8px; }
+.fork-title { font-weight: 700; margin: 10px 0 6px; }
+.fork-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.doctrine { background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
 .doctrine.chosen { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .doc-name { font-weight: 700; font-size: 16px; display: flex; gap: 6px; align-items: center; }
 .doc-name .ico { color: var(--ok); }
@@ -128,11 +163,11 @@ body.shell-rail .shop-body { border-top: 0; }
 .doc-cap b { color: var(--text); font-weight: 600; }
 .doc-state { font-size: 14px; font-weight: 700; color: var(--ok); }
 .doctrine .btn { align-self: stretch; margin-top: 4px; }
-/* Reachability: a chosen second Doctrine (dashed accent) and the fork's second-Doctrine note */
+/* Reachability: a chosen second Doctrine (dashed) and the fork's second-Doctrine note */
 .doctrine.second { border-style: dashed; }
-.doc-tag { color: var(--accent); border-color: var(--accent); font-weight: 700; }
-.fork-note { display: flex; gap: 6px; align-items: flex-start; margin: 0 0 8px; font-size: 14px; line-height: 1.4; color: var(--text); background: color-mix(in srgb, var(--accent) 10%, var(--bg-2)); border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line-2)); border-radius: 10px; padding: 8px 10px; }
-.fork-note .ico { flex: none; margin-top: 2px; color: var(--accent); }
+.doc-tag { color: var(--text); border-color: var(--line-2); font-weight: 700; }
+.fork-note { display: flex; gap: 6px; align-items: flex-start; margin: 0 0 8px; font-size: 14px; line-height: 1.4; color: var(--text); background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 8px 10px; }
+.fork-note .ico { flex: none; margin-top: 2px; color: var(--text-dim); }
 .pick-card.blocked { opacity: .6; border-style: dashed; }
 
 .pick-card { display: flex; gap: 12px; align-items: center; background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 12px; padding: 12px 14px; margin: 8px 0; }

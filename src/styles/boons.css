@@ -134,4 +134,6 @@ body.shell-rail .boon-offer.narrow:not(.thin) .bo-heading { justify-content: fle
 .bi-desc { margin: 0; font-size: 14px; line-height: 1.4; color: var(--text-dim); }
 .bi-note { margin: 0; font-size: 14px; color: var(--warn); }
 .bi-act { flex: none; align-self: center; }
-.btn.boon-waiting .ico:first-child { color: var(--accent); }
+.btn.boon-waiting .ico:first-child { color: var(--warn); }
+.btn.boon-waiting .bs-main { flex: 1; min-width: 0; padding: 4px 0; }
+.btn.boon-waiting .bs-sub { font-weight: 400; color: var(--text-dim); }

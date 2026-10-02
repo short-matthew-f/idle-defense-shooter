@@ -4,6 +4,8 @@
  * Doctrine per tree, Anomaly sockets, ability slots, and what Cores buy (the balance is in the wallet bar above the screen, wallet.ts). It reuses the shop's slot pickers, Refit dialog,
  * Doctrine fork cards (by opening the tree in Upgrades) and Cores tab rather than duplicating them.
  * Progressive reveal (progression.ts): each section shows once its feature is earned (or the player has something in it).
+ * Calm by default: section notes say only what the title does not; locked slots fold into one row, trees without a
+ * Doctrine into one "N trees …" line that opens on tap (per session), empty Anomaly sockets into one card.
  */
 import '../styles/build.css';
 import type { DoctrineId, TreeId } from '@sim/core/ids';
@@ -58,6 +60,8 @@ export class BuildScreen {
   readonly el = h('div', { class: 'build' });
   shown = false;
   private key = '';
+  /** The "N trees without a Doctrine yet" line is open (this session). */
+  private docsOpen = false;
 
   constructor(private readonly ctx: UiCtx, private readonly shop: Shop, private readonly abilities: AbilityBar, private readonly draft: DraftModal,
     /** Boons: show the pending offer on Battle. */
@@ -71,7 +75,7 @@ export class BuildScreen {
   update(ui: UiState): void {
     if (!this.shown) return;
     const f = this.ctx.features();
-    const key = buildKey(ui) + `|${f.frame}${f.boons}${f.hardpoints}${f.elements}${f.anomalies}${f.abilities}${f.cores}`;
+    const key = buildKey(ui) + `|${f.frame}${f.boons}${f.hardpoints}${f.elements}${f.anomalies}${f.abilities}${f.cores}|${this.docsOpen}`;
     if (key === this.key) return;
     this.key = key;
     const y = this.el.parentElement?.scrollTop ?? 0;
@@ -89,11 +93,11 @@ export class BuildScreen {
     const f = FRAME_BY_ID.get(ui.build.frame);
     const hc = ui.slotCaps?.hardpoint ?? f?.hardpointCap ?? 0, ac = ui.slotCaps?.attunement ?? f?.attunementCap ?? 0;
     const caps = f ? `${hc}${f.freeMount ? ` + ${TREE_LABEL[f.freeMount]}` : ''} hardpoints · ${ac} attunements` : '';
-    return h('section', { class: 'bs-frame' },
-      h('div', { class: 'bs-frame-head' }, icon('shield', 'ico big'),
-        h('div', null, h('div', { class: 'bs-frame-label', text: 'Frame' }), h('div', { class: 'bs-frame-name', text: f?.name ?? ui.build.frame }))),
+    return h('section', { class: 'bs-frame', title: 'A new Frame is chosen at Prestige' },
+      h('div', { class: 'bs-frame-head' }, icon('shield', 'ico'),
+        h('div', { class: 'bs-frame-id' }, h('span', { class: 'bs-frame-label', text: 'Frame' }), h('span', { class: 'bs-frame-name', text: f?.name ?? ui.build.frame }))),
       h('p', { class: 'bs-frame-trait', text: f?.trait ?? '' }),
-      h('p', { class: 'bs-frame-caps' }, caps, h('span', { class: 'dim', text: ' · a new Frame is chosen at Prestige' })));
+      caps ? h('p', { class: 'bs-frame-caps', text: caps }) : null);
   }
 
   private slotRows(ui: UiState, isEl: boolean): HTMLElement[] {
@@ -105,6 +109,7 @@ export class BuildScreen {
     const next = isEl ? ui.nextAttunementWave : ui.nextHardpointWave;
     const total = Math.max(cap, list.length, open);
     const out: HTMLElement[] = [];
+    let locked = 0;
     for (let i = 0; i < total; i++) {
       const id = list[i];
       if (id) {
@@ -115,15 +120,17 @@ export class BuildScreen {
         out.push(row(h('span', { class: 'bs-num', text: String(i + 1) }), name,
           docName ? h('span', null, h('span', { class: 'bs-doc', text: `${docName} Doctrine` }), h('br'), blurb) : blurb,
           [button(['Tree', icon('right', 'ico tiny chev')], () => this.shop.jumpTo(id), { class: 'btn small', label: `Open the ${name} tree` })],
-          `filled ${id}`));
+          `filled slot ${id}`));
       } else if (i < open) {
-        out.push(row(icon('plus', 'ico'), 'Empty slot', isEl ? 'Attune an element: it opens its tree, Infusions and Fusions.' : 'Mount a weapon system for the rest of this Prestige.',
+        out.push(row(icon('plus', 'ico'), 'Empty slot', isEl ? 'Opens its tree, Infusions and Fusions' : 'One weapon system for the rest of this Prestige',
           [hint(button(isEl ? 'Attune' : 'Mount', () => this.pick(isEl, i), { class: 'btn primary' }), isEl ? 'build-attune' : 'build-mount')], 'open'));
-      } else {
-        const first = i === open;
-        const when = first && next !== null ? (next <= 0 ? 'Opens now' : `Opens after clearing wave ${next}`) : 'Opens deeper in the climb';
-        out.push(row(icon('lock', 'ico'), 'Locked slot', when, [], 'locked'));
-      }
+      } else locked++;
+    }
+    // the slots still locked: one row ("2 locked slots · the next opens after clearing wave 55")
+    if (locked) {
+      const when = next !== null ? (next <= 0 ? 'The next opens now' : `The next opens after clearing wave ${next}`) : 'They open deeper in the climb';
+      const one = next === null ? 'Opens deeper in the climb' : next <= 0 ? 'Opens now' : `Opens after clearing wave ${next}`;
+      out.push(row(icon('lock', 'ico'), locked === 1 ? 'Locked slot' : `${locked} locked slots`, locked === 1 ? one : when, [], 'locked'));
     }
     if (!total) out.push(row(icon('lock', 'ico'), 'No slots', isEl ? 'This Frame or Trial has no attunement slots.' : 'This Frame or Trial has no hardpoint slots.', [], 'locked'));
     return out;
@@ -135,7 +142,7 @@ export class BuildScreen {
   }
 
   private hardpoints(ui: UiState): HTMLElement {
-    return section('Hardpoints', 'Weapon systems. Mounts lock for this Prestige; a Refit costs 3 Cores.', ...this.slotRows(ui, false), ...this.extraRows(ui));
+    return section('Hardpoints', 'Mounts lock for this Prestige; a Refit costs 3 Cores.', ...this.slotRows(ui, false), ...this.extraRows(ui));
   }
 
   /** Systems that run without a slot: a Frame's free mount, or a Borrowed Blade from an Anomaly. */
@@ -153,13 +160,14 @@ export class BuildScreen {
   }
 
   private attunements(ui: UiState): HTMLElement {
-    return section('Attunements', 'Elements. Each opens a tree, Infusions with your weapons and Fusions with other elements.', ...this.slotRows(ui, true));
+    return section('Attunements', 'Attunements lock for this Prestige.', ...this.slotRows(ui, true));
   }
 
   private doctrines(ui: UiState): HTMLElement {
     const frameMounted = (ui.extraSystems ?? []).filter((x) => x.via === 'frame').map((x) => x.system);
     const trees = [...CHASSIS, ...ui.build.attunements.filter(Boolean), ...ui.build.hardpoints.filter(Boolean), ...frameMounted] as TreeId[];
     let seconds = false;
+    const waiting: HTMLElement[] = [];
     const rows = trees.map((tree) => {
       const t = TREE_BY_ID.get(tree);
       if (!t) return null;
@@ -188,19 +196,29 @@ export class BuildScreen {
       if (avail) return row(icon('plus', 'ico'), h('span', null, h('span', { class: 'bs-tree', text: `${t.name}: ` }), 'fork open'), `Choose one of ${t.doctrines.length} paths: ${t.doctrines.map((d) => d.name).join(', ')}.${sd ? ` A second runs at ${strengthLabel(sd.strength)} (${SECOND_SOURCE_LABEL[sd.source]}).` : ''}`,
         [button('Choose', open, { class: 'btn primary' })], 'open');
       const have = t.shared.filter((n) => (ui.build.ranks[n.id] | 0) > 0).length;
-      return row(icon('lock', 'ico'), h('span', null, h('span', { class: 'bs-tree', text: `${t.name}: ` }), 'no Doctrine yet'), `The fork opens after ${t.forkRequirement} core nodes (${Math.min(have, t.forkRequirement)}/${t.forkRequirement} owned).`,
-        [button('Tree', open, { class: 'btn small ghost', label: `Open the ${t.name} tree` })], 'locked');
+      // not a decision yet: folded under one line (below)
+      waiting.push(row(icon('lock', 'ico'), h('span', null, h('span', { class: 'bs-tree', text: `${t.name}: ` }), 'no Doctrine yet'), `The fork opens after ${t.forkRequirement} core nodes (${Math.min(have, t.forkRequirement)}/${t.forkRequirement} owned).`,
+        [button('Tree', open, { class: 'btn small ghost', label: `Open the ${t.name} tree` })], 'locked'));
+      return null;
     });
-    return section('Doctrines', `One path per tree, locked for this Prestige. Changing one costs 1 Core, only at a checkpoint.${seconds ? ' Trees marked 2nd run a second Doctrine.' : ''}`, ...rows);
+    if (waiting.length) {
+      const n = waiting.length;
+      const fold = button([icon('lock', 'ico tiny'), h('span', { class: 'fold-label', text: `${n} tree${n === 1 ? '' : 's'} without a Doctrine yet` }), h('span', { class: 'fold-act', text: this.docsOpen ? 'Hide' : 'Show' }), icon(this.docsOpen ? 'up' : 'down', 'ico tiny chev')],
+        () => { this.docsOpen = !this.docsOpen; this.key = ''; const s = this.ctx.state(); if (s) this.update(s); }, { class: 'btn fold-btn bs-fold' });
+      fold.setAttribute('aria-expanded', this.docsOpen ? 'true' : 'false');
+      rows.push(fold, ...(this.docsOpen ? waiting : []));
+    }
+    return section('Doctrines', `Locked for this Prestige; a change costs 1 Core, at a checkpoint.${seconds ? ' Trees marked 2nd run a second Doctrine.' : ''}`, ...rows);
   }
 
   private anomalies(ui: UiState): HTMLElement {
     const b = ui.build;
     const rows: (HTMLElement | null)[] = [];
     const cards = h('div', { class: 'bs-anomalies' }, ...b.anomalies.map((a) => anomalyCard(a, ui)));
-    for (let i = b.anomalies.length; i < b.anomalySockets; i++) cards.appendChild(h('div', { class: 'bs-socket', text: 'Empty socket: Anomaly drafts follow boss kills' }));
+    const empty = b.anomalySockets - b.anomalies.length;
+    if (empty > 0) cards.appendChild(h('div', { class: 'bs-socket', text: `${empty === 1 ? 'An empty socket' : `${empty} empty sockets`}: Anomaly drafts follow boss kills` }));
     rows.push(cards);
-    return section('Anomalies', `${b.anomalies.length}/${b.anomalySockets} sockets. Anomalies bend the rules for this Prestige.`, ...rows);
+    return section('Anomalies', `${b.anomalies.length}/${b.anomalySockets} sockets, for this Prestige`, ...rows);
   }
 
   private abilitySlots(ui: UiState): HTMLElement {
@@ -224,8 +242,8 @@ export class BuildScreen {
         : def ? `${def.cost} CE · ${def.cooldown}s cooldown · ${def.desc}` : 'Abilities spend Command Energy (CE).';
       return row(id ? abilityIcon(id, 'ico') : icon('plus', 'ico'), h('span', null, h('span', { class: 'bs-num-inline', text: `${i + 1} · ` }), def ? def.name : 'Empty ability slot'), sub, acts, inactive ? 'locked' : def ? 'filled' : 'open');
     });
-    const more = n >= 4 ? '' : n === 2 ? ' A third slot comes with the Prestige III node Third Tactical Slot, a fourth with the Command Doctrine capstone (Reactor).' : ' A fourth slot comes with the Command Doctrine capstone (Reactor) or the Third Tactical Slot node.';
-    return section('Abilities', `${n} tactical slots on the Battle screen (keys 1–${n}). Hold an ability there to change it too.${more}${auto ? ' Autocast fires each ability when it is affordable and useful; switch it off per ability.' : ''}`, ...rows);
+    const more = n >= 4 ? '' : n === 2 ? ' More slots: Third Tactical Slot (Prestige III), the Command capstone (Reactor).' : ' A fourth: the Command capstone (Reactor) or Third Tactical Slot.';
+    return section('Abilities', `Keys 1–${n} on Battle.${more}${auto ? ' Autocast fires each when affordable and useful.' : ''}`, ...rows);
   }
 
   /** Reachability: the Threat Dial can be lowered mid-run (never raised; Echoes pay at the lowest level used). */
@@ -256,7 +274,7 @@ export class BuildScreen {
       button([h('span', { class: 'bs-main' }, h('span', { class: 'bs-name', text: label }), h('span', { class: 'bs-sub', text: sub })),
         h('span', { class: `price cores${can ? '' : ' short'}` }, icon('cores', 'ico tiny'), cost), icon('right', 'ico tiny chev')], onTap, { class: 'btn bs-core-row' });
     return h('section', { class: 'bs-section' },
-      h('h3', { class: 'sec-title' }, 'Cores', h('span', { class: 'sec-sub', text: 'Commitment currency: bosses drop them; they reset at Prestige.' })),
+      h('h3', { class: 'sec-title' }, 'Cores', h('span', { class: 'sec-sub', text: 'Bosses drop them; they reset at Prestige.' })),
       h('div', { class: 'bs-list' },
         go('Exotics', '2', 'One per tree, once its Doctrine fork is reached', () => this.shop.open('cores', 'exotic'), c >= 2),
         go('Refit', String(REFIT_CORES), 'Swap a mounted hardpoint (60% of its Scrap back)', () => this.shop.open('cores', 'refit'), c >= REFIT_CORES),

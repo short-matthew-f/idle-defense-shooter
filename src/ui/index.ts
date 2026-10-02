@@ -144,7 +144,7 @@ export class GameUi {
       this.active.el);
     const toasts = h('div', { class: 'toast-layer' }, this.coach.el, this.feed.el);
     this.shell = new Shell(root, host, {
-      topbar: this.hud.el, battle, abilities: this.abilities.el, toasts, strip: this.strip, wallet: this.wallet.el,
+      topbar: this.hud.el, battle, abilities: this.abilities.el, toasts, strip: this.strip, wallet: this.wallet.el, topExtra: this.shop.qtyChip,
       screens: {
         upgrades: {
           el: this.shop.el, ownScroll: true,

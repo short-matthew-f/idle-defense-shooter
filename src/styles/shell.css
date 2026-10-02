@@ -69,9 +69,19 @@ body.shell-desktop.panel-closed .screens { display: none; }
 .screen.own-scroll { overflow: hidden; padding: 0; display: flex; flex-direction: column; }
 .screen:focus { outline: none; }
 
-/* ---------------------------------------------------------------- status strip (non-Battle screens, phones) */
+/* ---------------------------------------------------------------- the top row (every tab screen)
+ * One row outside every scroller: the wallet on the left (wallet.css), the Upgrades quantity chip (shop.css), and the
+ * status strip on the right. Beside a wallet the strip is a compact "Battle ›" button with the tower's HP as a thin bar
+ * under the label (red and pulsing when low); with no wallet (More) it shows wave, HP and Scrap in full.
+ */
+.screen-top {
+  flex: none; display: flex; align-items: center; gap: 8px; min-width: 0;
+  padding: 6px var(--gutter) 0;
+}
+.screen-top:not(:has(> :not([hidden]))) { display: none; }
+body.shell-desktop .screen-top { padding-top: 10px; }
 .status-strip {
-  flex: none; display: flex; align-items: center; gap: 12px; min-height: 44px; margin: 8px var(--gutter) 6px; padding: 0 8px 0 12px;
+  flex: 1 1 auto; display: flex; align-items: center; gap: 12px; min-height: 44px; min-width: 0; padding: 0 8px 0 12px;
   border-radius: 12px; background: var(--bg-2); border: 1px solid var(--line); color: var(--text);
   font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; text-align: left; touch-action: manipulation;
 }
@@ -85,10 +95,25 @@ body.shell-desktop.panel-closed .screens { display: none; }
 .ss-hp-text { color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ss-res { display: flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ss-res .ico { color: var(--scrap); }
-.ss-back { display: flex; align-items: center; gap: 0; color: var(--accent); white-space: nowrap; }
+.ss-back { display: flex; align-items: center; gap: 0; color: var(--text); white-space: nowrap; }
+.ss-back .ico { color: var(--text-dim); }
 .status-strip.low { border-color: var(--bad); animation: pulse 1.4s infinite; --warn: var(--bad); }
 .status-strip.low .ss-hp-text { color: var(--bad); }
-@media (max-width: 370px) { .ss-back-label { display: none; } .ss-back .ico { width: 18px; height: 18px; } }
+/* a narrow phone with no wallet (More): the full strip keeps every figure; "Battle" gives way to its chevron */
+@media (max-width: 400px) { body:not(.wallet-shown) .ss-back-label { display: none; } body:not(.wallet-shown) .ss-back .ico { width: 18px; height: 18px; } }
+/* beside the wallet: just "Battle ›" over a thin HP bar (wave, the HP figure and Scrap are in its label and tooltip) */
+body.wallet-shown .status-strip {
+  flex: none; display: grid; grid-template-columns: auto auto; grid-template-areas: 'boss back' 'hp hp';
+  align-content: center; justify-content: center; gap: 3px 4px; padding: 0 10px 0 14px;
+}
+body.wallet-shown .ss-wave-wrap { grid-area: boss; }
+body.wallet-shown .ss-wave, body.wallet-shown .ss-res, body.wallet-shown .ss-hp > .ico, body.wallet-shown .ss-hp-text { display: none; }
+body.wallet-shown .ss-back { grid-area: back; }
+body.wallet-shown .ss-hp { grid-area: hp; }
+body.wallet-shown .ss-hp-bar { max-width: none; min-width: 0; height: 3px; }
+/* a quiet bar while the tower is fine; red (with the pulsing border) once it is low */
+body.wallet-shown .ss-hp-fill { background: var(--text-faint); }
+body.wallet-shown .status-strip.low .ss-hp-fill { background: var(--bad); }
 
 /* ---------------------------------------------------------------- Battle */
 .topbar { position: absolute; z-index: 5; top: 0; left: 0; right: 0; }

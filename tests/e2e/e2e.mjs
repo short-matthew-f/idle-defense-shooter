@@ -24,14 +24,20 @@
 //                     covers the tower, the Upgrade / ability / Overcharge buttons, the HUD, the tab bar, the coach buttons or
 //                     another overlay; none leaves the safe area; no overlay surface over the arena eats taps
 //   phone wallet      (src/ui/wallet.ts) at 393×852 and 375×667 (DPR 2): Upgrades (Chassis, Cores), Prestige (layers,
-//                     Ascension) and Build scrolled to the bottom keep the wallet bar on screen under the status strip, showing
-//                     exactly the live balances; a purchase updates it (and flashes it); a Refit dialog shows "You have … Cores"
+//                     Ascension) and Build scrolled to the bottom keep the wallet on screen in the top row (outside the
+//                     scroller), showing exactly the live balances; a purchase updates it (and flashes it); a Refit dialog
+//                     shows "You have … Cores"
+//   phone calm        (UX pass, docs/reviews/UX-REVIEW.md) a mid-game save at 393×852 and 375×667 (DPR 2, notch insets):
+//                     Upgrades (Chassis, Elements with an open slot, Cores), Build and Prestige layers pin at most 25% of the
+//                     height (top row + category tabs; at most two pinned rows beyond the tabs), the list gets ≥ 55%, nothing
+//                     overflows sideways, every tap target in view is ≥ 44 px, text ≥ 14 px except badges, the quieter
+//                     styles keep AA contrast; dots only for decisions; the empty-slot row opens the picker (hint targets)
 // Exit code 1 on any failed check.
 //
 // Environment: PLAYWRIGHT_DIR (a directory holding the `playwright` package; default: the global npm root),
 // CHROMIUM (browser executable; default: Playwright's own), E2E_URL (skip the preview server and test this URL),
 // E2E_OUT (screenshots; default tests/e2e/out), E2E_SKIP_DESKTOP=1 / E2E_SKIP_PHONE=1 / E2E_SKIP_REACH=1 / E2E_SKIP_TOUCH=1 /
-// E2E_SKIP_ONBOARD=1 / E2E_SKIP_OVERLAYS=1 / E2E_SKIP_WALLET=1. The walkthroughs that need every tab run with ?showall=1 (Unlock everything for the session).
+// E2E_SKIP_ONBOARD=1 / E2E_SKIP_OVERLAYS=1 / E2E_SKIP_WALLET=1 / E2E_SKIP_UX=1. The walkthroughs that need every tab run with ?showall=1 (Unlock everything for the session).
 import { createRequire } from 'node:module';
 import { spawn, execSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -116,6 +122,15 @@ const attachLogs = (page, errors) => {
 };
 const skipOnboarding = async (page) => { const s = page.getByRole('button', { name: 'Skip' }); if (await s.count()) await s.first().click(); };
 const tab = async (page, id) => { await page.locator(`.tabbar .tab-btn[data-tab="${id}"]`).click(); await page.waitForTimeout(350); };
+/** Open the Upgrades Suggested line to its chips (it is one collapsed line by default). */
+const expandSuggested = async (page, touch) => {
+  const t = page.locator('.screen.s-upgrades .sg-toggle');
+  if (await t.count() && await t.isVisible() && (await t.getAttribute('aria-expanded')) === 'false') { if (touch) await t.tap(); else await t.click(); await page.waitForTimeout(200); }
+};
+/** Cycle the top row's quantity chip (×1 → ×10 → Max) to `label`. */
+const setQty = async (page, label) => {
+  for (let k = 0; k < 3 && ((await page.locator('.screen-top .qty-chip .qty-val').textContent()) ?? '').trim() !== label; k++) { await page.locator('.screen-top .qty-chip').tap(); await page.waitForTimeout(150); }
+};
 
 try {
   if (!process.env.E2E_SKIP_DESKTOP) await desktop();
@@ -125,6 +140,7 @@ try {
   if (!process.env.E2E_SKIP_TOUCH) await touchCheck();
   if (!process.env.E2E_SKIP_OVERLAYS) await overlays();
   if (!process.env.E2E_SKIP_WALLET) await wallet();
+  if (!process.env.E2E_SKIP_UX) await calm();
 } catch (e) {
   check('no exceptions', false, String(e && e.stack || e));
 } finally {
@@ -155,6 +171,7 @@ async function desktop() {
   const before = await uiOf(page);
   const ranksBefore = Object.values(before.ranks).reduce((a, b) => a + b, 0);
   const bought = [];
+  await expandSuggested(page, false);
   for (let k = 0; k < 3; k++) {
     const chip = page.locator('.quick-row .btn.chip.quick').first();
     if (!(await chip.count())) break;
@@ -324,6 +341,7 @@ async function phone() {
   const s1 = await state();
   check('phone: Upgrades is a full screen; render paused; history entry pushed', s1.body.includes('tab-upgrades') && s1.visible.some((c) => c.includes('s-upgrades')) && s1.renderPaused === true && s1.hist?.tab === 'upgrades', s1);
   const r0 = await uiOf(page);
+  await expandSuggested(page, true);
   const chip = page.locator('.screen.s-upgrades .quick-row .btn.chip.quick').first();
   if (await chip.count()) { await chip.tap(); await page.waitForTimeout(700); }
   const r1 = await uiOf(page);
@@ -332,7 +350,7 @@ async function phone() {
   await page.screenshot({ path: `${OUT}/phone-upgrades.png` });
 
   // bulk buying: quantity Max, then "Spend here" on Ballistics buys the cheapest ranks there until the Scrap runs out
-  await page.locator('.screen.s-upgrades .qty-opt', { hasText: 'Max' }).tap();
+  await setQty(page, 'Max');
   await page.locator('.screen.s-upgrades .tree-chip', { hasText: 'Ballistics' }).tap();
   await page.waitForTimeout(300);
   const spend = page.locator('.screen.s-upgrades .spend-btn').first();
@@ -348,7 +366,7 @@ async function phone() {
   const b1 = await uiOf(page);
   await page.screenshot({ path: `${OUT}/phone-upgrades-spend-max.png` });
   check('phone: Max + Spend here (Ballistics) spends Scrap and raises ranks', /Max ×\d+/.test(spendLabel) && b1.scrap < b0.scrap && bal(b1) > bal(b0), { spendLabel, scrap: [b0.scrap, b1.scrap], ranks: [bal(b0), bal(b1)] });
-  await page.locator('.screen.s-upgrades .qty-opt').first().tap();   // back to ×1
+  await setQty(page, '×1');   // back to ×1
 
   for (const id of ['build', 'prestige', 'more']) {
     await tab(page, id);
@@ -663,7 +681,7 @@ async function onboard() {
     cats: [...document.querySelectorAll('.screen.s-upgrades .cat-tabs .tab')].filter((b) => !b.hidden).map((b) => b.textContent.replace(/\d+/g, '').trim()),
     catRow: !document.querySelector('.screen.s-upgrades .cat-tabs').hidden,
     suggested: !document.querySelector('.screen.s-upgrades .quick').hidden,
-    qty: !document.querySelector('.screen.s-upgrades .shop-tools').hidden,
+    qty: !document.querySelector('.screen-top .qty-chip').hidden,
     trees: [...document.querySelectorAll('.screen.s-upgrades .tree-chip')].map((b) => b.textContent.replace(/\d+/g, '').trim()),
   }));
   await page.screenshot({ path: `${OUT}/phone-onboard-stage1-upgrades.png` });
@@ -940,12 +958,12 @@ async function wallet() {
     const probe = (scroller) => page.evaluate((sc) => {
       const el = document.querySelector(sc);
       el.scrollTop = el.scrollHeight;
-      const w = document.querySelector('.wallet-bar'), st = document.querySelector('.status-strip');
-      const r = w.getBoundingClientRect(), sr = st.getBoundingClientRect();
+      const w = document.querySelector('.wallet-bar'), top = document.querySelector('.screen-top');
+      const r = w.getBoundingClientRect(), tr = top.getBoundingClientRect(), scr = el.getBoundingClientRect();
       const ui = window.__citadel.game.ui.ctx.state();
       const live = { scrap: ui.run.scrap, cores: ui.run.cores, echoes: ui.meta.echoes, stars: ui.meta.stars };
       const items = [...w.querySelectorAll('.wl-item')].filter((i) => !i.hidden).map((i) => ({ c: i.dataset.currency, value: Number(i.dataset.value), text: i.querySelector('.wl-val').textContent, live: live[i.dataset.currency] }));
-      return { scrolled: el.scrollTop, room: el.scrollHeight - el.clientHeight, top: r.top, bottom: r.bottom, stripBottom: sr.bottom, vh: innerHeight, visible: !w.hidden && r.height > 0, items };
+      return { scrolled: el.scrollTop, room: el.scrollHeight - el.clientHeight, top: r.top, bottom: r.bottom, rowTop: tr.top, rowBottom: tr.bottom, scrollerTop: scr.top, inScroller: el.contains(w), vh: innerHeight, visible: !w.hidden && r.height > 0, items };
     }, scroller);
     const views = [
       { id: 'upgrades-chassis', tab: 'upgrades', pick: '.screen.s-upgrades .cat-tabs .tab:has-text("Chassis")', scroller: '.screen.s-upgrades .shop-body', want: ['scrap', 'cores'] },
@@ -961,8 +979,8 @@ async function wallet() {
       await page.waitForTimeout(250);
       await page.screenshot({ path: `${OUT}/phone-wallet-${vp.id}-${v.id}.png` });
       const exact = m.items.every((i) => i.value === i.live && i.text === fmtWallet(i.live));
-      check(`wallet ${vp.id} ${v.id}: scrolled to the bottom, the balance stays in view under the strip and matches the live state`,
-        m.visible && (m.room <= 0 || m.scrolled > 0) && m.top >= m.stripBottom - 0.5 && m.bottom <= m.vh && exact && m.items.map((i) => i.c).join() === v.want.join(), m);
+      check(`wallet ${vp.id} ${v.id}: scrolled to the bottom, the balance stays in view in the top row (outside the scroller) and matches the live state`,
+        m.visible && (m.room <= 0 || m.scrolled > 0) && !m.inScroller && m.top >= m.rowTop - 0.5 && m.bottom <= m.rowBottom + 0.5 && m.bottom <= m.scrollerTop + 0.5 && m.top >= 0 && m.bottom <= m.vh && exact && m.items.map((i) => i.c).join() === v.want.join(), m);
     }
 
     // a purchase updates the figure at once (and flashes it): tap the cheapest suggested buy
@@ -975,7 +993,9 @@ async function wallet() {
       new MutationObserver(() => { if (val.classList.contains('flash-spend')) window.__walletFlash.push('spend'); }).observe(val, { attributes: true, attributeFilter: ['class'] });
     });
     const before = await probe('.screen.s-upgrades .shop-body');
-    await page.locator('.screen.s-upgrades .quick-row:not(.slots) .btn.chip.quick').first().tap();
+    await page.evaluate(() => { document.querySelector('.screen.s-upgrades .shop-body').scrollTop = 0; });
+    await expandSuggested(page, true);
+    await page.locator('.screen.s-upgrades .quick-row .btn.chip.quick').first().tap();
     await page.waitForTimeout(700);
     const after = await probe('.screen.s-upgrades .shop-body');
     const flashed = await page.evaluate(() => window.__walletFlash.length > 0);
@@ -994,6 +1014,152 @@ async function wallet() {
     check(`wallet ${vp.id}: the Refit dialog says how many Cores you have`, !!chip && chip.text === `You have ${fmtWallet(chip.cores)} Core${chip.cores === 1 ? '' : 's'}`, chip);
     await page.keyboard.press('Escape');
     check(`wallet ${vp.id}: zero console errors`, errors.length === 0, errors);
+    await ctx.close();
+  }
+}
+
+// ================================================================ phone: a calm spending screen (UX pass)
+/** In-page: pinned chrome, list share, pinned rows, sideways overflow, small targets / text, contrast of the quiet styles. */
+function calmAudit(scrollerSel) {
+  const vh = innerHeight, vw = innerWidth;
+  const vis = (el) => { if (!el || el.closest('[hidden]')) return false; const r = el.getBoundingClientRect(); if (r.width < 1 || r.height < 1) return false; for (let p = el; p; p = p.parentElement) { const c = getComputedStyle(p); if (c.display === 'none' || c.visibility === 'hidden') return false; } return true; };
+  const sc = document.querySelector(scrollerSel);
+  const sr = sc.getBoundingClientRect();
+  // the list starts under the scroller's top, or under a sticky bar inside it (the Prestige segments)
+  let listTop = sr.top;
+  for (const st of sc.querySelectorAll('.seg-ctl')) if (vis(st) && getComputedStyle(st).position === 'sticky') listTop = Math.max(listTop, st.getBoundingClientRect().bottom);
+  const listH = Math.min(sr.bottom, vh) - listTop;
+  // pinned rows: bands of controls / figures above the list, the category tabs counted apart
+  const bands = [];
+  let tabs = 0;
+  for (const el of document.querySelectorAll('.screens button, .screens .wl-item, .screens .seg-ctl')) {
+    if (!vis(el)) continue;
+    const r = el.getBoundingClientRect();
+    const sticky = el.closest('.seg-ctl') && getComputedStyle(el.closest('.seg-ctl')).position === 'sticky';
+    if ((sc.contains(el) && !sticky) || r.bottom > listTop + 1 || r.height < 16) continue;
+    if (el.closest('.cat-tabs')) { tabs = 1; continue; }
+    const mid = (r.top + r.bottom) / 2;
+    if (!bands.some((b) => Math.abs(b - mid) < 20)) bands.push(mid);
+  }
+  const inView = (r) => r.bottom > Math.max(0, sr.top) && r.top < Math.min(vh, sr.bottom);
+  const overflow = document.documentElement.scrollWidth > vw + 0.5 || [...document.querySelectorAll('.screens *')].some((el) => vis(el) && el.getBoundingClientRect().right > vw + 0.5 && !el.closest('.chips, .tabs, .sg-body, .quick-row'));
+  const targets = [...document.querySelectorAll('.screens button, .screens [role="button"], .tabbar button')].filter((el) => vis(el) && (el.closest('.tabbar') || !sc.contains(el) || inView(el.getBoundingClientRect())))
+    .filter((el) => { const r = el.getBoundingClientRect(); return r.height < 43.5 || r.width < 43.5; }).map((el) => `${el.className}:${Math.round(el.getBoundingClientRect().width)}x${Math.round(el.getBoundingClientRect().height)}`);
+  const small = new Set();
+  for (const el of document.querySelectorAll('.screens *')) {
+    if (!vis(el) || ![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
+    if (el.closest('.count, .tab-badge, .tag, .cat-dot, .chip-dot')) continue;   // badges may be smaller
+    const fs = parseFloat(getComputedStyle(el).fontSize);
+    if (fs < 13.9) small.add(`${el.className || el.tagName}:${fs}`);
+  }
+  // contrast of the quiet styles against what they sit on (WCAG AA: 4.5:1)
+  const rgb = (s) => { const m = /rgba?\(([\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)(?:[ ,/]+([\d.]+))?/.exec(s); return m ? [+m[1], +m[2], +m[3], m[4] === undefined ? 1 : +m[4]] : null; };
+  const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+  const bgOf = (el) => { const layers = []; for (let p = el; p; p = p.parentElement) { const c = rgb(getComputedStyle(p).backgroundColor); if (c && c[3] > 0) { layers.push(c); if (c[3] >= 1) break; } } let out = [11, 13, 18]; for (const c of layers.reverse()) out = out.map((v, i) => v * (1 - c[3]) + c[i] * c[3]); return out; };
+  const ratio = (el) => { const c = rgb(getComputedStyle(el).color), b = bgOf(el); const op = (() => { let o = 1; for (let p = el; p; p = p.parentElement) o *= +getComputedStyle(p).opacity; return o; })(); const fg = c.slice(0, 3).map((v, i) => v * c[3] * op + b[i] * (1 - c[3] * op)); const [L1, L2] = [lum(fg), lum(b)].sort((x, y) => y - x); return +((L1 + 0.05) / (L2 + 0.05)).toFixed(2); };
+  const contrast = {};
+  for (const sel of ['.node-desc', '.node-rank', '.sec-title', '.sec-sub', '.tree-chip .count', '.qty-k', '.fold-btn', '.dr-sub', '.sg-count', '.wl-bank', '.bs-sub', '.cat-tabs .tab:not(.active)', '.node.affordable .btn.buy:not(:disabled) .price']) {
+    const el = [...document.querySelectorAll(`.screens ${sel}`)].find((e) => vis(e) && (!sc.contains(e) || inView(e.getBoundingClientRect())));
+    if (el) contrast[sel] = ratio(el);
+  }
+  return { pinnedPct: +(listTop / vh * 100).toFixed(1), listPct: +(listH / vh * 100).toFixed(1), rows: bands.length, tabs, overflow, targets, small: [...small], contrast };
+}
+
+async function calm() {
+  const viewports = [
+    { id: '393', viewport: { width: 393, height: 852 }, safe: { top: 59, bottom: 34 } },
+    { id: '375', viewport: { width: 375, height: 667 }, safe: { top: 20, bottom: 0 } },
+  ];
+  // a mid-game save after two Prestiges: Ordnance mounted, Fire attuned and a second attunement slot empty, the Ballistics
+  // fork open, the Quartermaster on
+  const MUT = `s.meta.prestigeCount = 2; s.meta.deepestEver = 60; s.meta.echoes = 3000;
+    s.run.deepestCleared = 30; s.run.checkpoint = 30; s.run.wave = 31; s.run.scrap = 52345; s.run.cores = 5;
+    s.run.hardpointSlotsOpen = 1; s.run.build.hardpoints = ['ordnance']; s.run.attunementSlotsOpen = 2; s.run.build.attunements = ['fire', null];
+    Object.assign(s.run.build.ranks, { 'ballistics.damage': 12, 'ballistics.attack_speed': 10, 'ballistics.range': 8, 'ballistics.projectile_speed': 25, 'ballistics.crit_chance': 4, 'bastion.max_hp': 9, 'fire.damage': 3 });
+    if (s.meta.settings && s.meta.settings.quartermaster) s.meta.settings.quartermaster.on = true;
+    s.savedAtMs = Date.now();`;
+  const PREFS = { revealInit: true, hintsInit: true, contentInit: true, buyCoach: 3, contentSeen: ['fire', 'lightning', 'poison', 'frost', 'ordnance', 'drones', 'blade'],
+    coachSeen: ['start', 'checkpoint', 'elements', 'build', 'abilities', 'boons', 'anomalies', 'bulk', 'prestige', 'machine', 'salvage', 'overcharge', 'qm-on'], tabsVisited: ['battle', 'upgrades', 'build', 'prestige', 'more'] };
+  for (const vp of viewports) {
+    const ctx = await browser.newContext({ viewport: vp.viewport, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+    await ctx.route('**/favicon.ico', (r) => r.fulfill({ status: 204, body: '' }));
+    await ctx.addInitScript((s) => {
+      const put = () => { const st = document.createElement('style'); st.textContent = `:root{--safe-top:${s.top}px!important;--safe-bottom:${s.bottom}px!important}`; document.head.appendChild(st); };
+      if (document.head) put(); else document.addEventListener('DOMContentLoaded', put);
+    }, vp.safe);
+    const page = await ctx.newPage();
+    const errors = [];
+    attachLogs(page, errors);
+    const ready = () => page.waitForFunction(() => !!window.__citadel?.game?.ready, null, { timeout: 60000 });
+    await page.goto(`${BASE}?fast=1`);
+    await ready();
+    const save = await page.evaluate(async (src) => { const s = await window.__citadel.game.client.requestSave(); new Function('s', src)(s); return s; }, MUT);
+    await page.goto(`${BASE}icons/icon-192.png`);
+    await page.evaluate(async ({ save, prefs }) => {
+      localStorage.clear(); localStorage.setItem('citadel.prefs.v1', JSON.stringify(prefs));
+      await new Promise((res, rej) => {
+        const r = indexedDB.open('citadel', 1);
+        r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('saves')) r.result.createObjectStore('saves'); };
+        r.onsuccess = () => { const t = r.result.transaction('saves', 'readwrite'); t.objectStore('saves').put(save, 'main'); t.oncomplete = () => { r.result.close(); res(); }; t.onerror = () => rej(t.error); };
+        r.onerror = () => rej(r.error);
+      });
+    }, { save, prefs: PREFS });
+    await page.goto(`${BASE}?fast=1`);
+    await ready();
+    await page.waitForTimeout(1200);
+    const tapTab = async (id) => { await page.locator(`.tabbar .tab-btn[data-tab="${id}"]`).tap(); await page.waitForTimeout(400); };
+    const tapIf = async (sel) => { const l = page.locator(sel).first(); if (await l.count() && await l.isVisible()) { await l.tap(); await page.waitForTimeout(300); } };
+    const views = [
+      { id: 'upgrades-chassis', tab: 'upgrades', pick: '.screen.s-upgrades .cat-tabs .tab:has-text("Chassis")', sc: '.screen.s-upgrades .shop-body' },
+      { id: 'upgrades-elements', tab: 'upgrades', pick: '.screen.s-upgrades .cat-tabs .tab:has-text("Elements")', sc: '.screen.s-upgrades .shop-body' },
+      { id: 'upgrades-cores', tab: 'upgrades', pick: '.screen.s-upgrades .cat-tabs .tab:has-text("Cores")', sc: '.screen.s-upgrades .shop-body' },
+      { id: 'build', tab: 'build', pick: null, sc: '.screen.s-build' },
+      { id: 'prestige-layers', tab: 'prestige', pick: '.screen.s-prestige .seg-btn:has-text("Upgrades")', sc: '.screen.s-prestige' },
+    ];
+    for (const v of views) {
+      await tapTab(v.tab);
+      if (v.pick) await tapIf(v.pick);
+      await page.evaluate((s) => { document.querySelector(s).scrollTop = 0; }, v.sc);
+      await page.waitForTimeout(250);
+      const m = await page.evaluate(calmAudit, v.sc);
+      await page.screenshot({ path: `${OUT}/phone-calm-${vp.id}-${v.id}.png` });
+      const lowContrast = Object.entries(m.contrast).filter(([, r]) => r < 4.5);
+      const upgrades = v.tab === 'upgrades';
+      check(`calm ${vp.id} ${v.id}: pinned ≤ 25% (${m.pinnedPct}%), ≤ 2 pinned rows beyond the tabs (${m.rows}), list ≥ 55% (${m.listPct}%), no sideways overflow`,
+        m.pinnedPct <= 25 && m.rows <= 2 && m.listPct >= 55 && !m.overflow && (!upgrades || m.tabs === 1), m);
+      check(`calm ${vp.id} ${v.id}: tap targets ≥ 44 px, text ≥ 14 px (badges aside), quiet styles keep AA contrast`, m.targets.length === 0 && m.small.length === 0 && lowContrast.length === 0, { targets: m.targets, small: m.small, contrast: m.contrast });
+    }
+
+    // dots mean decisions: Elements (an empty slot with something to attune) and Chassis (the open Ballistics fork); Cross none
+    await tapTab('upgrades');
+    const dots = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('.screen.s-upgrades .cat-tabs .tab')].filter((b) => !b.hidden).map((b) => [b.textContent.trim(), !b.querySelector('.cat-dot').hidden])));
+    check(`calm ${vp.id}: category dots only where a decision waits (an empty slot, an open fork)`, dots.Elements === true && dots.Chassis === true && dots.Cross === false && dots.Cores === false, dots);
+    // the empty slot is a row at the top of Elements (pointer-hint target "slot-chip"); it opens the picker ("slot-picker") in place, and folds back
+    await tapIf('.screen.s-upgrades .cat-tabs .tab:has-text("Elements")');
+    const row = page.locator('.screen.s-upgrades .slot-row[data-hint="slot-chip"]');
+    const rowShown = await row.count() > 0 && await row.first().isVisible();
+    if (rowShown) await row.first().tap();
+    await page.waitForTimeout(300);
+    const picker = await page.evaluate(() => { const p = document.querySelector('.screen.s-upgrades [data-hint="slot-picker"]'); return !!p && p.getBoundingClientRect().height > 0 && p.querySelectorAll('.pick-card .btn.primary').length; });
+    await page.screenshot({ path: `${OUT}/phone-calm-${vp.id}-slot-picker.png` });
+    if (rowShown) await row.first().tap();
+    await page.waitForTimeout(300);
+    const back = await page.evaluate(() => !document.querySelector('.screen.s-upgrades [data-hint="slot-picker"]') && document.querySelectorAll('.screen.s-upgrades .shop-list .node').length > 0);
+    check(`calm ${vp.id}: the empty-slot row (hint target) opens the attune picker in place and folds back to the tree`, rowShown && picker > 0 && back, { rowShown, picker, back });
+    // the quantity chip cycles in one tap and every Buy button follows it; a row body unfolds its description (no purchase)
+    await tapIf('.screen.s-upgrades .cat-tabs .tab:has-text("Chassis")');
+    const q0 = await page.evaluate(() => document.querySelector('.screen-top .qty-chip .qty-val').textContent);
+    await page.locator('.screen-top .qty-chip').tap();
+    await page.waitForTimeout(250);
+    const q1 = await page.evaluate(() => ({ chip: document.querySelector('.screen-top .qty-chip .qty-val').textContent, buy: document.querySelector('.screen.s-upgrades .node .btn.buy .buy-count:not([hidden])')?.textContent ?? null, pref: JSON.parse(localStorage.getItem('citadel.prefs.v1')).buyQty }));
+    await setQty(page, '×1');
+    // record what the UI sends while a row body is tapped (the Quartermaster buys on its own: ranks alone would not tell)
+    await page.evaluate(() => { const host = window.__citadel.game.ui.ctx.host, send = host.send.bind(host); window.__sent = []; host.send = (c) => { window.__sent.push(c.type); return send(c); }; });
+    await page.locator('.screen.s-upgrades .node.expandable .node-main').first().tap();
+    await page.waitForTimeout(400);
+    const open = await page.evaluate(() => ({ open: !!document.querySelector('.screen.s-upgrades .node.open'), sent: window.__sent.slice() }));
+    check(`calm ${vp.id}: one tap on the quantity chip sets ×10 (Buy buttons say so); a row body unfolds its description without buying`, q0 === '×1' && q1.chip === '×10' && q1.pref === 10 && /×\d+/.test(q1.buy ?? '') && open.open && !open.sent.includes('buy'), { q0, q1, open });
+    check(`calm ${vp.id}: zero console errors`, errors.length === 0, errors);
     await ctx.close();
   }
 }

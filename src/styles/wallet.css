@@ -2,13 +2,20 @@
  * Wallet (src/ui/wallet.ts): the balances a screen spends, pinned in the shell's .screens column (never inside a
  * scroller), and the "You have …" line in the header of a dialog that spends.
  */
+/* the left of the top row (shell.css .screen-top): plain figures, no box; it wraps to a second line only if it must */
 .wallet-bar {
-  flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; min-height: 32px;
-  margin: 0 var(--gutter) 6px; padding: 0 12px; border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-2) 70%, transparent); border: 1px solid var(--line);
+  flex: 1 1 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 14px; min-height: 44px; min-width: 0;
+  padding: 0 2px;
 }
-/* desktop side panel: the first thing under its tab row */
-body.shell-desktop .wallet-bar { margin: 10px var(--gutter) 4px; }
+/* in the top row the Quartermaster's bank sits under the Scrap figure (one line of figures, not two) */
+.wallet-bar .wl-item { display: inline-grid; grid-template-columns: auto auto auto; grid-template-areas: 'ico val name' 'ico bank bank'; column-gap: 6px; align-items: center; }
+.wallet-bar .wl-ico { grid-area: ico; }
+.wallet-bar .wl-val { grid-area: val; line-height: 1.2; }
+.wallet-bar .wl-name { grid-area: name; }
+.wallet-bar .wl-bank { grid-area: bank; line-height: 1.15; font-weight: 600; }
+.wallet-bar .wl-bank::before { content: none; }
+/* a crowded row (several figures beside the quantity chip and the Battle button): the icons name the currencies */
+.screen-top.tight .wallet-bar .wl-name { display: none; }
 
 .wl-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .wl-ico { width: 18px; height: 18px; }
@@ -28,8 +35,6 @@ body.shell-desktop .wallet-bar { margin: 10px var(--gutter) 4px; }
 @keyframes wl-gain { 0%, 35% { color: var(--ok); background: color-mix(in srgb, var(--ok) 18%, transparent); } 100% { color: var(--text); background: transparent; } }
 @keyframes wl-spend { 0%, 35% { color: var(--warn); background: color-mix(in srgb, var(--warn) 18%, transparent); } 100% { color: var(--text); background: transparent; } }
 
-/* the status strip drops its Scrap figure while the wallet under it shows Scrap: one place for the number */
-body.wallet-scrap .status-strip .ss-res { display: none; }
 
 /* dialogs: "You have ◆ 12 Cores" under the title */
 .wallet-chip { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; margin: 2px 0 0; font-size: 14px; color: var(--text-dim); }

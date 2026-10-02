@@ -31,7 +31,7 @@ Best wave = `max(meta.deepestEver, run.deepestCleared)`. A first Prestige reveal
 | 2 | 6 | Upgrades → Elements (first attunement) |
 | 3 | 10 | Build tab; Upgrades → Hardpoints (first hardpoint slot); More tab |
 | 4 | 12 | Ability bar, Command Energy; Overcharge |
-| 5 | 15 | Boons and Anomalies on Build (offers and drafts always show); Suggested, Buy all, ×1 · ×10 · Max, Spend here |
+| 5 | 15 | Boons and Anomalies on Build (offers and drafts always show); the Suggested line, Buy all, the ×1 → ×10 → Max chip, Spend here |
 | 6 | 20 | Prestige tab and Forecast; Upgrades → Cross (Fusions, Linkages, Infusions); Inspector; Codex |
 | 7 | 25, or the first Prestige | Cores; Build → Frame |
 | 7 | the first Prestige only | More → Automation; More → Trials; the Quartermaster |
@@ -55,13 +55,13 @@ early Prestige, and everything is offered from Prestige 4.
   Blade). Existing saves keep everything they use; `prestigeCount` decides the rest. A Frame that mounts a system
   for free is a deliberate choice at Prestige, so it counts as owned.
 - **Where the pool applies:**
-  - the attune and mount pickers (Upgrades slot chips, Build → Attune / Mount);
+  - the attune and mount pickers (the Upgrades empty-slot rows, Build → Attune / Mount);
   - Refit;
-  - the open-slot suggestions (a slot chip or death-card shortcut shows only when the pool has something to put
-    in it);
+  - the open-slot decisions (the category tab's dot, the empty-slot row's dot and the death-card shortcut show only
+    when the pool has something to put in it);
   - Prestige → Blueprint (a Blueprint naming a system the next Prestige does not offer is listed but disabled);
   - Automation → Directives (the "Targeting" action's system list);
-  - the Suggested card, Buy all and the death card's purchases;
+  - the Suggested line, Buy all and the death card's purchases;
   - Upgrades → Cross.
 - **Fusions, Linkages, Infusions** (`poolAllows`): a Fusion or Triad shows only when **both** (all) of its elements
   are in the pool. A Linkage needs its hardpoints, and an Infusion needs its hardpoint and element. An entry with a
@@ -105,7 +105,9 @@ names the wall.
 
 The Quartermaster unlocks at the first Prestige (sim rule, `docs/QUARTERMASTER.md`) and starts **off**.
 
-- **Card:** at the top of Upgrades → Chassis and Upgrades → Hardpoints (the trees it buys in), shown once the
+- **Card:** at the top of Upgrades → Chassis and Upgrades → Hardpoints (the trees it buys in), under a one-line
+  summary ("Quartermaster · On · bank 1,234") that folds it: open while the Quartermaster is off (its switch is the
+  decision), folded once it is on (tap to open; this session). Shown once the
   `quartermaster` feature is on. Before the first Prestige, Unlock everything shows it as a one-line teaser. It shows
   the Quartermaster's **Bank** (its own Scrap, with what flows in per second), the **Share of income** control
   (10 / 25 / 50 / 75 / 100%, default 50%), the per-tree switches, and "Nothing left to buy: all your income is
@@ -120,6 +122,35 @@ The Quartermaster unlocks at the first Prestige (sim rule, `docs/QUARTERMASTER.m
   they never play the purchase sound. The audio director plays at most one quiet low tick (`QM_TICK_LEVEL` 0.25)
   every `QM_TICK_SECONDS` (4 s).
 - **Inspector:** the pass event (and the release of its bank) shows as "Quartermaster" (`EV_NAMES`).
+
+## Calm spending screens
+
+The tab screens are layered the same way as the ladder: what is needed at the moment of purchase is always in view, the
+rest is one tap away.
+
+- **One top row** (`shell.ts`, `.screen-top`): the wallet on the left (the balances this screen spends, with the
+  Quartermaster's bank under the Scrap figure), on Upgrades the buy-quantity chip (×1 → ×10 → Max, one tap each; Q), and
+  a compact **Battle ›** button with the tower's HP as a thin bar (red and pulsing when low). It sits outside every
+  scroller. With no wallet (More) the strip shows wave, HP and Scrap in full.
+- **Upgrades** pins only the category tabs below it. The list scrolls as one: the **Suggested** line ("Suggested 3 ·
+  Buy all ◆53", collapsed by default; its chevron opens the chips, remembered in `prefs.suggestExpanded`; the
+  "Cheapest upgrades…" sentence shows only for the first three purchases, `prefs.buyCoach`), the **decision rows** (an
+  empty attunement / hardpoint slot of this category, which opens its picker in place; this tree's open Doctrine fork,
+  which scrolls to it), the tree chips (only with two or more trees; Cross and Cores are one stacked view), then the
+  rows. A row shows its name, rank and headline effect (`format.ts splitDesc`, two lines at most); tapping the row
+  body unfolds the full description (the Buy button keeps hold-to-buy). Locked and maxed rows fold into "N locked" /
+  "N maxed" lines at the end (open per session).
+- **Dots mean a decision is waiting** (an empty slot with something to put in it, an open Doctrine fork; `--warn`), on
+  the category tab, the tree chip and the decision row. Affordability is the tab bar's count; a tree chip's count is
+  its affordable nodes in a quiet neutral badge. The bright accent is kept for the primary action (Buy all, the
+  starter Upgrade, Attune / Mount / Choose) and the selected state.
+- **Build** and **Prestige → Upgrades** follow suit: section notes say only what the title does not; Build folds its
+  locked slots into one row, the trees without a Doctrine into one line and the empty Anomaly sockets into one card;
+  a Prestige layer not yet open is one line ("9 upgrades · open at deepest wave 60"), and an open layer folds its
+  maxed rows (the guided first-Echo picks never fold).
+- `tests/e2e/e2e.mjs` "phone calm" (skip with `E2E_SKIP_UX=1`) measures it at 393×852 and 375×667: pinned chrome ≤ 25%
+  of the height, at most two pinned rows beyond the category tabs, list ≥ 55%, no sideways overflow, 44 px targets,
+  14 px text, AA contrast.
 
 ## Unlock everything
 

@@ -5,7 +5,7 @@
   background: transparent; border: 0; border-bottom: 1px solid var(--line); color: var(--text); font: inherit; touch-action: manipulation;
 }
 .menu-item:hover { background: var(--bg-2); }
-.menu-item > .ico:first-child { color: var(--accent); width: 24px; height: 24px; }
+.menu-item > .ico:first-child { color: var(--text-dim); width: 24px; height: 24px; }
 .menu-item > .chev { color: var(--text-faint); }
 .mi-main { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 1px; }
 .mi-label { font-weight: 700; font-size: 16px; }

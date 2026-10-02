@@ -248,3 +248,43 @@ at 8.6K particles while only one enemy is alive. Worth a check on a real phone b
 "Taps land 30-50 px below the finger" on an iPhone home-screen app: audit, fixes (pointer scaled from the canvas
 box into the camera view, punch included in the pointer math, re-fit on every viewport change), the Touch test
 and tap calibration are in [docs/TOUCH.md](../TOUCH.md).
+
+## Calm pass: spending screens (follow-up)
+
+"That screenshot is looking real busy": on a 393×852 phone the Upgrades screen pinned the status strip, the wallet,
+a Suggested card (sentence, Buy all, two dashed slot chips), the category tabs (a green dot on each), tree chips with
+bright count badges and the ×1 · ×10 · Max selector: 53% of the height, with the rows in the 36% left over. What
+changed (rules in `docs/ONBOARDING.md`, "Calm spending screens"):
+
+- One top row on every tab screen: the wallet (the Quartermaster's bank under the Scrap figure), the Upgrades quantity
+  chip (×1 → ×10 → Max, one tap; Q) and a compact "Battle ›" with a thin HP bar (red and pulsing when low).
+- Upgrades pins only the category tabs. The Suggested card is one line ("Suggested 3 · Buy all ◆64"), its chips one
+  chevron away; the slot chips became empty-slot rows at the top of Elements / Hardpoints (they open the picker in
+  place), plus a row for the tree's open Doctrine fork. Tree chips scroll with the list and only show for two or more
+  trees (Cross and Cores are one stacked view). Rows show the headline effect (two lines at most) and unfold on tap;
+  locked and maxed rows fold into "N locked" / "N maxed". The Quartermaster card folds under a one-line summary once on.
+- Dots mean "a decision is waiting"; counts are quiet neutral badges; the accent is kept for Buy all, the decisions'
+  Attune / Mount / Choose, and the selected state (section titles, Buy buttons, chips and doctrine tags went neutral).
+- Build: shorter section notes, locked slots and trees without a Doctrine folded, one card for empty Anomaly sockets.
+  Prestige → Upgrades: closed layers and maxed rows fold; the guided first-Echo picks keep their highlight.
+
+Measured with a mid-game save (Prestige 2, wave 31, an empty attunement slot, the Ballistics fork open) at 393×852
+(safe area 59 / 34), 375×667 (20 / 0) and desktop 1280×800. Pinned = viewport top (incl. the safe area) to the top
+of the scrolling list; rows count the pinned bands incl. the category tabs / segmented control; accent = elements on
+screen drawn in the Sector accent (tab bar included).
+
+| Screen | Size | Pinned % | List % | Pinned rows | Accent elements |
+| --- | --- | --- | --- | --- | --- |
+| Upgrades (Chassis / Elements / Cores) | 393×852 | 52.7 → 20.8 | 36.3 → 68.2 | 7 → 2 | 18–20 → 4 |
+| Upgrades (Chassis / Elements / Cores) | 375×667 | 61.5 → 20.7 | 29.5 → 70.3 | 7 → 2 | 18–20 → 4 |
+| Upgrades (Chassis / Elements / Cores) | 1280×800 | 50.5 → 23.3 | 49.5 → 76.8 | 6 → 2 | 17–20 → 4 |
+| Build | 393×852 | 18.2 → 12.8 | 70.8 → 76.2 | 2 → 1 | 12 → 5 |
+| Build | 375×667 | 17.4 → 10.5 | 73.6 → 80.5 | 2 → 1 | 12 → 5 |
+| Build | 1280×800 | 13.8 → 14.8 | 86.3 → 85.3 | 1 → 1 | 14 → 5 |
+| Prestige → Upgrades | 393×852 | 25.2 → 19.8 | 63.7 → 69.1 | 3 → 2 | 5 → 3 |
+| Prestige → Upgrades | 375×667 | 26.4 → 19.5 | 64.6 → 71.5 | 3 → 2 | 5 → 3 |
+| Prestige → Upgrades | 1280×800 | 21.3 → 22.3 | 78.8 → 77.8 | 2 → 2 | 4 → 3 |
+
+`tests/e2e/e2e.mjs` "phone calm" keeps it so (pinned ≤ 25%, ≤ 2 pinned rows beyond the tabs, list ≥ 55%, no sideways
+overflow, 44 px targets, 14 px text, AA contrast: the quiet text styles measure 7.7–8.8:1, the neutral count badge
+16:1).

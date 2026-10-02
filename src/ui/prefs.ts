@@ -17,8 +17,8 @@ export interface Prefs {
   buyCoach: number;
   /** Upgrades quantity selector: ranks per Buy tap (1, 10, 0 = Max). Q cycles it. */
   buyQty: 1 | 10 | 0;
-  /** The Suggested card at the top of Upgrades is expanded. */
-  suggestOpen: boolean;
+  /** The Suggested line at the top of the Upgrades list is expanded to its chips (collapsed to one line by default). */
+  suggestExpanded: boolean;
   /** Sound (audio pass): slider values 0..1 (gain = value², see src/audio/engine.ts), mute, music switch. */
   soundMaster: number;
   soundSfx: number;
@@ -53,7 +53,7 @@ export interface Prefs {
 }
 
 const KEY = 'citadel.prefs.v1';
-const DEFAULTS: Prefs = { onboarded: false, bloom: true, affordableFirst: false, panelOpen: true, shopCategory: 'chassis', shopTree: 'ballistics', activeTrial: null, buyCoach: 0, buyQty: 1, suggestOpen: true,
+const DEFAULTS: Prefs = { onboarded: false, bloom: true, affordableFirst: false, panelOpen: true, shopCategory: 'chassis', shopTree: 'ballistics', activeTrial: null, buyCoach: 0, buyQty: 1, suggestExpanded: false,
   soundMaster: 0.71, soundSfx: 0.8, soundMusic: 0.55, soundMuted: false, musicOn: true, touchCal: null,
   unlockAll: false, coachSeen: [], tabsVisited: [], revealInit: false, contentSeen: [], contentInit: false, echoGuide: false,
   pointerHints: true, hintsDone: [], hintsInit: false };

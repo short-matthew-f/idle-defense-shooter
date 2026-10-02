@@ -13,7 +13,7 @@
 .fr-trait { font-size: 14px; color: var(--text-dim); }
 .dial-val { font-size: 14px; color: var(--text-dim); }
 .pshop .player.closed .node { opacity: 0.5; }
-.pshop .player .node-lock::before { content: '🔒︎ '; }
+.pshop .btn.ps-fold { margin: 10px 0 0; }
 .echo-val, .star-val { font-variant-numeric: tabular-nums; }
 /* Reachability: Frames not unlocked yet (not selectable; they say how to unlock) */
 .frame-card.locked { opacity: 0.6; border-style: dashed; cursor: default; }
