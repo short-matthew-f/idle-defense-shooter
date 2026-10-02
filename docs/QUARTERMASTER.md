@@ -141,7 +141,8 @@ so leaving them all out is the simple, safe rule.
   (`data-hint="quartermaster-toggle"` stays on the master switch); "Bought N ranks this run · X Scrap".
 - **HUD chip:** a small bank icon and amount beside the Scrap counter while it is on and holds at least 1 Scrap
   (`qmBankChip`), dimmer than the player's Scrap. Hidden below 360 px wide, and on phones (≤ 400 px) during a boss
-  wave so the boss name never truncates; on a 375 px phone the Sector name may shorten ("The Outskir…"), as designed.
+  wave so the boss name never truncates. On a 375 px phone "The Outskirts" still fits beside it; a longer Sector
+  name gives way first (ellipsis), as the top bar is designed to.
 - **Coach line** after the first Prestige: "Quartermaster: it banks a share of your new Scrap and buys your stat
   upgrades with it, never your choices." with **Turn on**.
 
