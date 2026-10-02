@@ -39,6 +39,7 @@ import { showOfflineReturn } from './offline';
 import { BuildScreen } from './build';
 import { MoreScreen, PrestigeScreen, type MoreSub } from './screens';
 import { Shell } from './shell';
+import { WalletBar, updateLiveWallets, type WalletView } from './wallet';
 import { anyModalOpen, mountModalLayer } from './modal';
 import { sectorAccent } from './content';
 import type { UiHost } from './host';
@@ -67,6 +68,8 @@ export class GameUi {
   private readonly prestigeScreen: PrestigeScreen;
   private readonly more: MoreScreen;
   private readonly strip: StatusStrip;
+  /** The balances the screen in view spends, pinned under the status strip (wallet.ts). */
+  readonly wallet = new WalletBar();
   private latest: UiState | null = null;
   private sector = -1;
   private autoTab: AutoTab = 'directives';
@@ -141,15 +144,15 @@ export class GameUi {
       this.active.el);
     const toasts = h('div', { class: 'toast-layer' }, this.coach.el, this.feed.el);
     this.shell = new Shell(root, host, {
-      topbar: this.hud.el, battle, abilities: this.abilities.el, toasts, strip: this.strip,
+      topbar: this.hud.el, battle, abilities: this.abilities.el, toasts, strip: this.strip, wallet: this.wallet.el,
       screens: {
         upgrades: {
           el: this.shop.el, ownScroll: true,
-          onShow: () => { if (this.latest) this.shop.update(this.latest, this.hud.lastRate); },
+          onShow: () => { if (this.latest) this.shop.update(this.latest, this.hud.lastRate); this.refreshWallet(); },
         },
-        build: { el: this.build.el, onShow: () => this.build.setShown(true), onHide: () => this.build.setShown(false) },
-        prestige: { el: this.prestigeScreen.el, onShow: () => this.prestigeScreen.setShown(true), onHide: () => this.prestigeScreen.setShown(false) },
-        more: { el: this.more.el, onShow: (sub) => this.more.enter(sub), onHide: () => this.more.hide() },
+        build: { el: this.build.el, onShow: () => { this.build.setShown(true); this.refreshWallet(); }, onHide: () => this.build.setShown(false) },
+        prestige: { el: this.prestigeScreen.el, onShow: () => { this.prestigeScreen.setShown(true); this.refreshWallet(); }, onHide: () => this.prestigeScreen.setShown(false) },
+        more: { el: this.more.el, onShow: (sub) => { this.more.enter(sub); this.refreshWallet(); }, onHide: () => this.more.hide() },
       },
     });
     this.hints = new HintDriver(root, {
@@ -168,7 +171,20 @@ export class GameUi {
     setArenaSource(() => host.arena?.() ?? null);
     const layout = this.shell.onLayout;
     this.shell.onLayout = () => { layout?.(); this.lanes.schedule(); this.hints.pointer.schedule(); };
+    // the wallet follows the view at once (a category or segment switch, not only the next UiState)
+    this.shop.onViewChange = () => this.refreshWallet();
+    this.prestigeScreen.onViewChange = () => this.refreshWallet();
     window.addEventListener('keydown', (e) => this.onKey(e));
+  }
+
+  /** Where the player is, for the wallet: the screen on show, its More sub-screen, shop category and Prestige segment. */
+  walletView(): WalletView {
+    const tab = (['upgrades', 'build', 'prestige', 'more'] as const).find((s) => this.shell?.isShown(s)) ?? null;
+    return { tab, sub: tab ? this.shell.sub : null, shopCat: this.shop.view().cat, prestigeSeg: this.prestigeScreen.segment };
+  }
+
+  private refreshWallet(): void {
+    if (this.latest) this.wallet.update(this.latest, this.walletView(), this.feats);
   }
 
   /** Recompute the layout and camera insets. */
@@ -245,6 +261,8 @@ export class GameUi {
     this.active.update(ui);
     this.starter.update(ui, this.feats);
     this.shell.update(ui);
+    this.wallet.update(ui, this.walletView(), this.feats);
+    updateLiveWallets(ui);
     if (this.shell.isShown('upgrades')) this.shop.update(ui, this.hud.lastRate);
     this.death.update(ui);
     this.feed.update(ui, this.feats);

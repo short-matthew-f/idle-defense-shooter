@@ -26,6 +26,7 @@ import { bossDef, bossIndex, enemyDef, flagBitsFor, kindIndex, KIND_LIST, ELITE_
 import { enemyHp, bossHp, scrapPerKill, THREAT_SPEED_PER_LEVEL } from '../economy/curves';
 import { ELEMENT_ORDER } from '../data/index';
 import { trialHas } from '../economy/prestige';
+import { divertIncome } from '../directives/quartermaster';
 
 export const STATUS_CAPS: Record<StatusId, number> = { burn: 10, poison: 20, chill: 5, shock: 5, bleed: 10, brittle: 3, marked: 1, static: 10 };
 export const ELITE_HP_MUL = 2.5;
@@ -352,9 +353,11 @@ export class WorldImpl implements World {
   }
   private victimCache = new Map<number, NonNullable<SimEvent['data']>>();
 
-  addScrap(amount: number): void {
+  /** Scrap income (kills, crates, Reactor dividend); scrapEarned / waveScrap count the gross. `divert`: the Quartermaster's share goes to its bank (directives/quartermaster.ts). */
+  addScrap(amount: number, divert = true): void {
     if (!(amount > 0)) return;
-    this.run.scrap += amount; this.scrapEarned += amount; this.waveScrap += amount;
+    this.scrapEarned += amount; this.waveScrap += amount;
+    this.run.scrap += divert ? divertIncome(this, amount) : amount;
   }
 
   private recordShare(tag: string, dmg: number): void {

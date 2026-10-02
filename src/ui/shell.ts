@@ -4,7 +4,8 @@
  *
  *   phone (portrait)   Battle is the arena; Upgrades / Build / Prestige / More are full-screen tabs
  *                      over it, switched from a bottom tab bar. A status strip on those screens shows
- *                      wave, HP and Scrap and returns to Battle. The renderer pauses (the sim keeps
+ *                      wave, HP and Scrap and returns to Battle; the wallet bar under it (every layout) shows
+ *                      the balances the screen spends, and never scrolls. The renderer pauses (the sim keeps
  *                      running) while a full-screen tab covers the arena.
  *   rail (landscape)   the same, with the tabs on a left rail so the arena keeps its height.
  *   desktop (≥ 900 px) the arena stays visible; the four screens are tabs of a side panel.
@@ -48,6 +49,8 @@ export interface ShellParts {
   abilities: HTMLElement;
   toasts: HTMLElement;
   strip: StatusStrip;
+  /** The balances of what the screen in view spends (wallet.ts), pinned under the strip outside every scroller. */
+  wallet?: HTMLElement;
   screens: Record<ScreenId, ScreenSpec>;
 }
 
@@ -92,7 +95,7 @@ export class Shell {
     this.reopen = button([icon('panel', 'ico tiny'), 'Panel'], () => this.setPanelOpen(true), { class: 'btn ctl panel-reopen', label: 'Show the side panel (B)' });
     parts.battle.querySelector('.battle-controls')?.appendChild(this.reopen);
 
-    this.screensEl = h('div', { class: 'screens' }, parts.strip.el);
+    this.screensEl = h('div', { class: 'screens' }, parts.strip.el, parts.wallet ?? null);
     for (const id of Object.keys(parts.screens) as ScreenId[]) {
       const spec = parts.screens[id];
       const el = h('section', { class: `screen s-${id}${spec.ownScroll ? ' own-scroll' : ''}`, attrs: { 'aria-label': TABS.find((t) => t.id === id)?.label ?? id } }, spec.el);

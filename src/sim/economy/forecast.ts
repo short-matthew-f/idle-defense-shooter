@@ -9,7 +9,8 @@
  *  nextBoss*        Echoes at the next checkpoint and the rate if it is reached at the recent pace
  *  reclimbSeconds   0.3 × the previous Prestige's time to reach this checkpoint, else 0.35 × this run's time
  *  wallGaugeSeconds seconds until the cheapest not-yet-owned behavior-changing Scrap unlock is
- *                   affordable at the Scrap income of the last 60 s (null: nothing left / no income)
+ *                   affordable at the Scrap income of the last 60 s (null: nothing left / no income); the
+ *                   income is the player's part (minus the Quartermaster's share while it banks)
  *  frontier         waves past it are hardened (onboarding pass); nextFrontier: where Prestiging now moves it
  *  recommended      the rate has sat ≥15% below its peak for one full checkpoint cycle of PLAY TIME
  *                   (the median time this run's checkpoints took, at least RECOMMEND_MIN_CYCLE s)
@@ -26,6 +27,7 @@ import { echoesFor, frontierFor } from './curves';
 import { frontierWave, lifetimeEchoes, prestigeEchoes } from './prestige';
 import { codexMultiplier } from './codex';
 import { buildShop } from './shop';
+import { quartermasterShare } from '../directives/quartermaster';
 
 export const RECOMMEND_DROP = 0.15;
 /** Floor on the "one checkpoint cycle" window, in play seconds (early checkpoints fall in 2–3 min). */
@@ -141,7 +143,7 @@ export function wallGaugeSeconds(w: WorldImpl): number | null {
   const price = cheapestMechanic(w);
   if (price === null) return null;
   if (w.run.scrap >= price) return 0;
-  const inc = scrapIncome(w);
+  const inc = scrapIncome(w) * (1 - quartermasterShare(w) / 100);   // the player's part of income (the rest goes to the Quartermaster's bank)
   return inc > 0 ? (price - w.run.scrap) / inc : null;
 }
 

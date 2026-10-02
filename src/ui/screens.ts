@@ -35,6 +35,8 @@ export class PrestigeScreen {
   private readonly btns = new Map<PrestigeSeg, { b: HTMLButtonElement; lock: HTMLElement; dot: HTMLElement }>();
   private cur: PrestigeSeg = 'forecast';
   private shown = false;
+  /** The segment on show changed (GameUi: the wallet bar follows it). */
+  onViewChange: (() => void) | null = null;
 
   constructor(private readonly ctx: UiCtx, private readonly forecast: ForecastPanel, private readonly layers: PrestigeShop, private readonly stars: ConstellationPanel) {
     for (const s of PRESTIGE_SEGS) {
@@ -56,6 +58,7 @@ export class PrestigeScreen {
     this.cur = s;
     this.render();
     this.el.closest('.screen')?.scrollTo({ top: 0 });
+    this.onViewChange?.();
   }
 
   setShown(on: boolean): void {

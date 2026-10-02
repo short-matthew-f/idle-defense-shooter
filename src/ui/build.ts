@@ -1,7 +1,7 @@
 /**
  * Build screen (design §4, "why did my build converge"): every commitment of this Prestige on one
  * page — Frame, this attempt's active Boons (and a pending boon offer), Hardpoint and Attunement slots, the
- * Doctrine per tree, Anomaly sockets, ability slots, and the Cores balance with what Cores buy. It reuses the shop's slot pickers, Refit dialog,
+ * Doctrine per tree, Anomaly sockets, ability slots, and what Cores buy (the balance is in the wallet bar above the screen, wallet.ts). It reuses the shop's slot pickers, Refit dialog,
  * Doctrine fork cards (by opening the tree in Upgrades) and Cores tab rather than duplicating them.
  * Progressive reveal (progression.ts): each section shows once its feature is earned (or the player has something in it).
  */
@@ -10,7 +10,6 @@ import type { DoctrineId, TreeId } from '@sim/core/ids';
 import type { UiState } from '@sim/core/types';
 import { button, h, clear } from './dom';
 import { abilityIcon, icon } from './icons';
-import { fmtNum } from './format';
 import { ABILITY_BY_ID, CHASSIS, ELEMENT_BLURB, FRAME_BY_ID, HARDPOINT_BLURB, NODE_BY_ID, TREE_BY_ID, TREE_LABEL } from './content';
 import { anomalyCard } from './draft';
 import { autocastOn, setAutocast } from './abilities';
@@ -258,7 +257,6 @@ export class BuildScreen {
         h('span', { class: `price cores${can ? '' : ' short'}` }, icon('cores', 'ico tiny'), cost), icon('right', 'ico tiny chev')], onTap, { class: 'btn bs-core-row' });
     return h('section', { class: 'bs-section' },
       h('h3', { class: 'sec-title' }, 'Cores', h('span', { class: 'sec-sub', text: 'Commitment currency: bosses drop them; they reset at Prestige.' })),
-      h('div', { class: 'bs-cores-bal' }, icon('cores', 'ico big'), h('span', { class: 'bs-cores-val', text: fmtNum(c) }), h('span', { class: 'dim', text: c === 1 ? ' Core' : ' Cores' })),
       h('div', { class: 'bs-list' },
         go('Exotics', '2', 'One per tree, once its Doctrine fork is reached', () => this.shop.open('cores', 'exotic'), c >= 2),
         go('Refit', String(REFIT_CORES), 'Swap a mounted hardpoint (60% of its Scrap back)', () => this.shop.open('cores', 'refit'), c >= REFIT_CORES),

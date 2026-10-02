@@ -20,7 +20,7 @@ import { anomalyDef, boonDef } from '../core/content';
 import { BOON_CAP, BOON_QUEUE_CAP } from '../data/boons';
 import { FRAMES, TRIALS } from '../data/index';
 import { Prng } from '../math/prng';
-import { defaultQuartermasterSettings, sanitizeQuartermaster } from '../directives/quartermaster';
+import { defaultQuartermasterSettings, sanitizeQuartermaster, sanitizeQuartermasterRun, shareFromReserve } from '../directives/quartermaster';
 
 /** Minimal surface of the Sim the serializer needs (avoids an import cycle). */
 export interface Serializable { world: { run: RunState; build: BuildState; meta: MetaState; prng: { state(): [number, number, number, number] } } }
@@ -58,7 +58,8 @@ export function toRunSave(run: RunState, build: BuildState, prngState: [number, 
   } as RunSave, runExtras(run),   // WP8: progression extras
   run.pendingDraft && run.pendingDraft.length ? { pendingDraft: [...run.pendingDraft], draftWave: run.draftWave } : {},
   run.draftQueue.length ? { draftQueue: [...run.draftQueue] } : {},
-  boonExtras(run));
+  boonExtras(run),
+  run.quartermaster ? { quartermaster: clone(run.quartermaster) } : {});   // Quartermaster bank (save v3)
 }
 
 /** Boons: the offer bookkeeping a save carries (optional fields; see the header). */
@@ -98,6 +99,8 @@ export function fromRunSave(s: RunSave): { run: RunState; build: BuildState; prn
   if (Array.isArray(s.boonQueue)) run.boonQueue = [...s.boonQueue];
   run.boonOfferSeq = typeof s.boonOfferSeq === 'number' ? s.boonOfferSeq : 0;
   run.boonsSeenFirst = s.boonsSeenFirst === true;
+  const qm = sanitizeQuartermasterRun(s.quartermaster);   // Quartermaster bank: a reload never loses it
+  if (qm) run.quartermaster = qm;
   const build = clone(s.build);
   if (!Array.isArray(build.boons)) build.boons = [];
   return { run, build, prngState: [...s.prngState] as [number, number, number, number] };
@@ -115,9 +118,18 @@ export type Migration = (save: SaveState) => SaveState;
  * MIGRATIONS[v] upgrades a v-save to v+1. When bumping SAVE_VERSION to N, add `MIGRATIONS[N - 1]` (pure: take the
  * old shape, return the new one) and a test next to the synthetic-v2 test in tests/core/robustness.test.ts.
  *  1 → 2  Quartermaster: meta.settings.quartermaster added, switched OFF (an old save never starts auto-buying).
+ *  2 → 3  Quartermaster bank: settings.quartermaster.reserve r (Scrap kept for the player) becomes `share`, the
+ *         option nearest 100 − r (reserve 25 → share 75); on/off, trees and order are kept. The run's bank starts
+ *         empty (v2 saved no Quartermaster run state).
  */
 export const MIGRATIONS: Readonly<Record<number, Migration>> = {
   1: (s) => ({ ...s, meta: { ...s.meta, settings: { ...s.meta.settings, quartermaster: defaultQuartermasterSettings() } } }),
+  2: (s) => {
+    const q = s.meta.settings?.quartermaster as (Record<string, unknown> & { reserve?: unknown }) | undefined;
+    if (!isObj(q)) return s;
+    const { reserve, ...rest } = q;
+    return { ...s, meta: { ...s.meta, settings: { ...s.meta.settings, quartermaster: { ...rest, share: shareFromReserve(reserve) } as never } } };
+  },
 };
 
 /**
@@ -158,7 +170,7 @@ function sanitize(s: SaveState): void {
   if (!Array.isArray(m.upgradeQueue)) m.upgradeQueue = [];
   if (!Array.isArray(m.blueprints)) m.blueprints = [];
   if (!isObj(m.settings)) m.settings = newMeta().settings;
-  m.settings.quartermaster = sanitizeQuartermaster(m.settings.quartermaster);   // unknown trees / reserves repaired; missing = off
+  m.settings.quartermaster = sanitizeQuartermaster(m.settings.quartermaster);   // unknown trees / shares repaired; missing = off
   m.echoes = Math.max(0, finiteOr(m.echoes, 0)); m.stars = Math.max(0, finiteOr(m.stars, 0));
   sanitizeRun(s.run);
   if (m.parkedRun) { if (isObj(m.parkedRun) && isObj(m.parkedRun.build)) sanitizeRun(m.parkedRun); else delete m.parkedRun; }
@@ -206,6 +218,7 @@ function sanitizeRun(r: RunSave): void {
   if (r.boonOfferKind !== undefined && r.boonOfferKind !== 'start' && r.boonOfferKind !== 'boss') r.boonOfferKind = 'start';
   if (r.boonsSeenFirst !== undefined && typeof r.boonsSeenFirst !== 'boolean') r.boonsSeenFirst = !!r.boonsSeenFirst;
   b.anomalySockets = Math.max(0, Math.floor(finiteOr(b.anomalySockets, 3)));
+  if (r.quartermaster !== undefined) { const q = sanitizeQuartermasterRun(r.quartermaster); if (q) r.quartermaster = q; else delete r.quartermaster; }
 }
 
 function toBase64(str: string): string {

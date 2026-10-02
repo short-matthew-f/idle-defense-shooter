@@ -38,6 +38,15 @@ export class RateMeter {
   }
 }
 
+/**
+ * Quartermaster bank chip beside the Scrap counter: its text while the Quartermaster is unlocked, on and holding at
+ * least 1 Scrap, else null (hidden). CSS (hud.css) also hides it below 360 px wide, and on phones during a boss wave
+ * (the boss name must not truncate). Pure (tests).
+ */
+export function qmBankChip(q: UiState['quartermaster']): string | null {
+  return q && q.unlocked && q.on && q.bank >= 1 ? fmtNum(q.bank) : null;
+}
+
 /** The speeds a chip tap cycles through (never above what this wave allows). */
 export function speedCycle(current: number, allowed: number): 1 | 2 | 4 | 8 {
   const opts = SPEEDS.filter((s) => s <= Math.max(1, allowed));
@@ -47,7 +56,8 @@ export function speedCycle(current: number, allowed: number): 1 | 2 | 4 | 8 {
 
 /**
  * Top bar: two compact rows plus a 3 px checkpoint-cycle bar.
- *   row 1: "Wave 13 · The Outskirts" (the boss name during a boss wave) · Scrap + rate · Cores · pause
+ *   row 1: "Wave 13 · The Outskirts" (the boss name during a boss wave) · Scrap + rate · Quartermaster bank (while on
+ *          and not empty) · Cores · pause
  *   row 2: HP (shield and barrier as thin strips on the same bar) · CE (ability cost marks)
  *   cycle: waves checkpoint+1 … +5 with the wave boundaries as ticks, the boss tick last
  * The Battle controls (Push / Patrol, speed, restart, mute) are 36 px chips over the arena (`controls`).
@@ -61,6 +71,9 @@ export class Hud {
   private readonly scrap = h('span', { class: 'res-val' });
   private readonly scrapRate = h('span', { class: 'res-rate' });
   private readonly cores = h('span', { class: 'res-val' });
+  /** Quartermaster bank (its own Scrap; qmBankChip). */
+  private readonly qmBank = h('span', { class: 'res-val' });
+  private readonly qmItem: HTMLElement;
   private readonly hp = new Bar('hp', 'Tower health');
   private readonly shieldStrip = h('i', { class: 'strip shield' });
   private readonly barrierStrip = h('i', { class: 'strip barrier' });
@@ -130,6 +143,7 @@ export class Hud {
         h('div', { class: 'wave-line' }, this.waveNum, this.waveSub),
         h('div', { class: 'res' },
           h('div', { class: 'res-item scrap', title: 'Scrap: spend it on upgrades. Banks on every kill and survives death.' }, icon('scrap', 'ico res-ico'), h('span', { class: 'res-stack' }, this.scrap, this.scrapRate)),
+          this.qmItem = h('div', { class: 'res-item qm-bank-chip', title: 'Quartermaster bank: its share of your income. It spends only this, on your stat upgrades.' }, icon('bank', 'ico res-ico'), this.qmBank),
           this.coresItem = h('div', { class: 'res-item cores', title: 'Cores: commitment currency (Exotics, Refits, Doctrine changes, rerolls).' }, icon('cores', 'ico res-ico'), this.cores)),
         this.pauseBtn),
       h('div', { class: 'tb-row tb-bars' }, this.hp.el, this.ce.el),
@@ -180,6 +194,9 @@ export class Hud {
     this.lastRate = rate;
     text(this.scrapRate, rate > 0 ? fmtRate(rate) : '');
     text(this.cores, fmtNum(r.cores));
+    const bank = qmBankChip(ui.quartermaster);
+    show(this.qmItem, bank !== null);
+    if (bank !== null) { text(this.qmBank, bank); attr(this.qmItem, 'aria-label', `Quartermaster bank: ${bank} Scrap`); }
 
     const cyc = cycleBar(r.wave, r.checkpoint, w.progress);
     styleVar(this.cycleFill, '--f', cyc.frac.toFixed(4));

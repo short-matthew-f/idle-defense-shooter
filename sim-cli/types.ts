@@ -65,11 +65,12 @@ export interface RunConfig {
   activeExtras?: boolean | ActivePiece[];
   /**
    * Quartermaster (src/sim/directives/quartermaster.ts): once it unlocks (after Prestige 1) the runner switches it on
-   * with this reserve (default 25%) and the purchase agent stops buying the stat ranks it covers (the player hands the
-   * ramps to the Quartermaster and keeps making the choices), so nothing is bought twice.
+   * with this share of income going to its bank (default 50%) and the purchase agent stops buying the stat ranks it
+   * covers (the player hands the ramps to the Quartermaster and keeps making the choices), so nothing is bought
+   * twice. The agent spends only run.scrap; the bank is never its to spend.
    */
   quartermaster?: boolean;
-  quartermasterReserve?: number;
+  quartermasterShare?: number;
 }
 
 export interface WaveRecord {
@@ -151,8 +152,8 @@ export interface RunResult {
   /** Commands the policy sent that returned an error or had no observable effect. */
   noops: Record<string, number>;
   finalHash: number;
-  /** Ranks and Scrap the Quartermaster spent this climb (only when it ran). */
-  quartermaster?: { ranks: number; scrap: number };
+  /** Ranks and Scrap the Quartermaster spent this climb, and what was left in its bank (only when it ran). */
+  quartermaster?: { ranks: number; scrap: number; bank?: number };
   notes: string[];
 }
 

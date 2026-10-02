@@ -16,6 +16,7 @@ import { button, h } from './dom';
 import { icon } from './icons';
 import { NODE_BY_ID, TREE_BY_ID, TREE_LABEL } from './content';
 import { confirmDialog } from './modal';
+import { walletChip } from './wallet';
 import type { UiCtx } from './ctx';
 
 /** 1 Core: changing or clearing a chosen Doctrine (economy/curves CORE_COSTS.doctrine). */
@@ -158,7 +159,9 @@ export function doctrineFork(ctx: UiCtx, ui: UiState, tree: TreeId, opts: { titl
       const b = button([a.label, a.cost > 0 ? h('span', { class: 'price cores' }, String(a.cost), icon('cores', 'ico tiny')) : null], async () => {
         const cur = ctx.state() ?? ui;
         const t = confirmText(cur, tree, c, a);
-        if (!(await confirmDialog(t.title, t.body, t.ok, t.danger ? { danger: true } : {}))) return;
+        // a change that costs Cores shows the balance in the dialog
+        const wallet = a.cost > 0 ? walletChip(['cores'], cur) : undefined;
+        if (!(await confirmDialog(t.title, t.body, t.ok, { ...(t.danger ? { danger: true } : {}), ...(wallet ? { wallet } : {}) }))) return;
         ctx.host.send(a.cmd);
       }, { class: `btn small ${a.kind === 'clear2' ? 'ghost' : 'primary'}`, disabled: !!a.blocked, label: `${a.label} ${c.name}${a.cost ? ` for ${a.cost} Core` : ''}${a.blocked ? ` (${a.blocked})` : ''}` });
       if (a.blocked) b.title = a.blocked;

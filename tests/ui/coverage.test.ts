@@ -234,10 +234,15 @@ function checkTable(name: string, ids: readonly string[], table: Record<string, 
 }
 
 describe('capabilities reach a control', () => {
-  it('Quartermaster (unlocks at the first Prestige): its card sends set_quartermaster and reads UiState.quartermaster', () => {
+  it('Quartermaster (unlocks at the first Prestige): its card sends set_quartermaster (on, share, trees) and reads UiState.quartermaster; the HUD shows its bank', () => {
     const src = read('src/ui/quartermaster.ts');
     expect(src.includes("type: 'set_quartermaster'")).toBe(true);
+    for (const field of ['on: this.master.checked', 'share: r', 'trees: {']) expect(src.includes(field), field).toBe(true);
     expect(src.includes('ui.quartermaster')).toBe(true);
+    expect(src.includes('q.bank')).toBe(true);
+    expect(src.includes('q.idle')).toBe(true);
+    const hud = read('src/ui/hud.ts');
+    expect(hud.includes('qmBankChip(ui.quartermaster)')).toBe(true);
   });
   checkTable('Prestige nodes', PRESTIGE_NODES.map((p) => p.id), PRESTIGE);
   checkTable('Anomalies', ANOMALIES.map((a) => a.id), ANOMALY);

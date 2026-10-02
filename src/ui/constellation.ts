@@ -12,6 +12,7 @@ import { fmtNum, nextRankCost } from './format';
 import { STAR_NODES } from './content';
 import { confirmDialog } from './modal';
 import type { UiCtx } from './ctx';
+import { fmtExactish, walletChip } from './wallet';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const SYS = ['primary', 'ordnance', 'drones', 'blade', 'laser', 'gravitics'];
@@ -50,7 +51,6 @@ export class ConstellationPanel {
   shown = false;
   private readonly svg: SVGSVGElement;
   private readonly nodeEls = new Map<string, SVGGElement>();
-  private readonly stars = h('span', { class: 'star-val' });
   private readonly detail = h('div', { class: 'star-detail' });
   private readonly dName = h('div', { class: 'sd-name' });
   private readonly dDesc = h('p', { class: 'sd-desc' });
@@ -115,12 +115,14 @@ export class ConstellationPanel {
     this.detail.append(h('div', { class: 'node-head' }, this.dName, this.dRank), this.dDesc, this.dBuy);
     this.ascendBtn = button([icon('ascension'), 'Ascend…'], async () => {
       const ui = ctx.state(); if (!ui) return;
-      const ok = await confirmDialog('Ascend?', `Ascension resets waves, Scrap, Cores, upgrades and Anomalies, and pays ${fmtNum(starsFor(ui.run.deepestCleared, ui.meta.ascension))} Stars. Echoes, Prestige upgrades, the Codex, Trial rewards, Frames and Stars stay; every Star spent in the Constellation is refunded (a free respec). Enemies grow stronger and new rules unlock.`, 'Ascend', { danger: true });
+      const gain = starsFor(ui.run.deepestCleared, ui.meta.ascension);
+      const ok = await confirmDialog('Ascend?', `Ascension resets waves, Scrap, Cores, upgrades and Anomalies, and pays ${fmtNum(gain)} Stars. Echoes, Prestige upgrades, the Codex, Trial rewards, Frames and Stars stay; every Star spent in the Constellation is refunded (a free respec). Enemies grow stronger and new rules unlock.`, 'Ascend',
+        { danger: true, wallet: walletChip(['stars'], ui, (u) => (gain > 0 ? `+${fmtNum(gain)} → ${fmtExactish(u.meta.stars + gain)} after Ascending` : '')) });
       if (ok) { ctx.host.send({ type: 'ascend' }); ctx.host.saveNow(); }
     }, { class: 'btn primary wide' });
     this.ascendWrap.append(this.ascendText, this.ascendBtn);
+    // the Stars balance is in the wallet bar pinned above the screen (wallet.ts)
     this.el = h('div', { class: 'constellation' }, this.lockCard,
-      h('div', { class: 'pr-gain' }, icon('star', 'ico'), this.stars, h('span', { class: 'dim', text: ' Stars' })),
       h('div', { class: 'const-legend dim small' }, h('span', { class: 'lg major' }, '● Major: a system'), h('span', { class: 'lg bridge' }, '◆ Bridge: cross-system rule'), h('span', { class: 'lg minor' }, '• Minor: numbers')),
       this.svg, this.detail, this.ascendWrap);
     this.select(STAR_NODES[0] ?? null);
@@ -142,7 +144,6 @@ export class ConstellationPanel {
   update(ui: UiState, force = false): void {
     if (!this.isOpen && !force) return;
     const m = ui.meta;
-    text(this.stars, fmtNum(m.stars));
     for (const n of STAR_NODES) {
       const g = this.nodeEls.get(n.id)!;
       const rank = m.constellation[n.id] | 0;

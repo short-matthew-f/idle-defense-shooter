@@ -23,12 +23,15 @@
 //                     offer or its chip, the pointer ring, the armed hint, a boss bar with its tell, the death card): no overlay
 //                     covers the tower, the Upgrade / ability / Overcharge buttons, the HUD, the tab bar, the coach buttons or
 //                     another overlay; none leaves the safe area; no overlay surface over the arena eats taps
+//   phone wallet      (src/ui/wallet.ts) at 393×852 and 375×667 (DPR 2): Upgrades (Chassis, Cores), Prestige (layers,
+//                     Ascension) and Build scrolled to the bottom keep the wallet bar on screen under the status strip, showing
+//                     exactly the live balances; a purchase updates it (and flashes it); a Refit dialog shows "You have … Cores"
 // Exit code 1 on any failed check.
 //
 // Environment: PLAYWRIGHT_DIR (a directory holding the `playwright` package; default: the global npm root),
 // CHROMIUM (browser executable; default: Playwright's own), E2E_URL (skip the preview server and test this URL),
 // E2E_OUT (screenshots; default tests/e2e/out), E2E_SKIP_DESKTOP=1 / E2E_SKIP_PHONE=1 / E2E_SKIP_REACH=1 / E2E_SKIP_TOUCH=1 /
-// E2E_SKIP_ONBOARD=1 / E2E_SKIP_OVERLAYS=1. The walkthroughs that need every tab run with ?showall=1 (Unlock everything for the session).
+// E2E_SKIP_ONBOARD=1 / E2E_SKIP_OVERLAYS=1 / E2E_SKIP_WALLET=1. The walkthroughs that need every tab run with ?showall=1 (Unlock everything for the session).
 import { createRequire } from 'node:module';
 import { spawn, execSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -121,6 +124,7 @@ try {
   if (!process.env.E2E_SKIP_ONBOARD) await onboard();
   if (!process.env.E2E_SKIP_TOUCH) await touchCheck();
   if (!process.env.E2E_SKIP_OVERLAYS) await overlays();
+  if (!process.env.E2E_SKIP_WALLET) await wallet();
 } catch (e) {
   check('no exceptions', false, String(e && e.stack || e));
 } finally {
@@ -876,3 +880,120 @@ async function overlays() {
   }
 }
 
+
+// ================================================================ phone: the wallet stays in view while spending (src/ui/wallet.ts)
+/** src/ui/format.ts fmtNum (the wallet's figure format). */
+function fmtNum(n) {
+  if (!Number.isFinite(n)) return n > 0 ? '∞' : n < 0 ? '-∞' : '—';
+  const SUF = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc'];
+  const trim = (x) => (x.includes('.') ? x.replace(/\.?0+$/, '') : x);
+  const neg = n < 0; let v = Math.abs(n);
+  if (v < 1000) return (neg ? '-' : '') + (v < 10 && v % 1 !== 0 ? trim((Math.floor(v * 10) / 10).toFixed(1)) : String(Math.floor(v)));
+  let i = 0; while (v >= 1000 && i < SUF.length - 1) { v /= 1000; i++; }
+  return (neg ? '-' : '') + (v < 100 ? trim((Math.floor(v * 10) / 10).toFixed(1)) : String(Math.floor(v))) + SUF[i];
+}
+
+/** src/ui/wallet.ts fmtExactish: exact below a million, else fmtNum. */
+function fmtWallet(n) { return Math.abs(n) < 1e6 ? Math.floor(n).toLocaleString('en-US') : fmtNum(n); }
+
+async function wallet() {
+  const viewports = [
+    { id: '393', viewport: { width: 393, height: 852 }, safe: { top: 59, bottom: 34 } },
+    { id: '375', viewport: { width: 375, height: 667 }, safe: { top: 20, bottom: 0 } },
+  ];
+  for (const vp of viewports) {
+    const ctx = await browser.newContext({ viewport: vp.viewport, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+    await ctx.route('**/favicon.ico', (r) => r.fulfill({ status: 204, body: '' }));
+    await ctx.addInitScript((s) => {
+      const put = () => { const st = document.createElement('style'); st.textContent = `:root{--safe-top:${s.top}px!important;--safe-bottom:${s.bottom}px!important}`; document.head.appendChild(st); };
+      if (document.head) put(); else document.addEventListener('DOMContentLoaded', put);
+    }, vp.safe);
+    const page = await ctx.newPage();
+    const errors = [];
+    attachLogs(page, errors);
+    const ready = () => page.waitForFunction(() => !!window.__citadel?.game?.ready, null, { timeout: 60000 });
+    await page.goto(`${BASE}?fast=1`);
+    await ready();
+    // a save after two Prestiges: Scrap, Cores, Echoes and Stars to spend, Ordnance mounted (Refit)
+    const save = await page.evaluate(async () => {
+      const s = await window.__citadel.game.client.requestSave();
+      s.meta.prestigeCount = 2; s.meta.deepestEver = 60; s.meta.echoes = 3000; s.meta.stars = 20; s.meta.ascension = 1;
+      s.run.deepestCleared = 30; s.run.checkpoint = 30; s.run.wave = 31; s.run.scrap = 52345; s.run.cores = 5;
+      s.run.hardpointSlotsOpen = 1; s.run.build.hardpoints = ['ordnance']; s.savedAtMs = Date.now();
+      return s;
+    });
+    await page.goto(`${BASE}icons/icon-192.png`);
+    await page.evaluate(async (save) => {
+      localStorage.clear();
+      await new Promise((res, rej) => {
+        const r = indexedDB.open('citadel', 1);
+        r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('saves')) r.result.createObjectStore('saves'); };
+        r.onsuccess = () => { const t = r.result.transaction('saves', 'readwrite'); t.objectStore('saves').put(save, 'main'); t.oncomplete = () => { r.result.close(); res(); }; t.onerror = () => rej(t.error); };
+        r.onerror = () => rej(r.error);
+      });
+    }, save);
+    await page.goto(`${BASE}?fast=1&showall=1`);
+    await ready();
+    await page.waitForTimeout(900);
+    const tapTab = async (id) => { await page.locator(`.tabbar .tab-btn[data-tab="${id}"]`).tap(); await page.waitForTimeout(400); };
+    /** Scroll `scroller` to its bottom, then measure the wallet against the strip and the viewport, and read it against the UiState it shows. */
+    const probe = (scroller) => page.evaluate((sc) => {
+      const el = document.querySelector(sc);
+      el.scrollTop = el.scrollHeight;
+      const w = document.querySelector('.wallet-bar'), st = document.querySelector('.status-strip');
+      const r = w.getBoundingClientRect(), sr = st.getBoundingClientRect();
+      const ui = window.__citadel.game.ui.ctx.state();
+      const live = { scrap: ui.run.scrap, cores: ui.run.cores, echoes: ui.meta.echoes, stars: ui.meta.stars };
+      const items = [...w.querySelectorAll('.wl-item')].filter((i) => !i.hidden).map((i) => ({ c: i.dataset.currency, value: Number(i.dataset.value), text: i.querySelector('.wl-val').textContent, live: live[i.dataset.currency] }));
+      return { scrolled: el.scrollTop, room: el.scrollHeight - el.clientHeight, top: r.top, bottom: r.bottom, stripBottom: sr.bottom, vh: innerHeight, visible: !w.hidden && r.height > 0, items };
+    }, scroller);
+    const views = [
+      { id: 'upgrades-chassis', tab: 'upgrades', pick: '.screen.s-upgrades .cat-tabs .tab:has-text("Chassis")', scroller: '.screen.s-upgrades .shop-body', want: ['scrap', 'cores'] },
+      { id: 'upgrades-cores', tab: 'upgrades', pick: '.screen.s-upgrades .cat-tabs .tab:has-text("Cores")', scroller: '.screen.s-upgrades .shop-body', want: ['scrap', 'cores'] },
+      { id: 'prestige-layers', tab: 'prestige', pick: '.screen.s-prestige .seg-btn:has-text("Upgrades")', scroller: '.screen.s-prestige', want: ['echoes'] },
+      { id: 'prestige-ascension', tab: 'prestige', pick: '.screen.s-prestige .seg-btn:has-text("Ascension")', scroller: '.screen.s-prestige', want: ['echoes', 'stars'] },
+      { id: 'build', tab: 'build', pick: null, scroller: '.screen.s-build', want: ['cores'] },
+    ];
+    for (const v of views) {
+      await tapTab(v.tab);
+      if (v.pick) { await page.locator(v.pick).first().tap(); await page.waitForTimeout(300); }
+      const m = await probe(v.scroller);
+      await page.waitForTimeout(250);
+      await page.screenshot({ path: `${OUT}/phone-wallet-${vp.id}-${v.id}.png` });
+      const exact = m.items.every((i) => i.value === i.live && i.text === fmtWallet(i.live));
+      check(`wallet ${vp.id} ${v.id}: scrolled to the bottom, the balance stays in view under the strip and matches the live state`,
+        m.visible && (m.room <= 0 || m.scrolled > 0) && m.top >= m.stripBottom - 0.5 && m.bottom <= m.vh && exact && m.items.map((i) => i.c).join() === v.want.join(), m);
+    }
+
+    // a purchase updates the figure at once (and flashes it): tap the cheapest suggested buy
+    await tapTab('upgrades');
+    await page.locator('.screen.s-upgrades .cat-tabs .tab:has-text("Chassis")').first().tap();
+    await page.waitForTimeout(300);
+    await page.evaluate(() => {
+      window.__walletFlash = [];
+      const val = document.querySelector('.wallet-bar .wl-item.scrap .wl-val');
+      new MutationObserver(() => { if (val.classList.contains('flash-spend')) window.__walletFlash.push('spend'); }).observe(val, { attributes: true, attributeFilter: ['class'] });
+    });
+    const before = await probe('.screen.s-upgrades .shop-body');
+    await page.locator('.screen.s-upgrades .quick-row:not(.slots) .btn.chip.quick').first().tap();
+    await page.waitForTimeout(700);
+    const after = await probe('.screen.s-upgrades .shop-body');
+    const flashed = await page.evaluate(() => window.__walletFlash.length > 0);
+    const reduced = await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const s0 = before.items.find((i) => i.c === 'scrap'), s1 = after.items.find((i) => i.c === 'scrap');
+    check(`wallet ${vp.id}: a purchase lowers the Scrap figure to the live remainder (flashing it)`, s1.value < s0.value && s1.text !== s0.text && s1.value === s1.live && s1.text === fmtWallet(s1.live) && (flashed || reduced), { before: s0, after: s1, flashed });
+
+    // a dialog that spends shows the balance in its header
+    await page.evaluate(() => window.__citadel.game.ui.shop.refitPicker(0));
+    await page.waitForTimeout(400);
+    const chip = await page.evaluate(() => {
+      const c = document.querySelector('.modal-card .modal-head .wallet-chip'); const ui = window.__citadel.game.ui.ctx.state();
+      return c ? { text: c.innerText.replace(/\s+/g, ' ').trim(), cores: ui.run.cores } : null;
+    });
+    await page.screenshot({ path: `${OUT}/phone-wallet-${vp.id}-modal-refit.png` });
+    check(`wallet ${vp.id}: the Refit dialog says how many Cores you have`, !!chip && chip.text === `You have ${fmtWallet(chip.cores)} Core${chip.cores === 1 ? '' : 's'}`, chip);
+    await page.keyboard.press('Escape');
+    check(`wallet ${vp.id}: zero console errors`, errors.length === 0, errors);
+    await ctx.close();
+  }
+}

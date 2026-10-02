@@ -28,6 +28,18 @@ body:is(.shell-phone) .wave-sub { max-width: 100%; }
 .res-val { font-size: 16px; font-weight: 700; }
 .res-rate { font-size: 14px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .res-rate:empty { display: none; }
+/* Quartermaster bank chip (hud.ts qmBankChip): smaller and dimmer than the player's Scrap, so the wallet stays the headline */
+.res-item.qm-bank-chip { gap: 3px; padding: 1px 5px; border-radius: 999px; background: var(--bg-3); }
+.res-item.qm-bank-chip .res-ico { color: var(--scrap); opacity: 0.8; width: 14px; height: 14px; }
+.res-item.qm-bank-chip .res-val { font-size: 14px; font-weight: 600; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+/* phones: a tighter chip and gap; it gives way to a boss name (which must never truncate) and below 360 px */
+@media (max-width: 400px) {
+  .res:has(.qm-bank-chip:not([hidden])) { gap: 7px; }
+  .res-item.qm-bank-chip { padding: 1px 4px; gap: 2px; }
+  .res-item.qm-bank-chip .res-val { font-size: 13px; }
+  .topbar.boss-wave .res-item.qm-bank-chip { display: none; }
+}
+@media (max-width: 359px) { .res-item.qm-bank-chip { display: none; } }
 
 .tb-bars { gap: 8px; }
 .tb-bars .bar { height: 20px; }

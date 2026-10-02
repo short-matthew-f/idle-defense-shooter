@@ -36,6 +36,8 @@ const P: Record<string, string> = {
   ascension: '<path d="M12 2.8l2.7 6 6.5.6-4.9 4.3 1.5 6.4L12 16.8l-5.8 3.3 1.5-6.4-4.9-4.3 6.5-.6z"/>',
   inspector: '<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l6 6"/>',
   blueprint: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>',
+  /** Quartermaster bank (a small safe). */
+  bank: '<rect x="3.5" y="4" width="17" height="14.5" rx="2"/><circle cx="12" cy="11.25" r="3.4"/><path d="M12 7.85v1.5M12 13.15v1.5M8.6 11.25h1.5M13.9 11.25h1.5M7 18.5v2M17 18.5v2"/>',
   shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
   heart: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" fill="currentColor" stroke="none"/>',
   bolt: '<path d="M13 2L5 13.5h6L10 22l9-12h-6z" fill="currentColor" stroke="none"/>',

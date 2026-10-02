@@ -25,6 +25,7 @@ import { doctrineFork, forkKey } from './doctrine';
 import { prefs, setPref } from './prefs';
 import { POOL_COMPLETE_AT, STARTER_IDS, contentPool, newInPool, poolShop, type ContentPool, type Features } from './progression';
 import { QuartermasterPanel } from './quartermaster';
+import { walletChip } from './wallet';
 import type { UiCtx } from './ctx';
 
 export type Category = 'chassis' | 'elements' | 'hardpoints' | 'cross' | 'cores';
@@ -145,6 +146,8 @@ export class Shop {
   private pendingBulk: { where: string | null; until: number; events: SimEvent[]; timer: number } | null = null;
   /** Bring the Upgrades screen forward when a chip, the death card or the Build screen jumps to a tree (GameUi wires it). */
   onReveal: (() => void) | null = null;
+  /** The category on show changed (GameUi: the wallet bar follows it). */
+  onViewChange: (() => void) | null = null;
   private readonly sortBtn: HTMLButtonElement;
   private readonly catBtns = new Map<Category, { b: HTMLButtonElement; n: HTMLSpanElement }>();
   private treeBtns = new Map<string, { b: HTMLButtonElement; n: HTMLSpanElement }>();
@@ -342,6 +345,7 @@ export class Shop {
     this.chipKey = ''; this.viewKey = '';
     if (this.ui) this.update(this.ui);
     this.body.scrollTop = 0;
+    this.onViewChange?.();
   }
   setTree(t: string): void {
     if (t === this.tree) return;
@@ -730,14 +734,14 @@ export class Shop {
     const old = ui.build.hardpoints[slot];
     if (!old) return;
     const body = h('div', { class: 'slot-picker' }, h('p', { class: 'note', text: `Replace ${TREE_LABEL[old]} for ${REFIT_CORES} Cores. You get back 60% of the Scrap spent in ${TREE_LABEL[old]}; its ranks, Doctrine and Linkages are lost.` }));
-    const m = openModal({ title: `Refit slot ${slot + 1}`, body });
+    const m = openModal({ title: `Refit slot ${slot + 1}`, body, wallet: walletChip(['cores'], ui) });
     const pool = this.pool(ui);   // a Refit offers what a mount would (progression.ts content pool)
     for (const hp of HARDPOINTS.filter((x) => pool.hardpoints.includes(x) && !ui.build.hardpoints.includes(x) && !ui.mountBlocked?.[x])) {
       body.appendChild(h('div', { class: 'pick-card' },
         h('div', { class: 'pick-main' }, h('div', { class: 'pick-name', text: TREE_LABEL[hp] }), h('p', { class: 'pick-blurb', text: HARDPOINT_BLURB[hp] })),
         button('Refit', async () => {
           m.close();
-          if (await confirmDialog('Confirm Refit', `${TREE_LABEL[old]} → ${TREE_LABEL[hp]} for ${REFIT_CORES} Cores.`, 'Refit', { danger: true })) {
+          if (await confirmDialog('Confirm Refit', `${TREE_LABEL[old]} → ${TREE_LABEL[hp]} for ${REFIT_CORES} Cores.`, 'Refit', { danger: true, wallet: walletChip(['cores'], this.ctx.state()) })) {
             this.ctx.host.send({ type: 'refit_hardpoint', slot, system: hp });
             this.tree = hp;
           }

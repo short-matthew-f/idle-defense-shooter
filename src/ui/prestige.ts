@@ -14,6 +14,7 @@ import { confirmDialog, openModal } from './modal';
 import type { UiCtx } from './ctx';
 import { openCeremony, useCeremony } from './ceremony';
 import { blueprintInPool } from './progression';
+import { echoesAfter, walletChip } from './wallet';
 
 type PrestigeCmd = Extract<Command, { type: 'prestige' }>;
 
@@ -106,7 +107,7 @@ export function openPrestige(ctx: UiCtx): void {
   }
 
   const go = button([icon('prestige'), 'Prestige'], async () => {
-    const ok = await confirmDialog('Prestige now?', `You gain ${fmtNum(echoes)} Echoes and start over at wave 1 as a ${FRAME_BY_ID.get(frame)?.name ?? frame}.`, 'Prestige', { danger: echoes <= 0 });
+    const ok = await confirmDialog('Prestige now?', `You gain ${fmtNum(echoes)} Echoes and start over at wave 1 as a ${FRAME_BY_ID.get(frame)?.name ?? frame}.`, 'Prestige', { danger: echoes <= 0, wallet: walletChip(['echoes'], ctx.state(), echoesAfter(echoes)) });
     if (!ok) return;
     const cmd: PrestigeCmd = { type: 'prestige', frame };
     if (blueprint !== undefined) cmd.blueprint = blueprint;
@@ -117,7 +118,7 @@ export function openPrestige(ctx: UiCtx): void {
     ctx.host.saveNow();
     m.close();
   }, { class: 'btn primary wide' });
-  const m = openModal({ title: 'Prestige', body: h('div', { class: 'prestige' }, ...sections), footer: go, variant: 'wide', className: 'prestige-modal' });
+  const m = openModal({ title: 'Prestige', body: h('div', { class: 'prestige' }, ...sections), footer: go, variant: 'wide', className: 'prestige-modal', wallet: walletChip(['echoes'], ui, echoesAfter(echoes)) });
 }
 
 /** Hardpoint / attunement caps of a Frame for this player (Expanded Frame, Third Attunement; at most four systems). */

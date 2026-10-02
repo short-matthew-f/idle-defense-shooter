@@ -319,7 +319,7 @@ export class ProgressionSystem implements System {
     const f = w.stats.get('prestige.checkpoint_dividend');
     if (f > 0 && w.waveScrap > 0) {
       const bonus = w.waveScrap * f;
-      w.addScrap(bonus);
+      w.addScrap(bonus, false);   // a Prestige perk: never split with the Quartermaster's bank (docs/QUARTERMASTER.md)
       w.emit(Ev.ScrapGain, 'checkpoint_dividend', wave, bonus, 0, 0, cause);
     }
     sampleForecast(w);

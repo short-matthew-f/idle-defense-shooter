@@ -20,6 +20,7 @@ src/sim/          Pure TypeScript simulation. NO DOM, NO Math.random/Date/perfor
   run/            Attempt/wave/checkpoint state machine, Push/Patrol, Prestige/Ascension,
                   commands.ts (dispatch) + validate.ts (Command shape validation)  [WP1, WP8]
   directives/     Directive engine, Targeting Profiles, Upgrade Queue        [WP9]
+                  + Quartermaster (its own bank fed by World.addScrap; docs/QUARTERMASTER.md)
   save/           Serialization, MIGRATIONS table, save sanitization         [WP1, WP7]
   index.ts        `export class Sim implements ISim`                          [WP1]
 src/worker/       Web Worker wrapper around Sim (protocol in core/types.ts ToWorker/FromWorker) [WP1]
@@ -131,7 +132,7 @@ Three player-only Commands, never an error (a tap that finds nothing is ignored,
 after the spatial hash is rebuilt. The system owns a private `Prng` (reseeded per attempt from the Prestige seed and the
 attempt count), so salvage rolls and assist crits never perturb the combat stream. Salvage values read
 `WorldImpl.killScrap[i]` (the Scrap `finishKill` just paid for enemy i, set before the onKill hooks, so nested kills
-cannot overwrite it) and pay through `World.addScrap`. Events: `Ev.Assist` / `Ev.Overcharge` are the causes of their
+cannot overwrite it) and pay through `World.addScrap` (so the Quartermaster's share goes to its bank, like kill Scrap). Events: `Ev.Assist` / `Ev.Overcharge` are the causes of their
 Hits (srcTag `assist` / `overcharge`, source `ability`); `Kill → Ev.SalvageDrop → Ev.SalvageCollect` (src `salvage.tap` /
 `salvage.passive`). `UiState.active` carries the cooldown, chain and meter. Crates are drawn as layer-7 Diamonds with
 `aux1 = SALVAGE_MARK`; `app/pick.ts nearestCrate` and `app/overlay.ts` find them by that mark (like the reticle).

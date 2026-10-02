@@ -72,3 +72,5 @@ Balance history and current acceptance status: [`docs/BALANCE.md`](docs/BALANCE.
 
 How a new player meets the game (the unlock ladder, which weapons and elements each Prestige offers, the
 first-Prestige ceremony, the Quartermaster, Unlock everything, and how to test it): [`docs/ONBOARDING.md`](docs/ONBOARDING.md).
+The Quartermaster (from the first Prestige: it banks a share of incoming Scrap and buys stat ranks only from that bank):
+[`docs/QUARTERMASTER.md`](docs/QUARTERMASTER.md).

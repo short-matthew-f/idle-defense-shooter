@@ -24,7 +24,6 @@ interface Row { def: PrestigeNodeDef; el: HTMLElement; rank: HTMLElement; btn: H
 
 export class PrestigeShop {
   shown = false;
-  private readonly echoes = h('span', { class: 'echo-val' });
   private readonly rows: Row[] = [];
   private readonly layerEls: { el: HTMLElement; lock: HTMLElement; wave: number }[] = [];
   /** First-Prestige guide (ceremony.ts): an inline coach line; the affordable Layer I picks get the class `guide`. */
@@ -36,7 +35,8 @@ export class PrestigeShop {
     this.guide = h('div', { class: 'coach-banner ps-guide', attrs: { role: 'status', 'aria-live': 'polite' } },
       h('span', { class: 'coach-ico' }, icon('echo', 'ico')), h('span', { class: 'coach-text', text: ECHO_GUIDE_TEXT }), ok);
     this.guide.hidden = true;
-    this.el = h('div', { class: 'pshop' }, this.guide, h('div', { class: 'pr-gain' }, icon('echo', 'ico'), this.echoes, h('span', { class: 'dim', text: ' Echoes' })));
+    // the Echoes balance is in the wallet bar pinned above the screen (wallet.ts)
+    this.el = h('div', { class: 'pshop' }, this.guide);
     for (const L of LAYERS) {
       const lock = h('p', { class: 'node-lock', text: `Opens when your deepest-ever wave reaches ${L.wave}.` });
       const sec = h('section', { class: 'player' }, h('h3', { class: 'sec-title' }, L.name, h('span', { class: 'sec-sub', text: L.blurb })), lock);
@@ -63,7 +63,6 @@ export class PrestigeShop {
   update(ui: UiState): void {
     if (!this.isOpen) return;
     const m = ui.meta;
-    text(this.echoes, fmtNum(m.echoes));
     for (const L of this.layerEls) { const open = m.deepestEver >= L.wave; show(L.lock, !open); L.el.classList.toggle('closed', !open); }
     // guided first Echo spend: never buys, only points (ends on Got it, or once nothing in Layer I is affordable)
     if (echoGuideOn() && (echoGuideDone(ui) || this.ctx.features().unlockAll)) { endEchoGuide(); markCoachSeen(['echoes']); }

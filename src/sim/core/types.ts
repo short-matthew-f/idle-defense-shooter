@@ -314,20 +314,21 @@ export interface RunState {
    */
   boonSpent: BoonId[];
   /**
-   * Quartermaster addition (directives/quartermaster.ts): this Prestige's auto-buy bookkeeping, created lazily on
-   * the first pass. Not saved (a load starts a fresh allowance from the Scrap on hand).
+   * Quartermaster addition (directives/quartermaster.ts): this Prestige's bank and auto-buy bookkeeping, created
+   * lazily. Saved with the run (RunSave.quartermaster), so a reload never loses the bank.
    */
   quartermaster?: QuartermasterRun;
 }
 
-/** Quartermaster run bookkeeping (see RunState.quartermaster). */
+/** Quartermaster run state (see RunState.quartermaster). */
 export interface QuartermasterRun {
-  /** Scrap the Quartermaster may still spend: (100 − reserve)% of the Scrap on hand when it started, plus of every kill's Scrap since. */
-  allowance: number;
-  /** World.scrapEarned at the last pass (income since then feeds the allowance). */
-  earnedMark: number;
-  /** Whether it was switched on at the last pass (switching on, or changing settings, restarts the allowance). */
-  active: boolean;
+  /**
+   * The Quartermaster's own bank: share% of every World.addScrap income lands here instead of run.scrap. It spends
+   * only this. Turning it off, disabling every tree, or going idle releases it into run.scrap (no Scrap is ever lost).
+   */
+  bank: number;
+  /** True while no enabled tree has anything it could ever buy (all maxed, locked or hidden): no diversion, bank released. */
+  idle: boolean;
   /** Ranks bought per tree this Prestige, and the Scrap they cost. */
   bought: Partial<Record<TreeId, number>>;
   spent: number;
@@ -336,8 +337,8 @@ export interface QuartermasterRun {
 /** Quartermaster settings (MetaState.settings.quartermaster; `set_quartermaster` patches them). */
 export interface QuartermasterSettings {
   on: boolean;
-  /** Percent of Scrap kept for the player: 0, 25, 50 or 75. */
-  reserve: number;
+  /** Percent of INCOMING Scrap (World.addScrap) sent to the Quartermaster's bank: 10, 25, 50, 75 or 100. */
+  share: number;
   /** Per-tree switches; a tree missing here is on. */
   trees: Partial<Record<TreeId, boolean>>;
   /** Tree priority order (earlier trees buy first each round); [] = cheapest next rank first. */
@@ -479,9 +480,10 @@ export type Command =
   | { type: 'delete_blueprint'; index: number }
   /**
    * Quartermaster addition: patch the Quartermaster settings (only the fields given change). Rejected before the
-   * first Prestige. `trees` switches single trees on/off; `order` replaces the priority order ([] = cheapest first).
+   * first Prestige. `share` is the percent of incoming Scrap sent to its bank (10/25/50/75/100). `trees` switches
+   * single trees on/off; `order` replaces the priority order ([] = cheapest first).
    */
-  | { type: 'set_quartermaster'; on?: boolean; reserve?: number; trees?: Partial<Record<TreeId, boolean>>; order?: TreeId[] }
+  | { type: 'set_quartermaster'; on?: boolean; share?: number; trees?: Partial<Record<TreeId, boolean>>; order?: TreeId[] }
   /**
    * Active-edge additions (systems/active.ts, docs/ACTIVE.md; player-only, never an error: a tap that finds nothing,
    * lands inside the cooldown or outside combat is ignored). `tap_assist`: a free bonus shot at the live enemy
@@ -509,8 +511,9 @@ export const enum Ev {
   /** Boons additions: an offer opened (src 'start' | 'boss' | 'reroll', a = offer seq, b = rerolls) / resolved (src = boon id or 'decline', a = active count). */
   BoonOffer, BoonPicked,
   /**
-   * Quartermaster addition: an auto-buy pass that is about to buy (src 'quartermaster', a = Scrap on hand, b = its
-   * allowance, both floored). The pass's Purchase events name it as their cause and carry data { via: 'quartermaster' }.
+   * Quartermaster addition: an auto-buy pass that is about to buy (src 'quartermaster', a = its bank, floored; b = its
+   * share %). The pass's Purchase events name it as their cause and carry data { via: 'quartermaster' }. Its bank
+   * released into the player's Scrap (switched off, every tree off, or idle): src 'quartermaster.release', a = Scrap.
    */
   Quartermaster,
   /**
@@ -695,7 +698,11 @@ export interface ActiveUi {
 }
 
 export interface QuartermasterUi {
-  unlocked: boolean; on: boolean; reserve: number;
+  unlocked: boolean; on: boolean;
+  /** Percent of new Scrap that goes to its bank. */
+  share: number;
+  /** Scrap in its bank (spent only by it), and whether it is idle (nothing left to buy: no diversion). */
+  bank: number; idle: boolean;
   trees: { tree: TreeId; on: boolean; bought: number }[];
   /** The saved priority order ([] = cheapest next rank first). */
   order: TreeId[];
@@ -734,8 +741,11 @@ export interface DamageShare { bySource: Record<string, number>; total: number; 
 // ---------------------------------------------------------------------------
 // Save state
 // ---------------------------------------------------------------------------
-/** 2: Quartermaster settings (meta.settings.quartermaster; v1 saves migrate with it off). */
-export const SAVE_VERSION = 2;
+/**
+ * 2: Quartermaster settings (meta.settings.quartermaster; v1 saves migrate with it off).
+ * 3: Quartermaster bank: settings.quartermaster.reserve → share; RunSave.quartermaster (bank) is saved.
+ */
+export const SAVE_VERSION = 3;
 export interface SaveState {
   version: number;
   savedAtMs: number;             // wall clock, main-thread only
@@ -768,6 +778,8 @@ export interface RunSave {
    */
   boonOffer?: BoonId[]; boonOfferWave?: number; boonOfferKind?: 'start' | 'boss'; boonOfferSeq?: number; boonRerolls?: number;
   boonQueue?: number[]; boonsSeenFirst?: boolean;
+  /** Quartermaster (save v3): its bank and this Prestige's bookkeeping (see RunState.quartermaster). Optional. */
+  quartermaster?: QuartermasterRun;
 }
 
 // ---------------------------------------------------------------------------

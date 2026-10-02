@@ -1,0 +1,39 @@
+/*
+ * Wallet (src/ui/wallet.ts): the balances a screen spends, pinned in the shell's .screens column (never inside a
+ * scroller), and the "You have …" line in the header of a dialog that spends.
+ */
+.wallet-bar {
+  flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; min-height: 32px;
+  margin: 0 var(--gutter) 6px; padding: 0 12px; border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-2) 70%, transparent); border: 1px solid var(--line);
+}
+/* desktop side panel: the first thing under its tab row */
+body.shell-desktop .wallet-bar { margin: 10px var(--gutter) 4px; }
+
+.wl-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.wl-ico { width: 18px; height: 18px; }
+.wl-item.scrap .wl-ico { color: var(--scrap); }
+.wl-item.cores .wl-ico { color: var(--cores); }
+.wl-item.echoes .wl-ico { color: var(--echo); }
+.wl-item.stars .wl-ico { color: var(--star); }
+.wl-val { font-size: 17px; font-weight: 800; letter-spacing: -0.01em; color: var(--text); border-radius: 4px; }
+.wl-name { font-size: 14px; font-weight: 600; color: var(--text-dim); }
+.wl-bank { font-size: 14px; font-weight: 700; color: var(--text-dim); }
+.wl-bank::before { content: '·'; margin-right: 6px; color: var(--text-faint); }
+@media (max-width: 359px) { .wallet-bar .wl-name { display: none; } }
+
+/* a change: green on a gain, amber on a spend (theme.css drops animations under reduced motion; wallet.ts skips them for the in-game setting) */
+.wl-val.flash-gain { animation: wl-gain 0.65s ease-out; }
+.wl-val.flash-spend { animation: wl-spend 0.65s ease-out; }
+@keyframes wl-gain { 0%, 35% { color: var(--ok); background: color-mix(in srgb, var(--ok) 18%, transparent); } 100% { color: var(--text); background: transparent; } }
+@keyframes wl-spend { 0%, 35% { color: var(--warn); background: color-mix(in srgb, var(--warn) 18%, transparent); } 100% { color: var(--text); background: transparent; } }
+
+/* the status strip drops its Scrap figure while the wallet under it shows Scrap: one place for the number */
+body.wallet-scrap .status-strip .ss-res { display: none; }
+
+/* dialogs: "You have ◆ 12 Cores" under the title */
+.wallet-chip { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; margin: 2px 0 0; font-size: 14px; color: var(--text-dim); }
+.wallet-chip .wl-val { font-size: 15px; }
+.wallet-chip .wl-name { color: var(--text-dim); }
+.wc-lead { font-weight: 600; }
+.wc-after { font-weight: 600; color: var(--text-dim); }

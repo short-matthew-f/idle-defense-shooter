@@ -22,3 +22,14 @@
 .qm-tree.off .qm-tree-name { color: var(--text-dim); }
 .qm-count { font-size: 14px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .qm-card.off .qm-seg, .qm-card.off .qm-trees { opacity: 0.7; }
+/* Bank: the Quartermaster's own Scrap (it spends only this) */
+.qm-bank { display: flex; align-items: center; gap: 10px; min-height: var(--touch); padding: 6px 10px; background: var(--bg-3); border: 1px solid var(--line); border-radius: 12px; }
+.qm-bank-ico { width: 26px; height: 26px; flex: none; color: var(--scrap); }
+.qm-bank-stack { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+.qm-bank-label { font-size: 14px; font-weight: 600; color: var(--text-dim); }
+.qm-bank-line { display: flex; align-items: baseline; gap: 8px; }
+.qm-bank-val { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.qm-bank-rate { font-size: 14px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.qm-bank-rate:empty { display: none; }
+.qm-card.off .qm-bank, .qm-card.idle .qm-bank { opacity: 0.7; }
+.qm-card.idle .qm-bank-note { color: var(--ok); font-weight: 600; }

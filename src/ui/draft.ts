@@ -12,6 +12,7 @@ import { ANOMALY_BY_ID, TREE_LABEL } from './content';
 import { openModal, type ModalHandle } from './modal';
 import { titleCase } from './format';
 import type { UiCtx } from './ctx';
+import { walletChip } from './wallet';
 
 export const RARITY_LABEL: Record<AnomalyRarity, string> = { common: 'Common', rare: 'Rare', paradox: 'Paradox', cursed: 'Cursed' };
 
@@ -81,7 +82,7 @@ export class DraftModal {
     const body = h('div', { class: 'draft' },
       h('p', { class: 'dim', text: `Anomalies bend the rules for this Prestige. Sockets: ${ui.build.anomalies.length}/${ui.build.anomalySockets}${full ? ' (full: picking replaces one)' : ''}.` }),
       cards, this.note);
-    this.modal = openModal({ title: 'Anomaly draft', body, footer: h('div', { class: 'draft-foot' }, later, reroll, skip), variant: 'wide', className: 'draft-modal',
+    this.modal = openModal({ title: 'Anomaly draft', body, footer: h('div', { class: 'draft-foot' }, later, reroll, skip), variant: 'wide', className: 'draft-modal', wallet: walletChip(['cores'], ui),
       onClose: () => { if (this.modal) { this.modal = null; this.laterKey = this.offers; } } });
   }
 

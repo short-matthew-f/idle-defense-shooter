@@ -16,6 +16,8 @@ export interface ModalOptions {
   /** 'center' (default), 'wide', or 'overlay' (translucent side sheet that keeps the field readable). */
   variant?: 'center' | 'wide' | 'overlay';
   onClose?: () => void;
+  /** A balance line under the title for a dialog that spends ("You have ◆ 12 Cores": wallet.ts walletChip). */
+  wallet?: HTMLElement;
 }
 
 export interface ModalHandle { el: HTMLElement; close(): void; readonly open: boolean; setTitle(t: string): void }
@@ -42,7 +44,7 @@ export function openModal(opts: ModalOptions): ModalHandle {
   const titleEl = h('h2', { class: 'modal-title', text: opts.title });
   const id = `m${Math.random().toString(36).slice(2, 8)}`;
   titleEl.id = id;
-  const head = h('div', { class: 'modal-head' }, titleEl);
+  const head = h('div', { class: 'modal-head' }, opts.wallet ? h('div', { class: 'modal-titles' }, titleEl, opts.wallet) : titleEl);
   let isOpen = true;
   const handle: ModalHandle = {
     el: null as unknown as HTMLElement,
@@ -76,13 +78,13 @@ export function openModal(opts: ModalOptions): ModalHandle {
 }
 
 /** Yes/no confirmation; resolves false on dismiss. */
-export function confirmDialog(title: string, message: string | HTMLElement, confirmLabel = 'Confirm', opts: { danger?: boolean; cancelLabel?: string } = {}): Promise<boolean> {
+export function confirmDialog(title: string, message: string | HTMLElement, confirmLabel = 'Confirm', opts: { danger?: boolean; cancelLabel?: string; wallet?: HTMLElement } = {}): Promise<boolean> {
   return new Promise((resolve) => {
     let result = false;
     const body = typeof message === 'string' ? h('p', { class: 'confirm-msg', text: message }) : message;
     const ok = button(confirmLabel, () => { result = true; m.close(); }, { class: `btn ${opts.danger ? 'danger' : 'primary'}` });
     const cancel = button(opts.cancelLabel ?? 'Cancel', () => m.close(), { class: 'btn' });
-    const m = openModal({ title, body, footer: h('div', { class: 'row end gap' }, cancel, ok), className: 'confirm', onClose: () => resolve(result) });
+    const m = openModal({ title, body, footer: h('div', { class: 'row end gap' }, cancel, ok), className: 'confirm', wallet: opts.wallet, onClose: () => resolve(result) });
     cancel.focus();
   });
 }

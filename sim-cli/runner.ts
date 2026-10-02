@@ -27,6 +27,7 @@ import { BOON_CAP } from '../src/sim/run/boons';
 import { echoesFor, nodeCost } from '../src/sim/economy/curves';
 import { nodeInfo } from '../src/sim/core/content';
 import { PRESTIGE_NODES } from '../src/sim/data/index';
+import { QM_DEFAULT_SHARE } from '../src/sim/directives/quartermaster';
 import { makeAgent } from './agents/index';
 import { makeCtx, totalSpent, type Agent, type AgentCtx } from './agents/base';
 import { makePolicy, type Policy } from './policies';
@@ -231,9 +232,10 @@ export class Climber {
 
   /** --quartermaster: switch it on once it unlocks (the agent then leaves the stat ranks it covers to it). */
   private quartermasterOn(): void {
-    const err = applyCommand(this.sim.machine, { type: 'set_quartermaster', on: true, reserve: this.cfg.quartermasterReserve ?? 25 });
+    const share = this.cfg.quartermasterShare ?? QM_DEFAULT_SHARE;
+    const err = applyCommand(this.sim.machine, { type: 'set_quartermaster', on: true, share });
     if (err) { this.notes.push(`set_quartermaster rejected: ${err}`); this.cfg.quartermaster = false; }
-    else this.notes.push(`quartermaster on (reserve ${this.cfg.quartermasterReserve ?? 25}%) at wave ${this.sim.world.run.wave}`);
+    else this.notes.push(`quartermaster on (share ${share}%) at wave ${this.sim.world.run.wave}`);
   }
 
   /** The recommendation is "Prestige now": the depth reached when it fires. */
@@ -280,12 +282,9 @@ export class Climber {
       }
       if ((cfg.forceBoon || cfg.noBoons) && run.boonOffer && run.boonOffer.length > 0) this.forceBoonOffer();
       if (cfg.quartermaster && w.meta.prestigeCount >= 1 && !w.meta.settings.quartermaster?.on) this.quartermasterOn();
-      // --quartermaster: the agent plays the player who makes the choices from the reserve and leaves the
-      // Quartermaster's allowance alone (else an instant-buying agent would spend it every tick before a pass).
-      const qmHold = cfg.quartermaster && w.meta.settings.quartermaster?.on ? Math.min(run.scrap, run.quartermaster?.allowance ?? 0) : 0;
-      if (qmHold > 0) run.scrap -= qmHold;
+      // --quartermaster: the agent spends only run.scrap (its share of income); the Quartermaster's bank is separate
+      // (run.quartermaster.bank) and buys the stat ranks the agent's shop leaves out (agents/base.ts).
       agent.tick(ctx);
-      if (qmHold > 0) run.scrap += qmHold;
       policy.tick(sim);
       sim.step();
       this.playSeconds += 1 / (TICK_RATE * (w.run.speedMultiplier || 1));
@@ -326,7 +325,7 @@ export class Climber {
       casts: this.casts, tells: this.tells, counters: Math.max(this.counters, this.bossCounters), designations: policy.stats.designations,
       noops: { ...policy.stats.noops },
       finalHash: sim.events.hash(),
-      ...(w.run.quartermaster ? { quartermaster: { ranks: Object.values(w.run.quartermaster.bought).reduce((a, n) => a + (n ?? 0), 0), scrap: Math.round(w.run.quartermaster.spent) } } : {}),
+      ...(w.run.quartermaster ? { quartermaster: { ranks: Object.values(w.run.quartermaster.bought).reduce((a, n) => a + (n ?? 0), 0), scrap: Math.round(w.run.quartermaster.spent), bank: Math.round(w.run.quartermaster.bank) } } : {}),
       notes: this.notes,
     };
     this.result = result;

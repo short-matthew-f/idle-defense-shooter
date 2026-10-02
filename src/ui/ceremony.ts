@@ -18,6 +18,7 @@ import { openModal } from './modal';
 import { prefs, setPref } from './prefs';
 import type { UiCtx } from './ctx';
 import type { CoachExtra } from './coach';
+import { echoesAfter, walletChip } from './wallet';
 
 export const CEREMONY_TITLE = 'Your first Prestige';
 export const CEREMONY_RESETS = 'Scrap, upgrades and the wave reset (this run\'s Cores and Anomalies too): you start again at wave 1.';
@@ -100,7 +101,8 @@ export function openCeremony(ctx: UiCtx): void {
     m.close();
     ctx.open('prestige_shop');
   }, { class: 'btn primary wide cer-go' });
-  const m = openModal({ title: CEREMONY_TITLE, body, footer: go, className: 'ceremony-modal' });
+  const m = openModal({ title: CEREMONY_TITLE, body, footer: go, className: 'ceremony-modal',
+    wallet: walletChip(['echoes'], ui, echoesAfter(fx.echoes)) });
 }
 
 // ---------------------------------------------------------------- post-Prestige coach lines (index.ts feeds CoachBanner)
@@ -118,4 +120,4 @@ export function newContentCoach(ids: readonly string[]): CoachExtra | null {
 }
 
 export const QM_COACH_ID = 'qm-on';
-export const QM_COACH_TEXT = 'Quartermaster: it buys your stat upgrades for you, never your choices.';
+export const QM_COACH_TEXT = 'Quartermaster: it banks a share of your new Scrap and buys your stat upgrades with it, never your choices.';

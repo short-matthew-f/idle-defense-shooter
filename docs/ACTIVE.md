@@ -36,8 +36,9 @@ Details the sim enforces (`systems/active.ts`):
 - **Scrap path**: a crate's value is a multiple of `World.killScrap[i]`, the Scrap the kill itself paid, so it already
   carries the first-clear ×3 (Strip Mine ×4/×5), `economy.scrap_mul` (Reclamation, Prestige, Constellation), Boss
   Scavenging and clump merges; no multiplier is applied twice. The payout goes through `World.addScrap`, the kill
-  Scrap path: `run.scrap`, `scrapEarned` (Forecast, rates) and `waveScrap` (the wave's `ScrapGain` event and the
-  Patrol / offline estimate).
+  Scrap path: `run.scrap` (minus the Quartermaster's share, which goes to its bank while it is on),
+  `scrapEarned` (Forecast, rates) and `waveScrap` (the wave's `ScrapGain` event and the Patrol / offline estimate),
+  both gross.
 - **Overcharge**: a 0–100 meter, separate from Command Energy (it never costs CE). +1 per landed primary hit, at most
   2/s from shots (a token bucket, so late-game fire rates do not trivialise it), +2 per assist hit. It never decays and
   empties on death, like CE. Charging needs a full meter, combat, not Blackout. The hold is counted in real seconds

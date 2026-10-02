@@ -106,15 +106,20 @@ names the wall.
 The Quartermaster unlocks at the first Prestige (sim rule, `docs/QUARTERMASTER.md`) and starts **off**.
 
 - **Card:** at the top of Upgrades → Chassis and Upgrades → Hardpoints (the trees it buys in), shown once the
-  `quartermaster` feature is on. Before the first Prestige, Unlock everything shows it as a one-line teaser.
-- **Offer:** after the first Prestige, a coach line: "Quartermaster: it buys your stat upgrades for you, never your
-  choices." Its **Turn on** button sends `set_quartermaster {on: true}`. Once the Quartermaster has been on, the line
-  is never offered again.
+  `quartermaster` feature is on. Before the first Prestige, Unlock everything shows it as a one-line teaser. It shows
+  the Quartermaster's **Bank** (its own Scrap, with what flows in per second), the **Share of income** control
+  (10 / 25 / 50 / 75 / 100%, default 50%), the per-tree switches, and "Nothing left to buy: all your income is
+  yours" while it is idle.
+- **HUD chip:** while it is on and its bank holds Scrap, a small bank chip sits beside the Scrap counter
+  (`qmBankChip`, hud.ts), so the player always sees where that share of income went. Hidden below 360 px wide.
+- **Offer:** after the first Prestige, a coach line: "Quartermaster: it banks a share of your new Scrap and buys your
+  stat upgrades with it, never your choices." Its **Turn on** button sends `set_quartermaster {on: true}` (the saved
+  share, 50% by default). Once the Quartermaster has been on, the line is never offered again.
 - **Not player feedback:** its buys are `Purchase` events with `data.via === 'quartermaster'`. They do not count
   toward the first-purchase coach (`Shop.noteBuy`) or the bulk summary toast (`Shop.notePurchases`, `bulkToast`), and
   they never play the purchase sound. The audio director plays at most one quiet low tick (`QM_TICK_LEVEL` 0.25)
   every `QM_TICK_SECONDS` (4 s).
-- **Inspector:** the pass event shows as "Quartermaster" (`EV_NAMES`).
+- **Inspector:** the pass event (and the release of its bank) shows as "Quartermaster" (`EV_NAMES`).
 
 ## Unlock everything
 
