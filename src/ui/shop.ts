@@ -676,6 +676,8 @@ export class Shop {
       b.dataset.hint = 'slot-chip';   // pointer hints (hints.ts): the empty slot, then its picker
       attr(b, 'aria-expanded', on ? 'true' : 'false');
       rows.push(b);
+      // the picker opens right under its row (not down in the list, where the Quartermaster card could push it off screen)
+      if (on) rows.push(this.slotPicker(isEl, s.slot));
     }
     if (fork) {
       const name = TREE_LABEL[fork as TreeId] ?? fork;
@@ -729,9 +731,7 @@ export class Shop {
         return out;
       }
       if (chip.startsWith('slot:')) {
-        const slot = Number(chip.slice(5));
-        out.push({ t: 'el', key: `pick:${this.cat}:${slot}:${(isEl ? ui.build.attunements : ui.build.hardpoints).join(',')}`, make: () => this.slotPicker(isEl, slot) });
-        return out;
+        return out;   // the picker sits under the slot's decision row (updateDecisions)
       }
     }
 
