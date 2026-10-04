@@ -47,7 +47,9 @@ describe('Gravitics', () => {
     const sim = hpSim(['gravitics']);
     rankTree(sim, 'gravitics', 'collapse');
     const w = sim.world;
-    w.stats.override('gravitics.wells', 1); w.rebuildStats();
+    w.stats.override('gravitics.wells', 1);
+    w.stats.override('ballistics.range', 600);   // outward flings stop at 85% of the primary's range (core/forces.ts): room for the outer ring
+    w.rebuildStats();
     cluster(sim, 250, 0, 9);
     const R = w.stats.get('gravitics.radius');
     for (let k = 0; k < 24; k++) { const a = (k / 24) * 6.2832; w.spawnEnemy('grunt', 250 + Math.cos(a) * (R + 22), Math.sin(a) * (R + 22), { hpScale: 1e5 }); }

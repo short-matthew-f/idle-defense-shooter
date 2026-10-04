@@ -1,6 +1,6 @@
 /**
  * Event feed: small transient toasts (Checkpoint, Core drop, Anomaly draft ready, Counter scored,
- * Codex discovery, Prestige recommended). A queue: at most `limit` toasts show at once (4, or as many as the overlay
+ * Codex discovery, Prestige recommended, a stalled wave's Rush). A queue: at most `limit` toasts show at once (4, or as many as the overlay
  * lane has room for on Battle: lanes.ts); the rest wait their turn, and a toast's time on screen only runs while it
  * shows. Announced politely to screen readers.
  */
@@ -21,6 +21,8 @@ export const FEED_MAX_SHOWN = 4;
 export const FEED_MAX_QUEUED = 6;
 /** A toast that waited this long without ever showing is stale and dropped (ms). */
 export const FEED_MAX_WAIT_MS = 20000;
+/** "Stragglers rush the tower" (Ev.Rush, run/stall.ts) shows at most once per this long (ms). */
+export const RUSH_TOAST_GAP_MS = 60000;
 
 interface Item { el: HTMLElement; left: number; queuedAt: number; shownAt: number; timer: number; leaving: boolean }
 
@@ -34,6 +36,7 @@ export class Feed {
   private lastRec = false;
   private lastGate = false;
   private lastSlots: { hp: number; at: number } | null = null;
+  private lastRush = -Infinity;
 
   toast(msg: string, kind: ToastKind = 'info', ms = 3600): void {
     const t = h('div', { class: `toast t-${kind}` }, icon(ICON[kind], 'ico tiny'), h('span', { text: msg }));
@@ -119,8 +122,17 @@ export class Feed {
       else if (e.type === Ev.BossKilled) this.toast('Boss destroyed', 'good');
       else if (e.type === Ev.Prestige) this.toast('Prestige complete: a new machine begins', 'good');
       else if (e.type === Ev.Ascend) this.toast('Ascension complete', 'good');
+      else if (e.type === Ev.Rush) this.rush();
     }
     if (cores > 0) this.toast(`+${cores} Core${cores > 1 ? 's' : ''}`, 'core');
+  }
+
+  /** Anti-stall Rush (a stalled wave's enemies charge the tower): a subtle, rate-limited note. */
+  private rush(): void {
+    const now = performance.now();
+    if (now - this.lastRush < RUSH_TOAST_GAP_MS) return;
+    this.lastRush = now;
+    this.toast('Stragglers rush the tower', 'info', 2800);
   }
 
   /** State edges: draft ready, Prestige recommended. Slot toasts wait for their category to be revealed (progression.ts). */

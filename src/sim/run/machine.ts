@@ -21,6 +21,8 @@
  * start. Once wave 100 is cleared, Push holds at wave 100 in `between` (the Ascend prompt) and Patrol loops
  * waves 96–99; a death or restart returns to the same place.
  * Past the enemy cap, grunt/swarm spawns merge into a Clump (hp summed, clumpCount).
+ * Anti-stall: `stall` (run/stall.ts) watches every combat tick for progress; a wave with none for wave.stall_seconds
+ * makes its enemies Rush the tower (Ev.Rush), so every wave ends.
  */
 import type { WorldImpl } from '../core/world-impl';
 import type { SpawnEntry } from '../core/types';
@@ -39,6 +41,7 @@ import { ASCENSION_WAVE, deepWavesUnlocked } from '../economy/ascension';
 import { trialWave } from './trials';                 // WP8
 import { frontierWave, trialHas } from '../economy/prestige';       // WP8; frontierWave: onboarding pass
 import { ARENA_RADIUS } from '../core/types';
+import { StallWatch } from './stall';                // anti-stall invariant
 
 export const PHASE_TICKS = { between: 2 * TICK_RATE, wave_clear: 1.5 * TICK_RATE, dead: 1.5 * TICK_RATE } as const;
 /** Non-boss Push clears the offline Patrol estimate averages over (one checkpoint cycle: checkpoint+1..+4). */
@@ -60,6 +63,8 @@ export class RunMachine {
   private scrapMark = 0;
   /** Last command rejection reason (UI/tests). */
   lastError: string | null = null;
+  /** Anti-stall watcher (run/stall.ts): reset at every wave and attempt start. */
+  readonly stall = new StallWatch();
 
   constructor(w: WorldImpl) { this.w = w; }
 
@@ -81,6 +86,7 @@ export class RunMachine {
     w.clearCombat();
     w.wave = null;
     this.cursor = 0; this.bossIndex = NO_ENTITY; this.clumpIndex = NO_ENTITY;
+    this.stall.reset(w, -1);
     run.wave = this.firstWave();
     run.attemptTick = 0; run.waveTick = 0;
     run.attemptDamageTaken = {};
@@ -169,6 +175,7 @@ export class RunMachine {
       const i = w.spawnEnemy('boss', cos(a) * ARENA_RADIUS, sin(a) * ARENA_RADIUS, { bossId: wave.bossId, hpScale: 1 + 0.12 * run.threatDial, cause: startId });
       if (i >= 0) { this.bossIndex = i; this.bossGen = w.enemies.gen[i]; }
     }
+    this.stall.reset(w, startId);
     this.setPhase('combat');
     for (const s of w.systems) s.onWaveStart?.(w);
   }
@@ -223,6 +230,7 @@ export class RunMachine {
     if (run.phase !== 'combat') return;
     if (w.tower.hp <= 0) { this.setPhase('dead'); return; }
     const wave = w.wave;
+    this.stall.tick(w, !wave || this.cursor >= wave.spawns.length);   // anti-stall invariant (run/stall.ts)
     if (!wave || this.cursor < wave.spawns.length) return;
     const e = w.enemies;
     for (let i = 0; i < e.count; i++) if ((e.flags[i] & (EnemyFlag.Dead | EnemyFlag.Ally)) === 0) return;

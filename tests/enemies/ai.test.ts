@@ -15,10 +15,14 @@ function arena(seed = 1, wave = 30): Sim {
   w.stats.override('bastion.max_hp', 1e12);
   w.stats.override('ballistics.damage', 0);
   w.stats.override('ballistics.range', 0);
+  w.stats.override('wave.stall_seconds', 1e6);   // behaviors in isolation: nothing here damages them, which is not a stall
   w.rebuildStats();
   w.tower.hp = w.tower.maxHp;
   return sim;
 }
+
+/** Shield / HP regeneration and outward knockback only work inside the primary's range (enemies/recovery.ts, core/forces.ts). */
+function reach(sim: Sim, range = 600): void { sim.world.stats.override('ballistics.range', range); sim.world.rebuildStats(); }
 
 function spawn(sim: Sim, kind: string, x: number, y: number, elite?: string[]): number {
   return sim.world.spawnEnemy(kind, x, y, { cause: -1, elite });
@@ -214,6 +218,7 @@ describe('enemy behaviors', () => {
   it('shielded regenerates its shield after 3 s without damage; veteran hardens with time', () => {
     const sim = arena();
     const w = sim.world;
+    reach(sim);
     const s = spawn(sim, 'shielded', 480, 0);
     const v = spawn(sim, 'veteran', 480, 40);
     const sGen = w.enemies.gen[s], vGen = w.enemies.gen[v];
@@ -232,6 +237,7 @@ describe('enemy behaviors', () => {
   it('refractor faces the tower; anchor ignores knockback; brute resists part of it', () => {
     const sim = arena();
     const w = sim.world;
+    reach(sim);
     const r = spawn(sim, 'refractor', 300, 200);
     const a = spawn(sim, 'anchor', -300, 0);
     const b = spawn(sim, 'brute', 0, 400);

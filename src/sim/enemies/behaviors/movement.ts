@@ -3,7 +3,7 @@
  *  - swarm / fragment / brood: loose flocking jitter around the formation target
  *  - runner:   weaves across its path
  *  - brute:    restores 35% of any external displacement (knockback / pull) since its last move
- *  - artillery: holds at ~330 from the tower and lobs hostile blast shells every 2.5 s
+ *  - artillery: holds at ~330 from the tower and lobs hostile blast shells every 2.5 s (Rushing: closes to contact)
  *  - charger:  walks in; inside 320 it winds up for 0.6 s (telegraph) then dashes at 4× speed
  *  - phase:    Phased 1.5 s of every 4 s (untargetable: core targeting/collision skip Phased)
  *  - burrower: Burrowed until within 200 of the tower; delayed-ambush spawns (radiusOffset < -100)
@@ -80,7 +80,7 @@ export function artilleryMove(w: World, i: number): void {
   const e = w.enemies;
   if (e.attackT[i] > 0) e.attackT[i]--;
   const x = e.x[i], y = e.y[i], d = Math.sqrt(x * x + y * y);
-  const hold = ARTILLERY_HOLD + (e.gen[i] % 3) * 10;
+  const hold = e.rushT[i] > 0 ? contactR(w, i) : ARTILLERY_HOLD + (e.gen[i] % 3) * 10;   // anti-stall Rush: no standing off
   const m = e.speedMul[i];
   if (d > hold + 1 && m > 0) {
     const wave = w.wave, si = e.spawnIdx[i];

@@ -5,8 +5,8 @@
  *
  *  every elite     radius ×1.2 (the snapshot draws elites with a gold layer-5 outline)
  *  hardened        armor + 40 (and +50% of its own)       swift           speed ×1.4
- *  regenerating    regains 1.5% max HP/s when not hit for 1 s
- *  shielded_elite  shield = 60% max HP, regenerates after 3 s without damage
+ *  regenerating    regains 1.5% max HP/s when not hit for 1 s (inside the primary's range, not just pushed: recovery.ts)
+ *  shielded_elite  shield = 60% max HP, regenerates after 3 s without damage (same gate)
  *  volatile        explodes on death (hostile blast, 60 radius; hurts the tower when close)
  *  phasing         blinks intangible like a Phase enemy (1.5 s on / 2.5 s off)
  *  splitting       splits into 2 fragments on death
@@ -56,11 +56,14 @@ export function initElite(w: World, i: number): void {
   if (m & MOD.refracting) e.flags[i] |= EnemyFlag.Refracts;
 }
 
-/** Per-tick elite upkeep (regeneration). Shield regen for shielded_elite is shared with Shielded (ai.ts). */
-export function eliteTick(w: World, i: number): void {
+/**
+ * Per-tick elite upkeep (regeneration). Shield regen for shielded_elite is shared with Shielded (ai.ts).
+ * `canRegen`: the knockback / range / Rush gate (enemies/recovery.ts regenAllowed).
+ */
+export function eliteTick(w: World, i: number, canRegen = true): void {
   const e = w.enemies;
   const m = e.eliteMods[i];
-  if ((m & MOD.regenerating) && e.hp[i] < e.maxHp[i] && (e.lastHitTick[i] < 0 || w.tick - e.lastHitTick[i] >= TICK_RATE)) {
+  if (canRegen && (m & MOD.regenerating) && e.hp[i] < e.maxHp[i] && (e.lastHitTick[i] < 0 || w.tick - e.lastHitTick[i] >= TICK_RATE)) {
     w.healEnemy(i, e.maxHp[i] * 0.015 / TICK_RATE, 'elite.regenerating', e.spawnEv[i], true);   // per-tick regen: silent
   }
 }

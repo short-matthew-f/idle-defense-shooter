@@ -9,7 +9,7 @@
  * Contact: within TOWER_RADIUS + radius + 4 of the tower an enemy stops and hits for
  * contactDamage × 1.06^wave once per second; kamikazes detonate once and are removed (no Scrap).
  * Bosses advance to radius 160, stop, and fire a hostile shot every 2 s once within 320.
- * Ranged enemies hold at 240 and fire every 2.5 s.
+ * Ranged enemies hold at 240 and fire every 2.5 s (while Rushing, run/stall.ts, they close to contact instead).
  */
 import type { World } from '../core/world';
 import { EnemyFlag, Ev, ProjFlag, ProjKind, TICK_DT, TICK_RATE, TOWER_RADIUS, INNER_RING } from '../core/types';
@@ -35,7 +35,7 @@ export function steerEnemy(world: World, i: number): void {
 
   if (f & (EnemyFlag.Boss | EnemyFlag.Ranged)) {
     const boss = (f & EnemyFlag.Boss) !== 0;
-    const hold = boss ? BOSS_HOLD : RANGED_HOLD;
+    const hold = boss ? BOSS_HOLD : e.rushT[i] > 0 ? contactR : RANGED_HOLD;   // anti-stall Rush: no standing off
     if (d > hold && m > 0) moveToward(world, i, 0, 0, e.speed[i] * m, hold);
     else { e.vx[i] = 0; e.vy[i] = 0; }
     if (e.staggerT[i] === 0 && e.frozenT[i] === 0 && d <= (boss ? BOSS_FIRE_RANGE : RANGED_HOLD + 20) && e.attackT[i] === 0) {

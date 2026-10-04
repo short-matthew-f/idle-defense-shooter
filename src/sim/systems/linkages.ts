@@ -359,7 +359,7 @@ export class LinkagesSystem implements System {
       const buf = SCRATCH.push();
       const cnt = w.queryRadius(0, 0, INNER_RING, buf);
       const e = w.enemies;
-      for (let j = 0; j < cnt; j++) { const i = buf[j]; if (w.alive(i)) w.knockback(i, e.x[i], e.y[i], 120 * TICK_DT); }
+      for (let j = 0; j < cnt; j++) { const i = buf[j]; if (w.alive(i)) w.knockback(i, e.x[i], e.y[i], 120 * TICK_DT, true); }   // a continuous field: no stacking
       SCRATCH.pop();
       return;
     }

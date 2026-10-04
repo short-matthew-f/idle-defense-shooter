@@ -96,6 +96,7 @@ export class Climber {
   private anomalies: string[] = [];
   private boons: string[] = [];
   private casts = 0; private tells = 0; private counters = 0; private bossCounters = 0;
+  private rushes: { wave: number; tick: number; enemies: number }[] = [];
   private eventMark = 0;
   private playSeconds = 0;
   private lastCpAt = 0;
@@ -252,6 +253,7 @@ export class Climber {
         case Ev.BossCounter: this.bossCounters++; break;
         case Ev.AnomalyPicked: this.anomalies.push(e.src); break;
         case Ev.BoonPicked: if (e.src !== 'decline') this.boons.push(e.src); break;
+        case Ev.Rush: this.rushes.push({ wave: this.sim.world.run.wave, tick: e.tick, enemies: e.a }); break;   // anti-stall (run/stall.ts)
         default: break;
       }
     });
@@ -322,7 +324,7 @@ export class Climber {
       build: { hardpoints: [...b.hardpoints], attunements: [...b.attunements], doctrines: { ...b.doctrines }, anomalies: [...b.anomalies], purchases: ctx.purchases },
       anomaliesPicked: this.anomalies,
       boonsPicked: this.boons,
-      casts: this.casts, tells: this.tells, counters: Math.max(this.counters, this.bossCounters), designations: policy.stats.designations,
+      casts: this.casts, tells: this.tells, counters: Math.max(this.counters, this.bossCounters), designations: policy.stats.designations, rushes: this.rushes,
       noops: { ...policy.stats.noops },
       finalHash: sim.events.hash(),
       ...(w.run.quartermaster ? { quartermaster: { ranks: Object.values(w.run.quartermaster.bought).reduce((a, n) => a + (n ?? 0), 0), scrap: Math.round(w.run.quartermaster.spent), bank: Math.round(w.run.quartermaster.bank) } } : {}),

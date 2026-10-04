@@ -70,7 +70,13 @@ export interface World {
   damage(enemy: number, amount: number, opts: { source: HitInfo['source']; srcTag: string; crit?: boolean; element?: ElementId | null; projectile?: number; cause: number; x?: number; y?: number; ignoreArmor?: boolean; trueDamage?: boolean;
     /** WP1 addition: no Hit event (DoT pulses); hooks still run with eventId = cause; a kill still emits Kill. */ silent?: boolean }): HitInfo;
   applyStatus(enemy: number, status: StatusId, stacks: number, durationTicks: number, srcTag: string, cause: number, magnitude?: number): void;
-  knockback(enemy: number, dx: number, dy: number, force: number): void;
+  /**
+   * Push an enemy `force` units along (dx, dy) through the knockback governor (core/forces.ts): outward pushes stop at
+   * knockback.reach × the primary's range and at the arena rim, repeated outward pushes within 2 s weaken (×0.5 each,
+   * floor 10%), and a pushed enemy rallies back faster. `field`: a continuous zone force applied every tick (Safe
+   * Harbor) that skips the stacking and rally bookkeeping (it keeps the reach / rim cap).
+   */
+  knockback(enemy: number, dx: number, dy: number, force: number, field?: boolean): void;
   pull(enemy: number, towardX: number, towardY: number, force: number): void;
   spawnProjectile(init: Partial<{ kind: number; source: number; x: number; y: number; vx: number; vy: number; damage: number; radius: number; life: number; pierce: number; bounces: number; target: number; flags: number; element: ElementId | null; critChance: number; blast: number; cause: number;
     /* WP1 additions */ srcTag: string; critMul: number; retention: number; pierceSpeed: number; bounceRange: number; knock: number; execBonus: number }>): number;

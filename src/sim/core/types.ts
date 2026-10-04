@@ -123,6 +123,15 @@ export interface EnemyPool {
   harmonicUntil: Int32Array;
   /** WP3 addition: extra weak-point exposure (ticks) banked by Kill Order; when the boss script closes the weak point, systems/ordnance.ts holds it open for this long. */
   weakPointT: Uint16Array;
+  // --- Knockback governor and anti-stall (core/forces.ts, enemies/recovery.ts, run/stall.ts; docs/BALANCE.md "Stalls and knockback") ---
+  /** Tick + 1 of the last outward push (0 = never pushed): diminishing returns, the regen grace and the weapon's focus read it. */
+  knockT: Int32Array;
+  /** Outward pushes stacked inside the current diminishing-returns window (each one inside it is weaker). */
+  knockN: Uint8Array;
+  /** Rally: distance from the tower the enemy was first pushed from; it walks back at the rally speed until it is there again (0 = not rallying). */
+  rallyR: Float32Array;
+  /** Rush (anti-stall escalation): ticks since this enemy started rushing the tower, saturating (0 = not rushing). */
+  rushT: Uint16Array;
 }
 
 export const enum EnemyFlag {
@@ -524,6 +533,12 @@ export const enum Ev {
    * 'overcharge', a = 1 perfect / 0 weak, b = damage per enemy; its Hits are the children).
    */
   Assist, SalvageDrop, SalvageCollect, Overcharge,
+  /**
+   * Anti-stall addition (run/stall.ts): the wave made no progress (no kill, no net HP/shield removed) for
+   * `wave.stall_seconds` with enemies alive, so every living enemy Rushes the tower (src 'wave.rush', a = enemies
+   * rushing, b = seconds without progress; cause = the wave's WaveStart event).
+   */
+  Rush,
 }
 
 export interface SimEvent {

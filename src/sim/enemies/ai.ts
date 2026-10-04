@@ -13,7 +13,8 @@
  * Chill attack-slow: an enemy slowed to speedMul m < 1 recovers its attack timer at rate m
  * (steering decrements attackT by one per tick; we give back the difference deterministically).
  * Wave-end guarantee: if live enemies remain but none is targetable (all Phased/Burrowed) for 20 s,
- * every one of them is forced tangible for good (AI_FORCED).
+ * every one of them is forced tangible for good (AI_FORCED). The anti-stall Rush (run/stall.ts) is the general
+ * guarantee; its enemy side (Rush speed ramp, no regeneration) and the knockback Rally live in enemies/recovery.ts.
  */
 import type { World } from '../core/world';
 import { EnemyFlag, TICK_RATE } from '../core/types';
@@ -25,6 +26,7 @@ import {
 } from './behaviors/movement';
 import { carrierTick, healerTick, leechTick, nullifierTick, shieldRegen, wardenTick } from './behaviors/support';
 import { commandAuras, eliteTick, initElite, MOD } from './elites';
+import { newRecoveryParams, readRecoveryParams, recoverySpeed, regenAllowed, type RecoveryParams } from './recovery';
 import { bossMovement, bossState } from './bosses';
 
 const SCR = new Int32Array(1024);
@@ -37,11 +39,11 @@ const K_SWARM = K.swarm, K_FRAGMENT = K.fragment, K_BROOD = K.brood, K_RUNNER = 
   K_CHARGER = K.charger, K_PHASE = K.phase, K_BURROWER = K.burrower, K_NULLIFIER = K.nullifier,
   K_REFRACTOR = K.refractor, K_BOSS_ADD = K.bossAdd, K_SHIELDED = K.shielded;
 
-interface AiState { noTargetTicks: number; sepCursor: number; boss: number }
+interface AiState { noTargetTicks: number; sepCursor: number; boss: number; rec: RecoveryParams }
 const STATES = new WeakMap<World, AiState>();
 function aiState(w: World): AiState {
   let s = STATES.get(w);
-  if (!s) { s = { noTargetTicks: 0, sepCursor: 0, boss: -1 }; STATES.set(w, s); }
+  if (!s) { s = { noTargetTicks: 0, sepCursor: 0, boss: -1, rec: newRecoveryParams() }; STATES.set(w, s); }
   return s;
 }
 
@@ -70,16 +72,19 @@ export function aiStep(world: World): void {
 
   // --- pass 1: behaviors ------------------------------------------------------
   const tick = w.tick;
+  const rec = st.rec;
+  readRecoveryParams(w, rec);
   for (let i = 0; i < n; i++) {
     const f = e.flags[i];
     if (f & F_SKIP) continue;
     // chill attack-slow: give back part of steering's attackT decrement
     const m = e.speedMul[i];
     if (m < 1 && m > 0 && e.attackT[i] > 0 && e.attackT[i] < 65535 && ((tick * 7 + i) % 8) < Math.round((1 - m) * 8)) e.attackT[i]++;
+    if (e.rallyR[i] > 0 || e.rushT[i] > 0) recoverySpeed(w, i, rec);   // knockback Rally / anti-stall Rush
     if (f & F_BOSS) { if (!bossMovement(w, i)) steerEnemy(w, i); continue; }
     const mods = e.eliteMods[i];
-    if (mods !== 0) { eliteTick(w, i); if (mods & M_PHASING) phaseToggle(w, i); }
-    if (e.maxShield[i] > 0 && (e.kind[i] === K_SHIELDED || (mods & M_SHIELDED))) shieldRegen(w, i);
+    if (mods !== 0) { eliteTick(w, i, regenAllowed(w, i, rec)); if (mods & M_PHASING) phaseToggle(w, i); }
+    if (e.maxShield[i] > 0 && (e.kind[i] === K_SHIELDED || (mods & M_SHIELDED)) && regenAllowed(w, i, rec)) shieldRegen(w, i);
     behave(w, i, st.boss);
   }
 

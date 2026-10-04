@@ -299,3 +299,48 @@ before the first boss. Slowing it would take longer early waves (generator) rath
 Before (first balance pass, `sim-out/tuned`): 53 → 64 → 79, reclimb 29% / 25.3%, 3,400+ Echoes at the first
 Prestige. The P4 reclimb (42–49%) is outside the §3 band but outside the harness (a 3-Prestige chain); it comes from
 P3 walling sharply after ~25 min, so the ratio's denominator is short.
+
+## Stalls and knockback
+
+**Report (owner, many Prestiges deep):** waves could not be finished although damage was fine: knockback carried
+enemies out of reach and their shields were back up before they walked in again. 20 minutes of idle play did not end the
+wave.
+
+**Cause.** Every push went straight into the enemy's position with no limit: stacked Heavy Rounds, Repulsor Pulse (every
+5 s), Orbital Blade hits and the Shockwave Shield could carry an enemy to the arena rim and beyond the weapons' reach.
+Shielded / shielded_elite shields regenerate after 3 s without damage and Regenerating elites heal 1.5% max HP/s after
+1 s, wherever the enemy is. Walking back took longer than the regeneration, so the net progress was zero.
+
+**Reproduction** (scratch probe, wave 62–97, seeds 1–2, 20 sim-minutes per run, a knockback build with the same damage as
+a no-knockback build; "ratio" = clear time with knockback ÷ without):
+
+| Probe | Before: uncleared in 20 min | Before: ratio | After: uncleared | After: ratio |
+| --- | --- | --- | --- | --- |
+| Shielded wave | 13 of 16 | 9.2× | 0 of 16 | 1.00× |
+| Shielded elite wave | 0 of 16 | 1.26× | 0 of 16 | 1.00× |
+| Regenerating elite wave | 0 of 16 | 1.28× | 0 of 16 | 1.00× |
+| Real generated wave | 8 of 16 | 1.62× | 2 of 16 (the anti-stall Rush fired in 4 runs) | 1.41× |
+
+The two real-wave runs still open at 20 min are low-damage probes whose waves are damage-limited rather than stalled; the
+numbers above are from a probe, not from a full acceptance run.
+
+**Fixes** (all knobs are base stats, `data/base-stats.ts` `knockback.*` / `wave.*`):
+
+- `core/forces.ts` is the single entry point for every push. Outward pushes never carry an enemy past 0.85 × the primary's
+  range or the arena rim; an enemy already beyond that is not pushed farther. Repeated outward pushes inside 2 s fade
+  ×0.5 each (floor 10%). Bosses ×0.15, Clumps ×0.3, elites ×0.5 as before. Pushes toward the tower are unaffected.
+- `enemies/recovery.ts`: a pushed enemy walks back at ×2 speed ("rally") until it is where it was first pushed from.
+  Shield and HP regeneration only work inside the primary's range, not within 3 s of a push and not while Rushing: shields
+  punish low damage, not distance.
+- Weapons keep their target for 1 s after it was pushed (`core/targeting.ts`), so a push does not make the gun switch.
+- `run/stall.ts` anti-stall invariant: 10 s of counted ticks without progress (no net HP/shield removed from the enemies
+  alive at the last progress point), with every spawn out, no boss tell live, a tangible enemy in reach or none walking in,
+  makes every living enemy and every later spawn Rush: speed ramps to ×3 over 8 s, pushes do ≤ 25% and nothing regenerates.
+  One `Ev.Rush` (src `wave.rush`) is emitted per wave with the cause chain to the wave start; the feed shows "Stragglers
+  rush the tower" (rate-limited). The upper bound for a wave that has stalled is therefore the stall time (10 s) + the
+  ramp (8 s) + the walk in at ×3 speed.
+
+**Tests:** `tests/core/forces.test.ts` (rim and reach caps, stacking, inward pushes), `tests/enemies/stall.test.ts` (the
+regeneration gate: outside the range, inside the range and 3 s after a push; the Rush starts at 10 s and not before; a
+knockback-heavy build clears a Shielded wave as fast as one without). The existing behavior tests set the primary's range
+explicitly because regeneration now needs it.

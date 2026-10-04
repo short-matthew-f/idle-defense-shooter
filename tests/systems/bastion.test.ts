@@ -3,7 +3,8 @@ import { Sim } from '../../src/sim/index';
 import { Ev, ProjFlag, ProjKind } from '../../src/sim/core/types';
 import { quietSim, setup, events, ticks, grunt } from './wp2-helpers';
 
-const NO_GUN = { 'ballistics.range': 1 };
+/** Silence the primary without shrinking its range (knockback stops at 85% of the primary's range: core/forces.ts). */
+const NO_GUN = { 'ballistics.attack_speed': 0 };
 
 describe('Bastion: Aegis', () => {
   it('Outer Barrier absorbs damage before shields and HP, and holds enemies at its ring', () => {

@@ -25,9 +25,10 @@ export const EV_KILL: number = Ev.Kill;
 const WINDOW_TICKS = 15 * 60;
 const MAX_KILLS = 400;
 
-/** Active-edge events (systems/active.ts), named by id so the positional table above needs no padding. */
+/** Active-edge events (systems/active.ts) and later additions, named by id so the positional table above needs no padding. */
 const ACTIVE_EV_NAMES: Readonly<Record<number, string>> = {
   [Ev.Assist]: 'Assist shot', [Ev.SalvageDrop]: 'Salvage drop', [Ev.SalvageCollect]: 'Salvage collect', [Ev.Overcharge]: 'Overcharge',
+  [Ev.Rush]: 'Stragglers rush',   // anti-stall (run/stall.ts)
 };
 export function evName(t: number): string { return ACTIVE_EV_NAMES[t] ?? EV_NAMES[t] ?? `Event ${t}`; }
 

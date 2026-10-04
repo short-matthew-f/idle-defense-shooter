@@ -5,7 +5,8 @@
  *  - Warden    projects shields onto enemies inside its ring (+6% max HP per 0.5 s, cap 30% max HP)
  *  - Nullifier strips every status stack inside its field every 0.5 s
  *  - Leech     tethers to the tower inside 130: drains (barrier → shield → HP) every 0.5 s and heals itself
- *  - Shielded (and shielded_elite) shields regenerate after 3 s without damage
+ *  - Shielded (and shielded_elite) shields regenerate after 3 s without damage, only inside the primary's range and
+ *    not within 3 s of a knockback (the gate is enemies/recovery.ts regenAllowed, checked by ai.ts)
  *  - Veteran   takes 2% less damage per second alive (max 50%), via World.damageModifier
  * Reaction hooks: Splitter → 3 fragments on death; elite `splitting` → 2; elite `volatile` → a
  * hostile blast; elite `vampiric` heals on tower hits; Phase enemies shrug off statuses while phased.

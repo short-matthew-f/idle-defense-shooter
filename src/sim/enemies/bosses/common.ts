@@ -117,6 +117,7 @@ export function healEnemy(w: World, j: number, amount: number, src: string, caus
 /** Add shield to an enemy, raising its cap to at least `capFrac` of max HP. */
 export function addShield(w: World, j: number, amount: number, capFrac: number): void {
   const e = w.enemies;
+  if (e.rushT[j] > 0) return;   // Rushing enemies (run/stall.ts) gain no shields: the escalation must end the wave
   const cap = e.maxHp[j] * capFrac;
   if (e.maxShield[j] < cap) e.maxShield[j] = cap;
   e.shield[j] = Math.min(e.maxShield[j], e.shield[j] + amount);

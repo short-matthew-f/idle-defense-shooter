@@ -475,6 +475,20 @@ export const BASE_STATS: Record<string, number> = {
   'star.bridge.ordnance+drones': 0,
   'star.bridge.ordnance+laser': 0,
 
+  // --- Knockback governor and anti-stall (docs/BALANCE.md "Stalls and knockback"; core/forces.ts, enemies/recovery.ts,
+  //     run/stall.ts). No node writes these yet: they are tunables, resolved like every other stat. ---
+  'knockback.reach': 0.85,                        // outward pushes stop at this fraction of the primary's range (and at the arena rim)
+  'knockback.stack_decay': 0.5,                   // each further outward push inside the window is ×0.5 as strong…
+  'knockback.stack_floor': 0.1,                   // …but never below 10% of its force
+  'knockback.stack_window': 2,                    // seconds: pushes this close together stack (the window restarts on each push)
+  'knockback.focus_seconds': 1,                   // a weapon keeps its target for this long after the target was pushed
+  'knockback.rally_speed': 2,                     // movement ×2 while a pushed enemy walks back to where it was pushed from
+  'knockback.regen_grace': 3,                     // seconds after a push with no shield / HP regeneration
+  'wave.stall_seconds': 10,                       // no kill and no net HP/shield removed for this long → Rush
+  'wave.rush_speed': 3,                           // Rush movement multiplier, reached after…
+  'wave.rush_ramp': 8,                            // …this many seconds (linear ramp from ×1)
+  'wave.rush_knockback': 0.25,                    // Rushing enemies take at most 25% of any knockback
+
   // --- Boons (data/boons.ts): keys only boons write; the defaults leave behaviour unchanged ---
   'bastion.shield_hp_frac': 0,                    // extra shield capacity as a fraction of max HP (Ablative Shell)
   'bastion.damage_taken_mul': 1,                  // multiplier on damage the tower takes, after armor (Overclocked)

@@ -49,12 +49,17 @@ export function avoidClass(p: EnemyPool, i: number, f: TargetFilter): number {
  * Pick a target, with stickiness: when `prev` (the caller's current target) is still live, targetable and in
  * range, it is kept unless the new best is materially better for the profile (20% closer, 20% lower/higher HP,
  * a strictly better priority class). Equidistant enemies therefore never cause the turret to flip-flop.
+ * Knockback focus: for the distance profiles, a `prev` pushed by knockback within the last `focusTicks` (at tick `now`;
+ * EnemyPool.knockT) is kept outright, so a push never makes the weapon drop its target for the next enemy in line
+ * (spreading fire across a crowd let shields regenerate between hits: docs/BALANCE.md "Stalls and knockback").
  */
-export function selectTarget(p: EnemyPool, hash: SpatialHash, tower: TowerState, x: number, y: number, maxR: number, profile: TargetingProfile, prev: number = NO_ENTITY, filter: TargetFilter | null = null): number {
+export function selectTarget(p: EnemyPool, hash: SpatialHash, tower: TowerState, x: number, y: number, maxR: number, profile: TargetingProfile, prev: number = NO_ENTITY, filter: TargetFilter | null = null, now = 0, focusTicks = 0): number {
   const des = designatedInRange(p, tower, x, y, maxR);
   if (des !== NO_ENTITY) return des;
   const prevOk = prev >= 0 && prev < p.count && targetable(p, prev) && inRange(p, prev, x, y, maxR);
+  const pushed = prevOk && focusTicks > 0 && p.knockT[prev] > 0 && now - (p.knockT[prev] - 1) < focusTicks;
   if (filter === null && (profile === 'nearest' || profile === 'designated')) {
+    if (pushed) return prev;
     const best = hash.nearest(x, y, maxR);
     if (!prevOk || best === NO_ENTITY || best === prev) return best;
     return dist2(p, best, x, y) < dist2(p, prev, x, y) * STICKY_DIST2 ? best : prev;
@@ -86,8 +91,8 @@ export function selectTarget(p: EnemyPool, hash: SpatialHash, tower: TowerState,
     if (pk < bestK0) return prev;
   }
   switch (profile) {
-    case 'nearest': case 'designated': return dist2(p, best, x, y) < dist2(p, prev, x, y) * STICKY_DIST2 ? best : prev;
-    case 'closest_to_tower': return dist2(p, best, 0, 0) < dist2(p, prev, 0, 0) * STICKY_DIST2 ? best : prev;
+    case 'nearest': case 'designated': return pushed || dist2(p, best, x, y) >= dist2(p, prev, x, y) * STICKY_DIST2 ? prev : best;
+    case 'closest_to_tower': return pushed || dist2(p, best, 0, 0) >= dist2(p, prev, 0, 0) * STICKY_DIST2 ? prev : best;
     case 'lowest_hp': return p.hp[best] < p.hp[prev] * 0.8 ? best : prev;
     case 'highest_hp': return p.hp[best] > p.hp[prev] * 1.25 ? best : prev;
     case 'fastest': return p.speed[best] * p.speedMul[best] > p.speed[prev] * p.speedMul[prev] * 1.25 ? best : prev;

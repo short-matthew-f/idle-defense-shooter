@@ -15,10 +15,14 @@ function arena(seed = 1, wave = 30): Sim {
   w.stats.override('bastion.max_hp', 1e12);
   w.stats.override('ballistics.damage', 0);
   w.stats.override('ballistics.range', 0);
+  w.stats.override('wave.stall_seconds', 1e6);   // behaviors in isolation: nothing here damages them, which is not a stall
   w.rebuildStats();
   w.tower.hp = w.tower.maxHp;
   return sim;
 }
+
+/** Shield / HP regeneration and outward knockback only work inside the primary's range (enemies/recovery.ts, core/forces.ts). */
+function reach(sim: Sim, range = 600): void { sim.world.stats.override('ballistics.range', range); sim.world.rebuildStats(); }
 function find(sim: Sim, gen: number): number {
   const e = sim.world.enemies;
   for (let i = 0; i < e.count; i++) if (e.gen[i] === gen && !(e.flags[i] & EnemyFlag.Dead)) return i;
@@ -56,6 +60,7 @@ describe('elite modifiers', () => {
   it('regenerating heals when not hit; phasing blinks', () => {
     const sim = arena();
     const w = sim.world, e = w.enemies;
+    reach(sim);
     const i = w.spawnEnemy('brute', 480, 0, { cause: -1, elite: ['regenerating', 'phasing'] });
     const gen = e.gen[i];
     w.damage(i, e.maxHp[i] * 0.5, { source: 'primary', srcTag: 'test', cause: -1 });

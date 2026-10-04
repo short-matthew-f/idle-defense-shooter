@@ -252,6 +252,8 @@ function clause(e: SimEvent): { verb: Verb; obj: string; launch?: boolean } {
     case Ev.SalvageCollect: return { verb: ['paid', 'pay'], obj: `${Math.round(e.a)} Scrap` };
     case Ev.BarrierBreak: return { verb: ['broke', 'break'], obj: 'the barrier' };
     case Ev.BossCounter: case Ev.CounterScored: return { verb: ['countered', 'counter'], obj: 'the boss' };
+    // Anti-stall (run/stall.ts): "The wave stalled for 10 s, so the stragglers rushed the tower."
+    case Ev.Rush: return { verb: ['sent', 'send'], obj: 'the stragglers rushing at the tower' };
     default: return { verb: ['triggered', 'trigger'], obj: '' };
   }
 }
@@ -268,6 +270,7 @@ export function chainSentence(chain: readonly SimEvent[]): string {
   for (let i = 0; i < chain.length; i++) {
     const e = chain[i], n = chain[i + 1];
     if (e.type === Ev.Hit && n && n.type === Ev.Kill && n.cause === e.id && n.src === e.src) continue;
+    if (e.type === Ev.WaveStart && n && n.type === Ev.Rush) continue;   // the Rush clause names the wave itself
     items.push(e);
   }
   if (items.length === 0) return '';
@@ -282,6 +285,7 @@ export function chainSentence(chain: readonly SimEvent[]): string {
     if (launch) part = i === 0 ? `The ${noun} launched` : `which launched the ${noun}`;
     else if (isTrigger(e.type)) part = i === 0 ? `The ${noun} triggered` : `which triggered the ${noun}`;
     else if (e.type === Ev.SalvageDrop) part = i === 0 ? 'A salvage crate dropped' : 'which dropped a salvage crate';   // Active edge
+    else if (e.type === Ev.Rush) part = `${i === 0 ? 'The' : 'which meant the'} wave made no progress for ${Math.round(e.b)} s, so the stragglers rushed the tower`;   // anti-stall
     else if (i === 0) part = `The ${noun} ${verb[0]}${tail}`;
     else if (noun === prevNoun) part = `which ${verb[0]}${tail}`;
     else part = `which caused the ${noun} to ${verb[1]}${tail}`;

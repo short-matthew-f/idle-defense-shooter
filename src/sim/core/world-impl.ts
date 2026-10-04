@@ -12,12 +12,13 @@ import type { World, SharedGeometry, ProgressionSignals } from './world';
 import type { System, HitInfo } from './system';
 import type { ElementId, StatusId, TargetingProfile, TrialId, WeaponSystemId } from './ids';
 import type { BuildState, Command, EnemyPool, Hazard, MetaState, ProjectilePool, RunState, SimEvent, TowerState, WaveDef } from './types';
-import { EnemyFlag, Ev, MAX_ENEMIES, MAX_HAZARDS, MAX_PROJECTILES, NO_ENTITY, ProjFlag, TICK_DT, TICK_RATE, ARENA_RADIUS } from './types';
+import { EnemyFlag, Ev, MAX_ENEMIES, MAX_HAZARDS, MAX_PROJECTILES, NO_ENTITY, ProjFlag, TICK_DT, TICK_RATE } from './types';
 import { MAX_BLADES, MAX_DRONES, MAX_LASER_NODES, MAX_WELLS } from './types';   // WP3: shared geometry sizes
 import { Prng } from '../math/prng';
 import { atan2 } from '../math/lut';
 import { createEnemyPool, createProjectilePool, allocEnemy, allocProjectile, freeEnemy, freeProjectile as poolFreeProjectile, compactEnemies, compactProjectiles } from './pools';
 import { SpatialHash } from './spatial';
+import { knockbackEnemy, newKnockParams, type KnockParams } from './forces';
 import { ScratchStack } from './scratch';
 import { EventLogImpl, StateBit, STATUS_INDEX } from './events';
 import { StatResolver } from './stats';
@@ -169,6 +170,13 @@ export class WorldImpl implements World {
     this.damageTakenMul = Math.max(0, s.get('bastion.damage_taken_mul'));                                    // Boons: Overclocked
     if (t.shield > t.maxShield) t.shield = t.maxShield;
     t.ceCap = Math.max(0, s.get('economy.ce_cap'));
+    const k = this.knock;   // knockback governor (core/forces.ts)
+    k.reach = Math.max(0, s.get('knockback.reach')) * Math.max(0, s.get('ballistics.range'));
+    k.decay = Math.min(1, Math.max(0, s.get('knockback.stack_decay')));
+    k.floor = Math.min(1, Math.max(0, s.get('knockback.stack_floor')));
+    k.windowTicks = Math.max(0, Math.round(s.get('knockback.stack_window') * TICK_RATE));
+    k.focusTicks = Math.max(0, Math.round(s.get('knockback.focus_seconds') * TICK_RATE));
+    k.rushMul = Math.min(1, Math.max(0, s.get('wave.rush_knockback')));
     if (t.ce > t.ceCap) t.ce = t.ceCap;
   }
 
@@ -178,9 +186,10 @@ export class WorldImpl implements World {
   queryRadius(x: number, y: number, r: number, out: Int32Array): number { return this.spatial.queryRadius(x, y, r, out); }
   nearestEnemy(x: number, y: number, maxR: number, profile: TargetingProfile, system: WeaponSystemId, prev: number = NO_ENTITY): number {
     const tl = this.targeting;
-    if (tl.rank <= 0) return selectTarget(this.enemies, this.spatial, this.tower, x, y, maxR, profile, prev);
+    const now = this.run.tick, focus = this.knock.focusTicks;   // a target just pushed by knockback keeps the lock
+    if (tl.rank <= 0) return selectTarget(this.enemies, this.spatial, this.tower, x, y, maxR, profile, prev, null, now, focus);
     const f = tl.filter(this.enemies, this.projectiles, this.run.tick, system !== 'primary');   // Reactor: Targeting Logic
-    const t = selectTarget(this.enemies, this.spatial, this.tower, x, y, maxR, profile, prev, f);
+    const t = selectTarget(this.enemies, this.spatial, this.tower, x, y, maxR, profile, prev, f, now, focus);
     tl.claim(f, t);
     return t;
   }
@@ -443,17 +452,13 @@ export class WorldImpl implements World {
   // -------------------------------------------------------------------------
   // Forces
   // -------------------------------------------------------------------------
-  knockback(enemy: number, dx: number, dy: number, force: number): void {
+  /** Every push goes through the knockback governor (core/forces.ts: reach / rim cap, diminishing returns, rally). */
+  knockback(enemy: number, dx: number, dy: number, force: number, field = false): void {
     if (!this.alive(enemy)) return;
-    const e = this.enemies, f = e.flags[enemy];
-    if (f & EnemyFlag.Immovable) return;
-    const l = Math.sqrt(dx * dx + dy * dy);
-    if (l <= 1e-6) return;
-    const scale = (f & EnemyFlag.Boss) ? 0.15 : (f & EnemyFlag.Clump) ? 0.3 : (f & EnemyFlag.Elite) ? 0.5 : 1;
-    const k = (force * scale) / l;
-    e.x[enemy] += dx * k; e.y[enemy] += dy * k;
-    this.clampToArena(enemy);
+    knockbackEnemy(this.enemies, enemy, dx, dy, force, this.run.tick, this.knock, field);
   }
+  /** Knockback governor knobs (data/base-stats.ts knockback.*, wave.rush_knockback), cached per rebuild. */
+  readonly knock: KnockParams = newKnockParams();
   pull(enemy: number, towardX: number, towardY: number, force: number): void {
     if (!this.alive(enemy)) return;
     const e = this.enemies;
@@ -464,12 +469,6 @@ export class WorldImpl implements World {
     const step = Math.min(l, force * TICK_DT * ((e.flags[enemy] & EnemyFlag.Boss) ? 0.15 : 1));
     e.x[enemy] += (dx / l) * step; e.y[enemy] += (dy / l) * step;
   }
-  private clampToArena(i: number): void {
-    const e = this.enemies, lim = ARENA_RADIUS + 120;
-    const d2 = e.x[i] * e.x[i] + e.y[i] * e.y[i];
-    if (d2 > lim * lim) { const k = lim / Math.sqrt(d2); e.x[i] *= k; e.y[i] *= k; }
-  }
-
   // -------------------------------------------------------------------------
   // Spawning
   // -------------------------------------------------------------------------
@@ -639,6 +638,7 @@ export class WorldImpl implements World {
   healEnemy(enemy: number, amount: number, srcTag: string, cause: number, silent = false): number {
     const e = this.enemies;
     if (!this.alive(enemy) || !(amount > 0)) return 0;
+    if (e.rushT[enemy] > 0) return 0;   // Rushing enemies (run/stall.ts) never heal: the escalation must end the wave
     const room = e.maxHp[enemy] - e.hp[enemy];
     const amt = amount < room ? amount : room;
     if (amt <= 0) return 0;

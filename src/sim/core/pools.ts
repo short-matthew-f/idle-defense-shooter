@@ -48,6 +48,8 @@ export function createEnemyPool(cap: number): EnemyPool {
     flashUntil: new Int32Array(cap), bossSlowUntil: new Int32Array(cap), comboStart: new Int32Array(cap), comboMask: new Uint8Array(cap),
     harmonicUntil: new Int32Array(cap),
     weakPointT: new Uint16Array(cap),   // WP3 addition
+    // knockback governor and anti-stall
+    knockT: new Int32Array(cap), knockN: new Uint8Array(cap), rallyR: new Float32Array(cap), rushT: new Uint16Array(cap),
   };
 }
 
