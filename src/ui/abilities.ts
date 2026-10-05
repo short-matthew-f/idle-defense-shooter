@@ -4,6 +4,7 @@
  * right-click) opens the slot picker. Keys 1–4 arm (handled by GameUi → press()).
  */
 import '../styles/abilities.css';
+import { nodeGate } from './echo-tiers';
 import type { AbilityId } from '@sim/core/ids';
 import type { UiState } from '@sim/core/types';
 import { button, h, longPress, show, text, styleVar, attr } from './dom';
@@ -279,6 +280,6 @@ export class AbilityBar {
       list.appendChild(b);
     }
     if (cur) list.appendChild(button('Empty this slot', () => { this.ctx.host.send({ type: 'set_ability_slot', slot, ability: null }); m.close(); }, { class: 'btn ghost' }));
-    list.appendChild(h('p', { class: 'dim small', text: `${ui.build.abilities.length} slots: a third opens at Prestige III, a fourth from the Command Doctrine capstone.` }));
+    list.appendChild(h('p', { class: 'dim small', text: `${ui.build.abilities.length} slots: a third from ${nodeGate('third_tactical_slot', ui.meta.deepestEver)?.short ?? 'Echo tier III'}, a fourth from the Command Doctrine capstone.` }));
   }
 }
