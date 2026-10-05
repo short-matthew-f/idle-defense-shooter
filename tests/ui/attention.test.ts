@@ -3,7 +3,7 @@
  * (forecast.ts, death.ts) and the stalemate cause (death.ts).
  */
 import { describe, it, expect } from 'vitest';
-import { CELEBRATE_MS, DEATH_FIRST_MS, coachHeld, liveBoss, planAttention, type AttnInput } from '../../src/ui/attention';
+import { CELEBRATE_MS, CLEAR_COACH_MS, DEATH_FIRST_MS, coachHeld, liveBoss, planAttention, type AttnInput } from '../../src/ui/attention';
 import { summaryText } from '../../src/ui/feed';
 import { frontierNear, frontierText, pastFrontier } from '../../src/ui/forecast';
 import { frontierLine, stalemateOf } from '../../src/ui/death';
@@ -79,5 +79,15 @@ describe('boss-clear summary, Frontier, stalemate', () => {
     expect(stalemateOf(undefined, ui('wave'))).toBe(false);
     expect(stalemateOf({ stalled: 'boss' } as never, ui(null))).toBe(true);
     expect(stalemateOf(undefined, ui('boss'))).toBe(true);
+  });
+
+  it('holds coach lines and pointer rings after a boss clear until the summary toast has gone', () => {
+    const p = planAttention({ ...base, bossClearAt: base.now - CELEBRATE_MS - 100 });
+    expect(p.celebrate).toBe(false);
+    expect(p.coachHeld).toBe(true);
+    expect(p.hintsHeld).toBe(true);
+    const later = planAttention({ ...base, bossClearAt: base.now - CLEAR_COACH_MS - 1 });
+    expect(later.coachHeld).toBe(false);
+    expect(later.hintsHeld).toBe(false);
   });
 });

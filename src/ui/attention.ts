@@ -28,6 +28,8 @@ import { icon } from './icons';
 export const DEATH_FIRST_MS = 8000;
 /** The boss-clear beat: no decision UI, coach or rings for this long after the kill (ms). */
 export const CELEBRATE_MS = 1800;
+/** Coach lines and pointer rings wait this long after a boss kill, so they never share the screen with the summary toast. */
+export const CLEAR_COACH_MS = 4000;
 
 export interface AttnInput {
   now: number;
@@ -67,12 +69,13 @@ export function planAttention(i: AttnInput): AttnPlan {
   const bossMode = i.liveBoss;
   const quiet = deathFirst || celebrate || bossMode;
   const decision = quiet ? null : i.draftWaiting ? 'draft' : i.offerPending ? 'boon' : null;
+  const afterClear = i.now - i.bossClearAt < CLEAR_COACH_MS;
   return {
     deathFirst, celebrate, bossMode, decision,
     offerHeld: quiet || decision === 'draft',
     draftHeld: quiet,
-    coachHeld: quiet || decision !== null,
-    hintsHeld: quiet || decision !== null,
+    coachHeld: quiet || afterClear || decision !== null,
+    hintsHeld: quiet || afterClear || decision !== null,
   };
 }
 
