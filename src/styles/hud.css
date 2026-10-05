@@ -14,6 +14,7 @@ body.shell-rail .topbar { padding-left: 12px; }
 .wave-num { font-size: 18px; font-weight: 800; flex: none; letter-spacing: -0.01em; }
 .wave-sub { font-size: 14px; font-weight: 600; color: var(--accent); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .wave-sub::before { content: '·'; color: var(--text-faint); margin-right: 6px; }
+.wave-sub.past-frontier { color: var(--warn); }
 /* phones: "Wave 45" over the Sector / boss name, so a boss name never truncates beside the resources */
 body:is(.shell-phone) .wave-line { flex-direction: column; align-items: flex-start; gap: 0; line-height: 1.12; }
 body:is(.shell-phone) .wave-num { font-size: 17px; }

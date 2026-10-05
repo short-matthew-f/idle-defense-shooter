@@ -18,6 +18,7 @@ import { muteChip } from '../audio/ui';
 import type { UiCtx } from './ctx';
 import { UNLOCKS, type Features } from './progression';
 import { tellDecision } from './tells';
+import { pastFrontier } from './forecast';
 
 const SPEEDS = [1, 2, 4, 8] as const;
 
@@ -188,7 +189,10 @@ export class Hud {
     text(this.waveNum, `Wave ${r.wave}`);
     const bossName = w.isBoss && w.bossId ? (BOSS_BY_ID.get(w.bossId)?.name ?? w.bossId) : '';
     // the boss name replaces the Sector during a boss wave (in full: the Sector is the part that gives way)
-    text(this.waveSub, bossName || (r.mode === 'patrol' ? `Patrol · ${sectorName(w.sector)}` : sectorName(w.sector)));
+    // past the Frontier (economy/prestige.ts) enemies harden fast: say so where the wave is named (HANDBOOK-EVAL B-01)
+    const past = !bossName && pastFrontier(ui);
+    text(this.waveSub, bossName || (past ? 'Past the Frontier' : r.mode === 'patrol' ? `Patrol · ${sectorName(w.sector)}` : sectorName(w.sector)));
+    this.waveSub.classList.toggle('past-frontier', past);
     this.el.classList.toggle('boss-wave', w.isBoss);
 
     text(this.scrap, fmtNum(r.scrap));

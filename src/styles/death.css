@@ -38,3 +38,5 @@
 .death-card.dc-tight .btn.dc-item .dc-name { flex: none; overflow-wrap: anywhere; }
 .death-card.dc-tight .btn.dc-item > .ico { display: none; }
 .death-card.dc-tight .dc-more { display: none; }
+/* near the Frontier the Prestige line replaces the purchase suggestions (death.ts) */
+.death-card.at-frontier .dc-lead, .death-card.at-frontier .dc-list { display: none; }

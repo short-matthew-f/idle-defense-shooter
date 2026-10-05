@@ -146,6 +146,8 @@ export class DeathCard {
     const fl = f.prestigeTab ? frontierLine(ui) : null;
     text(this.frontierText, fl ?? '');
     this.frontier.hidden = !fl;
+    // at the Frontier more Scrap buys are not the answer (a Prestige is): the line replaces the suggestions, so the card fits a 375 px phone
+    this.el.classList.toggle('at-frontier', !!fl);
     (this.frontier.querySelector('.dc-forecast') as HTMLElement).hidden = !f.forecast;
     this.stall.hidden = !this.stalled;
     text(this.stall, `The ${this.stallName} wasn't taking damage. Buy Damage${f.abilities ? ', or slot its Counter ability' : ''}.`);
