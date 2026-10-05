@@ -20,15 +20,23 @@ The game never picks a boon for you.
 ## When offers happen
 
 - **Start of an attempt**, except the very first attempt of a Prestige: after a death, after
-  `restart_checkpoint`, after the end of a Trial, and after loading a save (a load resumes at the
-  checkpoint as a fresh attempt). A retry never starts weaker than the run before it.
+  `restart_checkpoint` and after the end of a Trial. A retry never starts weaker than the run before it.
+  Loading a save is **not** a new attempt for boons (see Lifetime): it opens no offer.
 - **Every boss the tower clears** during an attempt, in Push. (Attempts start after the last cleared
   boss, so in practice this is always a boss's first clear.)
 - **Not in Patrol.** No offers open there, but boons already active keep working.
 - The **first offer of a Prestige** draws only stat surges (and so do its rerolls).
-- A boss cleared while an offer is still pending **queues** behind it (at most 3; the oldest drops).
-  Picking, rerolling or declining the pending offer brings up the next one.
+- A boss cleared while an offer is still pending **merges** into it (UX Phase 1: never two offers in a
+  row). The pending cards stand for that boss too; nothing is queued and nothing is picked
+  (`Ev.BoonOffer` src `merged`, c = the boss wave). A queue an older save carried still drains, oldest
+  first, as each offer resolves.
 - An offer **waits indefinitely**. Nothing times it out and nothing auto-picks it.
+- **Boss-clear hold.** After a boss clear opens a decision (a boon offer and/or an Anomaly draft), the run
+  stays in `between` while one is pending, at most 15 s of sim time from the clear (`BOSS_HOLD_TICKS`,
+  `run/machine.ts`). `release_hold` (the UI's "Later") ends it early and leaves the decision pending;
+  resolving every pending decision ends it too. Patrol never holds. `UiState.run.holdTicksLeft` is the
+  ticks left (0 = none). Not saved: a reload resumes in `between` without it. Headless agents decide on the
+  next tick, so they spend at most the clear tick itself held.
 
 ## The offer
 
@@ -39,9 +47,27 @@ offer kind (start or boss), so the simulator and the tests reproduce every offer
   weighs 4, a boon with no needs 2, a boon that needs something the build lacks 0.5;
 - at most one of the three needs something the build lacks;
 - never a boon that is already active, never a Second Chance already used this attempt;
-- never three of one category while another category is still available.
+- never three of one category while another category is still available;
+- never a boon the unlock ladder has not revealed (below).
 
 `needs` are a hardpoint or an element (mounted or attuned), or `fusion` (any Fusion active).
+
+### Ladder (UX Phase 1)
+
+Offers, rerolls and Anomaly drafts never name something the player has not been shown
+(`run/reveal.ts`). An item is withheld (weight 0) when
+
+- its `reveal` lists `abilities` and abilities are not revealed yet: best wave cleared
+  (`max(meta.deepestEver, run.deepestCleared)`) below `ABILITIES_REVEAL_WAVE` (12) and no Prestige. This is
+  the unlock ladder's `abilities` rung; `src/sim/data/content-pool.ts` holds the number and
+  `src/ui/progression.ts` reads it from there. Gated boons: Quick Hands, Deep Reserves, Reckless,
+  Overclocked. Gated Anomalies: Overcharged Capacitor, Second Opinion, Feedback Loop.
+- its `needs` or `reveal` lists an element or hardpoint outside the content pool at the current Prestige
+  count that the build does not own (`CONTENT_POOL`, now in `src/sim/data/content-pool.ts` and re-exported
+  by `src/ui/progression.ts`). Example: Frostbite and Cold Iron before the first Prestige; Borrowed Blade
+  (`reveal: ['blade']`) before Prestige 2.
+
+The sim cannot see the UI's "Unlock everything" preference, so that switch does not open these gates.
 
 ## Actions
 
@@ -65,10 +91,10 @@ this attempt".
 - Active boons, any pending offer and the queue are **cleared when a new attempt starts** (then that
   attempt's start offer opens), on **Prestige**, on **Ascension**, and on **Trial start and end** (the
   parked run comes back without its old offer and gets a fresh start offer).
-- **A reload is a fresh attempt.** A save taken mid-attempt stores the active list and a pending offer
-  (with its queue and paid rerolls). Loading clears the active boons, as every new attempt does, but
-  an undecided offer the save carried stays pending instead of the start offer, so a reload neither
-  trades an offer away nor rerolls it for free. With no offer in the save, the start offer opens.
+- **A reload is not a death** (UX Phase 1). A save stores the active list, the used-up one-use boons
+  (`boonSpent`) and a pending offer (with its queue and paid rerolls). Loading keeps all of them and
+  opens no new offer, so a reload neither costs the attempt's boons nor grants or rerolls an offer. A save
+  taken while the tower was dead (`RunSave.attemptEnded`) loads as that death: boons cleared, start offer.
 - **One-use boons.** Second Chance and Windfall leave the active list (freeing the slot) once they
   fire. Second Chance is then gone for the rest of the attempt (`run.boonSpent`); Windfall may be
   offered and picked again.
@@ -141,7 +167,7 @@ Trophy Hunter is the fourth wild card.
 
 - `build.boons: BoonId[]` (oldest first) is additive on `BuildState` and saved in `RunSave.build`;
   the offer bookkeeping (`boonOffer`, `boonOfferWave`, `boonOfferKind`, `boonOfferSeq`, `boonRerolls`,
-  `boonQueue`, `boonsSeenFirst`) is optional in `RunSave` and sanitized on load (unknown ids and
+  `boonQueue`, `boonsSeenFirst`, `boonSpent`, `attemptEnded`) is optional in `RunSave` and sanitized on load (unknown ids and
   duplicates dropped, at most 4 active and 3 queued, numbers made finite).
 - Stat boons carry `effects` and resolve in `StatResolver` at rank 1 (a `mul` effect adds to the key's
   multiplier sum, exactly like an upgrade rank). Two keys exist only for boons:
@@ -152,10 +178,10 @@ Trophy Hunter is the fourth wild card.
   `World.deathGuard` (Second Chance, read by `damageTower`), `signals.droneRateMul` (Rally Drones,
   read by drones.ts), `signals.wellLifeMul` (Anchor Well, read by gravitics.ts), `World.dynamicPowerMul`
   (Trophy Hunter, composed), `fieldSlow` (Stopwatch).
-- Events: `Ev.BoonOffer` (src `start` / `boss` / `reroll`, a = offer sequence, b = rerolls) and
+- Events: `Ev.BoonOffer` (src `start` / `boss` / `reroll` / `merged`, a = offer sequence, b = rerolls) and
   `Ev.BoonPicked` (src = boon id or `decline`, a = active count, b = dropped index or −1).
 - UiState: `run.boonOffer`, `run.boonOfferKind`, `run.boonOfferSeq`, `run.boons`, `run.boonQueueLength`,
-  `run.boonCap`, `run.boonRerollCost`.
+  `run.boonCap`, `run.boonRerollCost`, `run.holdTicksLeft`.
 - Presentation only (no effect on the sim hash): a soft two-note chime when a new offer appears and a
   pluck on a pick (`audio/sfx/meta.ts`, `boon_offer` / `boon_pick`); while boons are active the tower
   shows a faint gold halo and one orbiting pip per boon (`core/snapshot-tower.ts`).

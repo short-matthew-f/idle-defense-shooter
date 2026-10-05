@@ -147,7 +147,7 @@ export async function attention({ browser, BASE, OUT, check, attachLogs }) {
       await page.evaluate(() => window.__citadel.game.setFast(1));
       const samples = [];
       for (let k = 0; k < 40; k++) {
-        const s = await page.evaluate((c) => ({ dt: Math.round(performance.now() - c), ...attentionNow() }), clearAt);
+        const s = { dt: await page.evaluate((c) => Math.round(performance.now() - c), clearAt), ...(await page.evaluate(attentionNow)) };
         samples.push(s);
         if (k === 3) await shot('bossclear-w10-beat');
         if (k === 14) await shot('bossclear-w10-decision');

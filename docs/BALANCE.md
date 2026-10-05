@@ -339,8 +339,17 @@ numbers above are from a probe, not from a full acceptance run.
   One `Ev.Rush` (src `wave.rush`) is emitted per wave with the cause chain to the wave start; the feed shows "Stragglers
   rush the tower" (rate-limited). The upper bound for a wave that has stalled is therefore the stall time (10 s) + the
   ramp (8 s) + the walk in at ×3 speed.
+- **Boss waves (UX Phase 1, C-05).** While the boss lives its brood never counts as progress, so a boss nobody damaged
+  used to turn the whole wave, brood included, into a ×3 swarm. Now the first 10 s stall only makes the **boss step in**:
+  it alone Rushes (speed ramp, ≤ 25% of pushes, no shield / heal), drops its scripted movement and hold distance and
+  walks to contact (`enemies/ai.ts`, `enemies/steering.ts`), with one `Ev.Rush` src `boss.step_in`; the clock restarts.
+  If the boss still makes no progress for another 10 s, or once it is dead and the rest stalls, the whole wave Rushes as
+  above. Bound for a stalled boss wave: 2 × 10 s + the ramp + the walk in. `UiState.wave.stalled` is `'boss'` after a
+  step-in, `'wave'` once the wave Rushes, else null; it stays set through `dead` until the next attempt, so the death
+  card can say "The Broodheart wasn't taking damage".
 
 **Tests:** `tests/core/forces.test.ts` (rim and reach caps, stacking, inward pushes), `tests/enemies/stall.test.ts` (the
 regeneration gate: outside the range, inside the range and 3 s after a push; the Rush starts at 10 s and not before; a
-knockback-heavy build clears a Shielded wave as fast as one without). The existing behavior tests set the primary's range
+knockback-heavy build clears a Shielded wave as fast as one without); `tests/core/phase1.test.ts` (the boss steps in
+alone, then the wave Rushes if nothing changes; non-boss waves unchanged). The existing behavior tests set the primary's range
 explicitly because regeneration now needs it.

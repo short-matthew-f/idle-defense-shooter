@@ -29,3 +29,6 @@
 .dc-frontier > span { flex: 1; min-width: 0; }
 .dc-frontier .btn { flex: none; }
 .dc-stall { color: var(--text); }
+/* the card owns the lane but the room is short (lanes.ts): the buys come first, the restart / cause lines go */
+.death-card.dc-tight > .dc-sub:not(.dc-stall) { display: none; }
+.death-card.dc-tight .dc-lead { margin-top: 0; }

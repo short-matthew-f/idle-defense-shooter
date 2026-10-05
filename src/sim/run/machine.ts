@@ -11,8 +11,8 @@
  *             while the run continues, and later draft waves queue in run.draftQueue
  *  dead       1.5 s, then a new attempt at checkpoint+1 with full HP and empty CE (attempts++)
  * Boons (run/boons.ts): every attempt start clears the active boons and any offer, then (except on the first
- * attempt of a Prestige, and in Patrol) opens the start-of-attempt offer; a save load keeps an undecided offer
- * the save carried instead. Every boss cleared in Push opens (or queues) another offer. Offers wait for the
+ * attempt of a Prestige, and in Patrol) opens the start-of-attempt offer; a save load is not a death: it keeps
+ * the active boons and any undecided offer and opens none (a save taken while dead loads as that death). Every boss cleared in Push opens (or queues) another offer. Offers wait for the
  * player; nothing here ever picks one.
  * Push advances wave by wave; Patrol loops checkpoint+1 … checkpoint+4 and never fights a boss,
  * measuring run.patrolScrapPerSecond for offline returns. Until Patrol has measured it, every non-boss

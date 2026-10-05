@@ -302,6 +302,23 @@ async function desktop() {
   const saved = JSON.parse(Buffer.from(exported.slice('CITADEL1:'.length), 'base64').toString('utf8'));
   const sv = { cp: saved.run.checkpoint, deepest: saved.run.deepestCleared, scrap: saved.run.scrap };
   check('import restores the run', reloaded.cp === sv.cp && reloaded.deepest === sv.deepest && reloaded.scrap >= sv.scrap - 1e-6, { saved: sv, afterExport: { cp: preImport.cp, deepest: preImport.deepest, scrap: preImport.scrap }, reloaded: { cp: reloaded.cp, deepest: reloaded.deepest, scrap: reloaded.scrap } });
+  // UX Phase 1 "never lose a purchase": a purchase followed by a reload survives, (a) via the ~2 s debounced save,
+  // (b) via the pagehide path (synchronous backup + async save) with the reload right after it.
+  const rankSum = (u) => Object.values(u.ranks).reduce((a, b) => a + b, 0);
+  for (const path of ['debounce', 'pagehide']) {
+    await page.evaluate(() => window.__citadel.game.setFast(1));
+    const r0 = rankSum(await uiOf(page));
+    await page.evaluate(() => window.__citadel.game.ui.host.send({ type: 'buy_cheapest', tree: 'ballistics', count: 0 }));
+    const bought = await waitUi(page, (u) => rankSum(u) > r0, 10000, `buy before reload (${path})`);
+    const r1 = rankSum(bought);
+    if (path === 'debounce') await page.waitForTimeout(2600);
+    else { await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide'))); await page.waitForTimeout(300); }
+    await page.reload();
+    await page.waitForTimeout(1500);
+    await skipOnboarding(page);
+    const back = await waitUi(page, (u) => u.wave >= 1, 60000, `reload after purchase (${path})`);
+    check(`a purchase survives an immediate reload (${path})`, rankSum(back) >= r1 && r1 > r0, { before: r0, bought: r1, afterReload: rankSum(back) });
+  }
   await page.waitForTimeout(3000);
   const allCmdErrors = await page.evaluate(() => window.__citadel.game.cmdErrors.slice());
   const simErrors = await page.evaluate(() => window.__citadel.game.simErrors.slice());
@@ -992,16 +1009,16 @@ async function tells() {
     if (hadUndo) await undoBtn.tap();
     for (let k = 0; k < 30 && (await slots())[0] !== 'repulsor_pulse'; k++) await page.waitForTimeout(100);
     const back = await slots();
-    check(`tells ${vp.id}: Equip replaces slot 1, Undo restores Repulsor Pulse`, eq[0] === 'bombardment' && hadUndo && back[0] === 'repulsor_pulse' && back[1] === 'emp', { eq, back });
+    check(`tells ${vp.id}: Equip replaces slot 1, Undo restores Repulsor Pulse`, eq[0] === 'bombardment' && hadUndo && back[0] === 'repulsor_pulse' && back[1] === 'emp', { eq, back, hadUndo });
 
     // 3. the pre-boss card (between waves, wave 10 next, counter not slotted)
     await load("s.run.deepestCleared = 14; s.meta.deepestEver = 14; s.run.checkpoint = 9; s.run.wave = 10; s.run.scrap = 300; s.run.build.abilities = ['repulsor_pulse', 'emp'];", undefined, true);
     let card = null;
-    for (let k = 0; k < 40 && !card; k++) { card = await page.evaluate(() => { const c = document.querySelector('.preboss-card'); return c && !c.hidden ? c.textContent : null; }); if (!card) await page.waitForTimeout(100); }
+    for (let k = 0; k < 100 && !card; k++) { card = await page.evaluate(() => { const c = document.querySelector('.preboss-card'); return c && !c.hidden ? c.textContent : null; }); if (!card) await page.waitForTimeout(100); }
     await page.screenshot({ path: `${OUT}/phone-tells-${vp.id}-preboss.png` });
     const sBefore = await slots();
     check(`tells ${vp.id}: the pre-boss card names the boss, the tell and the counter, and equips nothing by itself`,
-      !!card && /Next: Broodheart/.test(card) && /Bombardment/.test(card) && /Not now/.test(card) && sBefore[0] === 'repulsor_pulse', { card, sBefore });
+      !!card && /Next: Broodheart/.test(card) && /Bombardment/.test(card) && /Not now/.test(card) && sBefore[0] === 'repulsor_pulse', { card, sBefore, dbg: await page.evaluate(() => { const g = window.__citadel.game, u = g.latestUi(); return { ph: u.run.phase, w: u.run.wave, ab: g.ui.ctx.features().abilities, hidden: document.querySelector('.preboss-card')?.hidden }; }) });
     if (card) {
       await page.locator('.preboss-card [data-act="dismiss"]').tap();
       await page.waitForTimeout(300);

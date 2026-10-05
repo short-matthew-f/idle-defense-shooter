@@ -170,7 +170,7 @@ export class OverlayLanes {
     for (const k of ['bottom']) styleVar(arenaTop, k, '');
     for (const el of [offer, coach.el, feed.el, armHint, this.p.death.el]) for (const k of ['top', 'bottom', 'left', 'right', 'width', 'max-width', 'max-height', 'position', 'transform']) styleVar(el, k, '');
     coach.el.classList.remove('lane-wait', 'compact');
-    this.p.death.el.classList.remove('lane-wait', 'lane-folded');
+    this.p.death.el.classList.remove('lane-wait', 'lane-folded', 'dc-tight');
     offer.classList.remove('narrow', 'thin');
     feed.fit(FEED_MAX_SHOWN);
     this.plan = {};
@@ -291,6 +291,12 @@ export class OverlayLanes {
       else {
         // asked for in full, or the card owns the lane (death first, attention.ts): the roomiest slot, whatever it holds
         const whole = D.wantFull || D.first;
+        // the card owns the lane but the roomiest slot is short: drop the restart / cause lines so the buys show whole
+        de.classList.remove('dc-tight');
+        if (whole && ids.length) {
+          const roomiest = Math.max(...ids.map((id) => slot(id)!.b - slot(id)!.t));
+          if (Math.max(...ids.map((id) => full(id))) > roomiest && Math.min(...ids.map((id) => full(id))) > roomiest) de.classList.add('dc-tight');
+        }
         const ranked = whole ? [...ids].sort((x, y) => (slot(y)!.b - slot(y)!.t) - (slot(x)!.b - slot(x)!.t)) : ids;
         for (const id of ranked) opts.push({ slot: id, h: full(id), minH: MIN_DEATH });
         if (!whole) for (const id of ids) opts.push({ slot: id, h: folded(id), compact: true });
