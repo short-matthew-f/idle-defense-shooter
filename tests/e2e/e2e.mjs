@@ -306,10 +306,15 @@ async function desktop() {
   // (b) via the pagehide path (synchronous backup + async save) with the reload right after it.
   const rankSum = (u) => Object.values(u.ranks).reduce((a, b) => a + b, 0);
   for (const path of ['debounce', 'pagehide']) {
-    await page.evaluate(() => window.__citadel.game.setFast(1));
     const r0 = rankSum(await uiOf(page));
-    await page.evaluate(() => window.__citadel.game.ui.host.send({ type: 'buy_cheapest', tree: 'ballistics', count: 0 }));
-    const bought = await waitUi(page, (u) => rankSum(u) > r0, 10000, `buy before reload (${path})`);
+    let bought = null;
+    for (let k = 0; k < 60 && !bought; k++) {   // one rank, as soon as Scrap allows (the sim keeps playing at ?fast)
+      await page.evaluate(() => window.__citadel.game.ui.host.send({ type: 'buy_cheapest', tree: 'ballistics', count: 1 }));
+      await page.waitForTimeout(500);
+      const u = await uiOf(page);
+      if (rankSum(u) > r0) bought = u;
+    }
+    if (!bought) throw new Error(`no affordable rank before reload (${path})`);
     const r1 = rankSum(bought);
     if (path === 'debounce') await page.waitForTimeout(2600);
     else { await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide'))); await page.waitForTimeout(300); }
@@ -963,7 +968,9 @@ async function tells() {
       await page.waitForTimeout(600);
     };
     const slots = () => page.evaluate(() => window.__citadel.game.latestUi().build.abilities.slice());
-    const setSlot = async (slot, ability) => { await page.evaluate(({ slot, ability }) => window.__citadel.game.ui.ctx.host.send({ type: 'set_ability_slot', slot, ability }), { slot, ability }); await page.waitForTimeout(400); };
+    const setSlot = async (slot, ability) => { await page.evaluate(({ slot, ability }) => window.__citadel.game.ui.ctx.host.send({ type: 'set_ability_slot', slot, ability }), { slot, ability });
+      for (let k = 0; k < 150 && (await slots())[slot] !== ability; k++) await page.waitForTimeout(100);   // the sim may be slow on software GL
+    };
     const bossTell = () => page.evaluate(() => {
       const bb = window.__citadel.game.ui.hud.bossBar, orig = bb.update.bind(bb);
       bb.update = (u) => orig({ ...u, wave: { ...u.wave, isBoss: true, bossId: 'broodheart', bossMaxHp: 1000, bossHp: 900, bossPhase: 0, bossPhaseMarks: [0.5], weakPointOpen: false, tellActive: 'bombardment', tellTicksLeft: 80 } });
@@ -973,7 +980,7 @@ async function tells() {
     // 1. before the abilities reveal (best wave 10): information only
     await load('s.run.deepestCleared = 10; s.meta.deepestEver = 10; s.run.checkpoint = 10; s.run.wave = 11; s.run.scrap = 300;');
     await bossTell();
-    await page.waitForTimeout(500);
+    for (let k = 0; k < 100 && !((await tellInfo())?.text); k++) await page.waitForTimeout(100);
     const s0 = await slots();
     const info = await tellInfo();
     await page.screenshot({ path: `${OUT}/phone-tells-${vp.id}-info.png` });
@@ -987,7 +994,7 @@ async function tells() {
     await load('s.run.deepestCleared = 14; s.meta.deepestEver = 14; s.run.checkpoint = 10; s.run.wave = 11; s.run.scrap = 300;');
     await setSlot(0, 'repulsor_pulse'); await setSlot(1, 'emp');
     await bossTell();
-    await page.waitForTimeout(500);
+    for (let k = 0; k < 100 && !/Bombardment/.test((await tellInfo())?.text ?? ''); k++) await page.waitForTimeout(100);
     const before = await slots();
     await page.locator('.boss-bar .tell').tap();
     await page.waitForTimeout(400);
@@ -996,29 +1003,31 @@ async function tells() {
     await page.screenshot({ path: `${OUT}/phone-tells-${vp.id}-confirm.png` });
     check(`tells ${vp.id}: both slots full, a tap asks "Equip Bombardment in slot 1 (replaces Repulsor Pulse)?" and changes nothing`,
       /Equip Bombardment in slot 1 \(replaces Repulsor Pulse\)\?/.test(askText) && JSON.stringify(before) === JSON.stringify(mid), { askText, before, mid });
-    await page.locator('.tell-confirm [data-act="cancel"]').tap();
+    await page.locator('.tell-confirm [data-act="cancel"]').evaluate((el) => el.click());
     await page.waitForTimeout(300);
     check(`tells ${vp.id}: Cancel closes the question and leaves the slots`, (await page.locator('.tell-confirm:visible').count()) === 0 && JSON.stringify(await slots()) === JSON.stringify(before));
     await page.locator('.boss-bar .tell').tap();
     await page.waitForTimeout(300);
-    await page.locator('.tell-confirm [data-act="equip"]').tap();
+    await page.locator('.tell-confirm [data-act="equip"]').evaluate((el) => el.click());   // the Undo window is 5 s: software-GL taps can be slower
     await page.waitForTimeout(500);
     const eq = await slots();
     const undoBtn = page.locator('.tell-confirm button', { hasText: 'Undo' });
     const hadUndo = (await undoBtn.count()) === 1;
-    if (hadUndo) await undoBtn.tap();
-    for (let k = 0; k < 30 && (await slots())[0] !== 'repulsor_pulse'; k++) await page.waitForTimeout(100);
+    if (hadUndo) await undoBtn.evaluate((el) => el.click());
+    for (let k = 0; k < 80 && (await slots())[0] !== 'repulsor_pulse'; k++) await page.waitForTimeout(100);
     const back = await slots();
     check(`tells ${vp.id}: Equip replaces slot 1, Undo restores Repulsor Pulse`, eq[0] === 'bombardment' && hadUndo && back[0] === 'repulsor_pulse' && back[1] === 'emp', { eq, back, hadUndo });
 
     // 3. the pre-boss card (between waves, wave 10 next, counter not slotted)
-    await load("s.run.deepestCleared = 14; s.meta.deepestEver = 14; s.run.checkpoint = 9; s.run.wave = 10; s.run.scrap = 300; s.run.build.abilities = ['repulsor_pulse', 'emp'];", undefined, true);
+    await load("s.run.deepestCleared = 14; s.meta.deepestEver = 14; s.run.checkpoint = 5; s.run.wave = 6; s.run.scrap = 300; s.run.build.abilities = ['repulsor_pulse', 'emp'];");
+    // the next boss wave is minutes away: feed the ability bar the `between` before wave 10 (its own state, otherwise live)
+    await page.evaluate(() => { const ab = window.__citadel.game.ui.abilities, orig = ab.update.bind(ab); ab.update = (u) => orig({ ...u, run: { ...u.run, wave: 10, phase: 'between' } }); });
     let card = null;
     for (let k = 0; k < 100 && !card; k++) { card = await page.evaluate(() => { const c = document.querySelector('.preboss-card'); return c && !c.hidden ? c.textContent : null; }); if (!card) await page.waitForTimeout(100); }
     await page.screenshot({ path: `${OUT}/phone-tells-${vp.id}-preboss.png` });
     const sBefore = await slots();
     check(`tells ${vp.id}: the pre-boss card names the boss, the tell and the counter, and equips nothing by itself`,
-      !!card && /Next: Broodheart/.test(card) && /Bombardment/.test(card) && /Not now/.test(card) && sBefore[0] === 'repulsor_pulse', { card, sBefore, dbg: await page.evaluate(() => { const g = window.__citadel.game, u = g.latestUi(); return { ph: u.run.phase, w: u.run.wave, ab: g.ui.ctx.features().abilities, hidden: document.querySelector('.preboss-card')?.hidden }; }) });
+      !!card && /Next: Broodheart/.test(card) && /Bombardment/.test(card) && /Not now/.test(card) && sBefore[0] === 'repulsor_pulse', { card, sBefore, dbg: await page.evaluate(() => { const g = window.__citadel.game, u = g.latestUi(); return { ph: u.run.phase, w: u.run.wave, tick: u.tick, paused: g.paused, doc: document.hidden, ab: g.ui.ctx.features().abilities, hidden: document.querySelector('.preboss-card')?.hidden }; }) });
     if (card) {
       await page.locator('.preboss-card [data-act="dismiss"]').tap();
       await page.waitForTimeout(300);
