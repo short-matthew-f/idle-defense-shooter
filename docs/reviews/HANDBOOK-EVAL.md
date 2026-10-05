@@ -234,3 +234,34 @@ The handbook is explicit (doc 08 §2.1, §5–7): only people and devices settle
 
 - Evaluator D's full screenshot matrix of every More sub-screen, its navigation tap-count table and its attention tables were cut short by a usage limit. The other three covered the same ground for Battle, Upgrades, Build and Prestige. Re-run D after Phase 1.
 - Physical devices, human comprehension, VoiceOver/TalkBack, colour-vision simulation of the arena, one-handed comfort, muted-play balance, and real performance. See Phase 5.
+
+## 7. Navigation and attention audit after Phases 1–2 (2026-10-05, master `a589366`)
+
+Re-run of evaluator D's doc-08 audits (§3 screenshots, §10 navigation, §11 attention, §4 proxy, §15.1 interruption).
+Evidence: static + scripted (headless Chromium, software GL; crafted saves and the owner's wave-28 save). No device or
+human testing; performance not judged. Scripts and screenshots: session scratchpad `navaudit/`.
+
+**Confirmed fixed:** the wave-10 tell is info-only before abilities; the Frontier death card and "Past the Frontier" HUD
+work on the owner's save; the death card owns its lane; Back closes a dialog the player opened; the welcome-back card;
+the save-loss window went from ~26 s to ~2 s; Start over is double-confirmed.
+
+Scorecard: Comprehension 3, Input reliability 3 (2 on the ring-guided Upgrades path), Navigation 3, Hierarchy 3,
+Feedback 3, Complexity 3, Engagement 3 (structure only), Accessibility 3 (Phase 3 pending), Performance not judged.
+
+| ID | Sev | Finding | Status |
+| --- | --- | --- | --- |
+| N-01 | S1 | The Phase-2 decision hold froze the sim, so buys on a ring-guided Upgrades visit did nothing for up to 30 s | hotfix |
+| N-02 | S2 | More → Inspector opens and instantly closes (async history pop closes the modal) | hotfix |
+| N-03 | S2 | Back while a dialog that opened itself on load is up leaves the app | hotfix |
+| N-04 | S2 | Landscape: death card / boon offer column overlaps the quick-buy chip; draft Pick below the fold | Phase 3 |
+| N-05 | S2 | The Elements hint ring follows the player onto every screen | hotfix |
+| N-06 | S2 | The death card's Frontier "Forecast" action looks like plain text | hotfix |
+| N-07 | S2 | Upgrades at 375×667: first upgrade row sits at ~75 % of the screen height | Phase 3 |
+| N-08 | S3 | Automation sub-tabs clip "Upgrade Queue"/"Blueprints" | Phase 4 |
+| N-09 | S2 | Purchases in the last ~2 s before a reload are lost (debounce window) | Phase 3 (command journal) |
+| N-10 | S3 | Quartermaster coach card wraps to 8 lines at 393 | hotfix |
+| N-11 | S3 | Quick-buy chip truncates its label | hotfix |
+| N-12 | S3 | Zero-income return card appears ~4 s after load | hotfix |
+| N-13 | S3 | Importing an old export credits offline time without saying so | Phase 4 |
+| N-14 | S3 | Constellation minor/bridge nodes have 31–33 px hit areas; 12 px names | Phase 3 |
+| N-15 | S3 | A death past a later Frontier has no why-line | hotfix |
