@@ -148,3 +148,7 @@ button.tell.info { animation: none; cursor: default; border-style: solid; backgr
 .tell-confirm .btn, .preboss-card .btn { min-height: 44px; font-size: 14px; }
 .arena-top > .preboss-card { align-self: stretch; max-width: 560px; margin: 0 auto; width: 100%; pointer-events: none; }
 .arena-top > .preboss-card :is(button) { pointer-events: auto; }
+.pb-btns { flex: 1 1 100%; flex-wrap: nowrap; min-width: 0; }
+.pb-btns .btn { white-space: normal; line-height: 18px; padding-top: 4px; padding-bottom: 4px; }
+.pb-btns .btn.primary { flex: 1 1 auto; min-width: 0; }
+.pb-btns .btn:not(.primary) { flex: none; }

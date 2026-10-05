@@ -16,7 +16,7 @@ import { bossForWave } from '@sim/data/bosses';
 import { equipTarget, preBossInfo, preBossKey, tellDecision, type PreBossInfo } from './tells';
 
 /** How long the replace question and the Undo stay up (ms). */
-const CONFIRM_MS = 8000;
+const CONFIRM_MS = 10000;
 const UNDO_MS = 5000;
 const act = (b: HTMLButtonElement, name: string): HTMLButtonElement => { b.dataset.act = name; return b; };
 const MIN_ABILITY_COST = Math.min(...ABILITIES.map((a) => a.cost));

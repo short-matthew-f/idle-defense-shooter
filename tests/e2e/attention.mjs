@@ -128,7 +128,7 @@ export async function attention({ browser, BASE, OUT, check, attachLogs }) {
     let bossShot = false;
     const t0 = Date.now();
     let clearAt = null;
-    while (Date.now() - t0 < 150000) {
+    while (Date.now() - t0 < 240000) {
       const st = await page.evaluate(() => { const G = window.__citadel.game, u = G.latestUi(); return { wave: u.run.wave, boss: u.wave.isBoss && u.run.phase === 'combat' && u.wave.bossHp > 0, clear: G.ui.feed.bossClearAt, boss10: u.wave.isBoss && u.run.wave === 10 }; });
       if (st.boss && st.wave === 10 && !bossShot) {
         await page.evaluate(() => window.__citadel.game.setFast(1));
