@@ -16,6 +16,9 @@
  *                   (the median time this run's checkpoints took, at least RECOMMEND_MIN_CYCLE s)
  *                   and at least wave 20 is cleared. Measured in time, not cleared waves: at a real
  *                   wall no waves are cleared, which is exactly when the player should Prestige.
+ *                   Frontier rule (UX Phase 2): also true once the player has died on a wave past the Frontier this
+ *                   Prestige (run.deepestDeath), or has cleared the Frontier wave and the Echo rate has stopped rising
+ *                   (≥ FRONTIER_FLAT below its peak). The rate rule alone lags the Frontier wall by several minutes.
  *
  * The ProgressionSystem (run/prestige.ts) calls `trackScrap` every tick and `sampleForecast` at
  * checkpoints / every 60 s. Tracker state is per World (WeakMap; never iterated).
@@ -32,6 +35,8 @@ import { quartermasterShare } from '../directives/quartermaster';
 export const RECOMMEND_DROP = 0.15;
 /** Floor on the "one checkpoint cycle" window, in play seconds (early checkpoints fall in 2–3 min). */
 export const RECOMMEND_MIN_CYCLE = 300;
+/** Frontier rule: past the Frontier, a rate this far below its peak counts as "stopped rising". */
+export const FRONTIER_FLAT = 0.02;
 export const SAMPLE_EVERY_TICKS = 60 * TICK_RATE;
 const HISTORY_CAP = 600;
 const WINDOW = 60;
@@ -101,6 +106,23 @@ export function isRecommended(history: readonly { seconds: number; echoes: numbe
   while (k - 1 > peakIdx && sampleRate(history[k - 1]) <= limit) k--;
   // k = first sample of the trailing run below the limit; it must have lasted a checkpoint cycle
   return history[history.length - 1].seconds - history[k].seconds >= Math.max(RECOMMEND_MIN_CYCLE, cycleSeconds);
+}
+
+/**
+ * The Frontier rule (pure; unit-tested): at least wave 20 cleared, a Frontier exists (not a Trial, ≤ 100) and either a
+ * death on a wave past it this Prestige, or the Frontier wave cleared and the current rate ≥ FRONTIER_FLAT below the peak.
+ */
+export function frontierRecommends(deepestCleared: number, deepestDeath: number, frontier: number | undefined, rate: number, peakRate: number): boolean {
+  if (frontier === undefined || frontier > 100 || deepestCleared < 20) return false;
+  if (deepestDeath > frontier) return true;
+  return deepestCleared >= frontier && peakRate > 0 && rate < (1 - FRONTIER_FLAT) * peakRate;
+}
+
+/** Peak sample rate over a history (0 when empty). */
+function peakOf(history: readonly { seconds: number; echoes: number }[]): number {
+  let p = 0;
+  for (const s of history) { const r = sampleRate(s); if (r > p) p = r; }
+  return p;
 }
 
 /** One checkpoint cycle in play seconds: the median time between this run's checkpoints (≥ the floor). */
@@ -174,7 +196,8 @@ export function computeForecast(w: WorldImpl): Forecast {
   return {
     echoesNow, echoRate, peakRate, nextBossEchoes, nextBossRate, reclimbSeconds,
     wallGaugeSeconds: wallGaugeSeconds(w),
-    recommended: isRecommended(hist, run.deepestCleared, checkpointCycleSeconds(run)),
+    recommended: isRecommended(hist, run.deepestCleared, checkpointCycleSeconds(run))
+      || frontierRecommends(run.deepestCleared, run.deepestDeath ?? 0, w.trial ? undefined : frontierWave(meta), echoRate, peakRate),
     curve,
     frontier: w.trial ? undefined : frontierWave(meta),
     nextFrontier: w.trial ? undefined : frontierFor(lifetimeEchoes(meta) + echoesNow),
@@ -187,5 +210,7 @@ export function forecastRecommends(w: WorldImpl): boolean {
   if (run.deepestCleared < 20) return false;
   const h = run.echoRateHistory;
   const cur = { seconds: run.playSeconds, echoes: prestigeEchoes(w), wave: run.deepestCleared };
-  return isRecommended(h.length ? [...h, cur] : [cur], run.deepestCleared, checkpointCycleSeconds(run));
+  const hist = h.length ? [...h, cur] : [cur];
+  if (isRecommended(hist, run.deepestCleared, checkpointCycleSeconds(run))) return true;
+  return frontierRecommends(run.deepestCleared, run.deepestDeath ?? 0, w.trial ? undefined : frontierWave(w.meta), sampleRate(cur), peakOf(hist));
 }

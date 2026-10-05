@@ -254,7 +254,10 @@ export class RunMachine {
   postTick(): void {
     const w = this.w, run = w.run;
     if (run.phase !== 'combat') return;
-    if (w.tower.hp <= 0) { this.setPhase('dead'); return; }
+    if (w.tower.hp <= 0) {
+      if (run.wave > (run.deepestDeath ?? 0)) run.deepestDeath = run.wave;   // UX Phase 2: Forecast Frontier rule
+      this.setPhase('dead'); return;
+    }
     const wave = w.wave;
     this.stall.tick(w, !wave || this.cursor >= wave.spawns.length);   // anti-stall invariant (run/stall.ts)
     if (!wave || this.cursor < wave.spawns.length) return;

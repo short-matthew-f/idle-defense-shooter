@@ -13,8 +13,8 @@ export interface ModalOptions {
   footer?: HTMLElement;
   className?: string;
   dismissable?: boolean;
-  /** 'center' (default), 'wide', or 'overlay' (translucent side sheet that keeps the field readable). */
-  variant?: 'center' | 'wide' | 'overlay';
+  /** 'center' (default), 'wide', 'overlay' (translucent side sheet that keeps the field readable) or 'sheet' (bottom sheet: info.ts). */
+  variant?: 'center' | 'wide' | 'overlay' | 'sheet';
   onClose?: () => void;
   /** A balance line under the title for a dialog that spends ("You have ◆ 12 Cores": wallet.ts walletChip). */
   wallet?: HTMLElement;

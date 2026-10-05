@@ -22,6 +22,8 @@ import type { Shop } from './shop';
 import type { AbilityBar } from './abilities';
 import type { DraftModal } from './draft';
 import type { UiCtx } from './ctx';
+import { markInfo } from './info';
+import { nodeTier } from './echo-tiers';
 
 const REFIT_CORES = 3;
 /** Tag a control for the pointer hints (hints.ts). */
@@ -75,7 +77,7 @@ export class BuildScreen {
   update(ui: UiState): void {
     if (!this.shown) return;
     const f = this.ctx.features();
-    const key = buildKey(ui) + `|${f.frame}${f.boons}${f.hardpoints}${f.elements}${f.anomalies}${f.abilities}${f.cores}|${this.docsOpen}`;
+    const key = buildKey(ui) + `|${f.frame}${f.boons}${f.hardpoints}${f.elements}${f.anomalies}${f.abilities}${f.cores}${f.prestigeTab}${f.cross}|${this.docsOpen}`;
     if (key === this.key) return;
     this.key = key;
     const y = this.el.parentElement?.scrollTop ?? 0;
@@ -93,11 +95,11 @@ export class BuildScreen {
     const f = FRAME_BY_ID.get(ui.build.frame);
     const hc = ui.slotCaps?.hardpoint ?? f?.hardpointCap ?? 0, ac = ui.slotCaps?.attunement ?? f?.attunementCap ?? 0;
     const caps = f ? `${hc}${f.freeMount ? ` + ${TREE_LABEL[f.freeMount]}` : ''} hardpoints · ${ac} attunements` : '';
-    return h('section', { class: 'bs-frame', title: 'A new Frame is chosen at Prestige' },
+    return markInfo(h('section', { class: 'bs-frame', title: 'A new Frame is chosen at Prestige' },
       h('div', { class: 'bs-frame-head' }, icon('shield', 'ico'),
         h('div', { class: 'bs-frame-id' }, h('span', { class: 'bs-frame-label', text: 'Frame' }), h('span', { class: 'bs-frame-name', text: f?.name ?? ui.build.frame }))),
       h('p', { class: 'bs-frame-trait', text: f?.trait ?? '' }),
-      caps ? h('p', { class: 'bs-frame-caps', text: caps }) : null);
+      caps ? h('p', { class: 'bs-frame-caps', text: caps }) : null), 'frame');
   }
 
   private slotRows(ui: UiState, isEl: boolean): HTMLElement[] {
@@ -122,7 +124,7 @@ export class BuildScreen {
           [button(['Tree', icon('right', 'ico tiny chev')], () => this.shop.jumpTo(id), { class: 'btn small', label: `Open the ${name} tree` })],
           `filled slot ${id}`));
       } else if (i < open) {
-        out.push(row(icon('plus', 'ico'), 'Empty slot', isEl ? 'Opens its tree, Infusions and Fusions' : 'One weapon system for the rest of this Prestige',
+        out.push(row(icon('plus', 'ico'), 'Empty slot', isEl ? (this.ctx.features().cross ? 'Opens its tree, Infusions and Fusions' : 'Opens its upgrade tree') : (this.ctx.features().prestigeTab ? 'One weapon system for the rest of this Prestige' : 'One weapon system, kept once mounted'),
           [hint(button(isEl ? 'Attune' : 'Mount', () => this.pick(isEl, i), { class: 'btn primary' }), isEl ? 'build-attune' : 'build-mount')], 'open'));
       } else locked++;
     }
@@ -142,7 +144,8 @@ export class BuildScreen {
   }
 
   private hardpoints(ui: UiState): HTMLElement {
-    return section('Hardpoints', 'Mounts lock for this Prestige; a Refit costs 3 Cores.', ...this.slotRows(ui, false), ...this.extraRows(ui));
+    const f = this.ctx.features();
+    return section('Hardpoints', f.prestigeTab ? `Mounts lock for this Prestige.${f.cores ? ` A Refit costs ${REFIT_CORES} Cores.` : ''}` : 'A mount stays once chosen.', ...this.slotRows(ui, false), ...this.extraRows(ui));
   }
 
   /** Systems that run without a slot: a Frame's free mount, or a Borrowed Blade from an Anomaly. */
@@ -160,7 +163,7 @@ export class BuildScreen {
   }
 
   private attunements(ui: UiState): HTMLElement {
-    return section('Attunements', 'Attunements lock for this Prestige.', ...this.slotRows(ui, true));
+    return section('Attunements', this.ctx.features().prestigeTab ? 'Attunements lock for this Prestige.' : 'An attunement stays once chosen.', ...this.slotRows(ui, true));
   }
 
   private doctrines(ui: UiState): HTMLElement {
@@ -208,7 +211,9 @@ export class BuildScreen {
       fold.setAttribute('aria-expanded', this.docsOpen ? 'true' : 'false');
       rows.push(fold, ...(this.docsOpen ? waiting : []));
     }
-    return section('Doctrines', `Locked for this Prestige; a change costs 1 Core, at a checkpoint.${seconds ? ' Trees marked 2nd run a second Doctrine.' : ''}`, ...rows);
+    const fx = this.ctx.features();
+    const rule = fx.cores ? (fx.prestigeTab ? 'Locked for this Prestige; a change costs 1 Core, at a checkpoint.' : 'A change costs 1 Core, at a checkpoint.') : 'A chosen path stays.';
+    return section('Doctrines', `${rule}${seconds ? ' Trees marked 2nd run a second Doctrine.' : ''}`, ...rows);
   }
 
   private anomalies(ui: UiState): HTMLElement {
@@ -218,7 +223,7 @@ export class BuildScreen {
     const empty = b.anomalySockets - b.anomalies.length;
     if (empty > 0) cards.appendChild(h('div', { class: 'bs-socket', text: `${empty === 1 ? 'An empty socket' : `${empty} empty sockets`}: Anomaly drafts follow boss kills` }));
     rows.push(cards);
-    return section('Anomalies', `${b.anomalies.length}/${b.anomalySockets} sockets, for this Prestige`, ...rows);
+    return section('Anomalies', `${b.anomalies.length}/${b.anomalySockets} sockets${this.ctx.features().prestigeTab ? ', for this Prestige' : ''}`, ...rows);
   }
 
   private abilitySlots(ui: UiState): HTMLElement {
@@ -229,7 +234,7 @@ export class BuildScreen {
       const def = id ? ABILITY_BY_ID.get(id) : null;
       const inactive = i >= n;
       const acts: HTMLElement[] = [];
-      // Reachability: Autocast (Prestige II) can be switched off per ability
+      // Reachability: Autocast (an Echo upgrade) can be switched off per ability
       if (auto && id && !inactive) {
         const on = autocastOn(mask, id);
         const t = button(on ? 'Auto on' : 'Auto off', () => this.ctx.host.send({ type: 'set_setting', key: 'autocastOff', value: setAutocast(mask, id, !on) }),
@@ -242,7 +247,8 @@ export class BuildScreen {
         : def ? `${def.cost} CE · ${def.cooldown}s cooldown · ${def.desc}` : 'Abilities spend Command Energy (CE).';
       return row(id ? abilityIcon(id, 'ico') : icon('plus', 'ico'), h('span', null, h('span', { class: 'bs-num-inline', text: `${i + 1} · ` }), def ? def.name : 'Empty ability slot'), sub, acts, inactive ? 'locked' : def ? 'filled' : 'open');
     });
-    const more = n >= 4 ? '' : n === 2 ? ' More slots: Third Tactical Slot (Prestige III), the Command capstone (Reactor).' : ' A fourth: the Command capstone (Reactor) or Third Tactical Slot.';
+    const fy = this.ctx.features();
+    const more = !fy.prestigeTab || n >= 4 ? '' : n === 2 ? ` More slots: Third Tactical Slot (${nodeTier('third_tactical_slot')}), the Command capstone (Reactor).` : ' A fourth: the Command capstone (Reactor) or Third Tactical Slot.';
     return section('Abilities', `Keys 1–${n} on Battle.${more}${auto ? ' Autocast fires each when affordable and useful.' : ''}`, ...rows);
   }
 

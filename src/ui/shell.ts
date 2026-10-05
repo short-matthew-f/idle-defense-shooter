@@ -30,6 +30,7 @@ import { anyModalOpen, handleBackWithModal } from './modal';
 import { prefs, setPref } from './prefs';
 import type { UiHost } from './host';
 import type { StatusStrip } from './hud';
+import { DecisionHold, LowHpAlert, buzz } from './decision-hold';
 
 export type ScreenId = Exclude<TabId, 'battle'>;
 
@@ -78,6 +79,13 @@ export class Shell {
   private shownKey = '';
   /** Called after the layout or insets changed. */
   onLayout: (() => void) | null = null;
+  /** UX Phase 2 item 10: decision screens opened from the fight hold the run (decision-hold.ts). */
+  private readonly hold = new DecisionHold();
+  private holdTimer = 0;
+  private readonly lowHp = new LowHpAlert();
+  /** A pointer ring points at this tab's button (GameUi sets it from the hint driver). */
+  isGuided: ((tab: TabId) => boolean) | null = null;
+  private guidedNav = false;
 
   constructor(root: HTMLElement, private readonly host: UiHost, private readonly parts: ShellParts) {
     this.panelOpen = prefs().panelOpen;
@@ -89,6 +97,8 @@ export class Shell {
       b.setAttribute('role', 'tab');
       b.dataset.tab = t.id;
       b.dataset.hint = `tab-${t.id}`;   // pointer hints (hints.ts)
+      // a ring on this tab (read at pointerdown: the pointer clears its target in the click's capture phase)
+      b.addEventListener('pointerdown', () => { this.guidedNav = !!this.isGuided?.(t.id); });
       badge.hidden = true;
       this.tabBtns.set(t.id, { b, badge });
       this.tabbar.appendChild(b);
@@ -148,10 +158,45 @@ export class Shell {
       this.apply();
       return;
     }
+    const from = this.view.tab;
     this.run(this.nav.go({ tab, sub }));
     this.view = this.nav.current;
     if (this.view.tab !== 'battle') this.panel = this.view;
+    const guided = this.guidedNav && this.view.tab === tab; this.guidedNav = false;
+    if (from === 'battle' && this.view.tab !== 'battle' && this.hold.navigatedAway(performance.now(), guided)) this.startHold();
     this.apply();
+  }
+
+  /** A tap on a decision source (death card, coach line, boon offer, draft): the next navigation away holds the run. */
+  armDecision(): void { if (this.layout !== 'desktop') this.hold.arm(performance.now()); }
+
+  /** The run is held for a decision (the Battle tab says so). */
+  get held(): boolean { return this.hold.active; }
+
+  private startHold(): void {
+    if (this.host.isPaused()) { this.hold.release(); return; }   // already paused by something else (inspector): leave it
+    this.host.setPaused(true);
+    window.clearTimeout(this.holdTimer);
+    this.holdTimer = window.setTimeout(() => this.endHold(), this.hold.left(performance.now()));
+    this.markHeld(true);
+  }
+
+  private endHold(): void {
+    window.clearTimeout(this.holdTimer);
+    if (!this.hold.release()) return;
+    this.host.setPaused(false);
+    this.markHeld(false);
+  }
+
+  private markHeld(on: boolean): void {
+    const b = this.tabBtns.get('battle')?.b;
+    if (!b) return;
+    b.classList.toggle('held', on);
+    b.dataset.held = on ? '1' : '';
+    // no UiState arrives while paused: set the label now (update() keeps it while the badge text changes)
+    const base = (b.getAttribute('aria-label') ?? 'Battle').replace(/ \(paused for your decision\)$/, '');
+    attr(b, 'aria-label', on ? `${base} (paused for your decision)` : base);
+    this.badgeKey = '';
   }
 
   /** Back: a sub-screen → its tab; a tab → Battle. */
@@ -264,6 +309,8 @@ export class Shell {
     show(this.parts.strip.el, !desk);
     // a full-screen tab hides the arena: stop drawing it (the sim keeps running) until Battle is back
     this.host.setRenderPaused(!desk && this.view.tab !== 'battle');
+    // back on Battle (or the arena is visible anyway): a decision hold ends
+    if (this.hold.active && (desk || this.view.tab === 'battle')) this.endHold();
   }
 
   /** Layout mode, measured bar heights (CSS vars) and camera insets. */
@@ -337,6 +384,10 @@ export class Shell {
   /** Badges and the status strip (10 Hz). */
   update(ui: UiState): void {
     this.parts.strip.update(ui);
+    // low HP while the arena is hidden: the Battle tab flashes and the phone buzzes once (decision-hold.ts)
+    const t = ui.tower, off = !this.battleVisible;
+    if (this.lowHp.update(performance.now(), t.maxHp > 0 ? t.hp / t.maxHp : 1, off, ui.run.phase === 'combat')) buzz();
+    this.tabBtns.get('battle')?.b.classList.toggle('hp-alert', this.lowHp.low);
     if (this.layout === 'phone' && this.view.tab === 'battle' && Math.abs(this.dockPx(Math.ceil(this.tabbar.getBoundingClientRect().height) * (this.feats.tabbar ? 1 : 0)) - this.lastDock) > 2) this.relayout();
     const shown = tabsShown(this.feats), visited = new Set(prefs().tabsVisited);
     const fresh = new Set(TABS.filter((t) => t.id !== 'battle' && shown[t.id] && !visited.has(t.id)).map((t) => t.id));
@@ -349,7 +400,8 @@ export class Shell {
       show(el.badge, !!x);
       text(el.badge, x ? x.text : '');
       el.badge.className = `tab-badge${x ? ` ${x.kind}` : ''}${x?.fresh ? ' fresh' : ''}`;
-      attr(el.b, 'aria-label', x ? `${t.label}: ${x.label}` : t.label);
+      const held = t.id === 'battle' && this.hold.active ? ' (paused for your decision)' : '';
+      attr(el.b, 'aria-label', (x ? `${t.label}: ${x.label}` : t.label) + held);
     }
   }
 

@@ -52,13 +52,15 @@ export interface Prefs {
   hintsInit: boolean;
   /** The first Core earned on this device got its one-line explainer toast (feed.ts). */
   coreExplained: boolean;
+  /** Phase 2: the full Quartermaster card was shown once (unlocked); from then on Upgrades folds it to one line. */
+  qmSeen: boolean;
 }
 
 const KEY = 'citadel.prefs.v1';
 const DEFAULTS: Prefs = { onboarded: false, bloom: true, affordableFirst: false, panelOpen: true, shopCategory: 'chassis', shopTree: 'ballistics', activeTrial: null, buyCoach: 0, buyQty: 1, suggestExpanded: false,
   soundMaster: 0.71, soundSfx: 0.8, soundMusic: 0.55, soundMuted: false, musicOn: true, touchCal: null,
   unlockAll: false, coachSeen: [], tabsVisited: [], revealInit: false, contentSeen: [], contentInit: false, echoGuide: false,
-  pointerHints: true, hintsDone: [], hintsInit: false, coreExplained: false };
+  pointerHints: true, hintsDone: [], hintsInit: false, coreExplained: false, qmSeen: false };
 
 let cache: Prefs | null = null;
 

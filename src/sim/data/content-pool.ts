@@ -42,3 +42,13 @@ export const ABILITIES_REVEAL_PRESTIGE = 1;
 export function abilitiesRevealed(bestWave: number, prestigeCount: number): boolean {
   return bestWave >= ABILITIES_REVEAL_WAVE || prestigeCount >= ABILITIES_REVEAL_PRESTIGE;
 }
+
+/**
+ * UX Phase 2 item 7: best wave cleared that reveals Doctrines (the ladder's `doctrines` rung, ui/progression.ts, with a
+ * coach line). The sim opens forks as before (shop forkRequirement); the UI hides fork cards/rows until this is reached.
+ * Any deepest-ever wave counts, so a Prestiged player keeps them revealed.
+ */
+export const DOCTRINES_REVEAL_WAVE = 10;
+
+/** Are Doctrine forks revealed at this best wave cleared (max of this run's and the lifetime deepest)? */
+export function doctrinesRevealed(bestWave: number): boolean { return bestWave >= DOCTRINES_REVEAL_WAVE; }

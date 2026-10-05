@@ -248,6 +248,12 @@ export interface BuildState {
 export type RunMode = 'push' | 'patrol';
 export type RunPhase = 'between' | 'combat' | 'dead' | 'wave_clear' | 'draft';
 
+/**
+ * UX Phase 2: a queued Doctrine change. `second` targets the tree's second Doctrine; `doctrine: null` (second only)
+ * clears it. Applied at the next checkpoint `between` for the price then (1 Core).
+ */
+export interface PendingDoctrine { tree: TreeId; doctrine: DoctrineId | null; second: boolean }
+
 export interface RunState {
   prestigeSeed: number;
   wave: number;                 // current wave (1-based)
@@ -293,6 +299,13 @@ export interface RunState {
   discountTree?: TreeId | null;
   /** playSeconds at the first reach of each checkpoint (index = checkpoint / 5), for the Reclimb estimate. */
   checkpointSeconds?: number[];
+  /** UX Phase 2: the deepest wave the tower died on this Prestige (Forecast Frontier rule); 0/absent = none. Saved. */
+  deepestDeath?: number;
+  /**
+   * UX Phase 2: Doctrine changes queued with `queue_doctrine`, applied (Cores charged then) at the next checkpoint
+   * `between` (run/doctrine-queue.ts). One per tree and slot. Saved.
+   */
+  pendingDoctrines?: PendingDoctrine[];
   // --- UX-review additions ---
   /**
    * Tower damage taken this attempt by source (after armor/resistance, before shield/barrier): an enemy kind,
@@ -461,7 +474,8 @@ export type Command =
   | { type: 'set_ability_slot'; slot: number; ability: AbilityId | null }
   | { type: 'set_targeting'; system: WeaponSystemId; profile: TargetingProfile }
   | { type: 'prestige'; frame: FrameId; blueprint?: number; threatDial?: number;
-      /** WP8 additions: Keepsake Anomaly to keep (must be socketed), Branch Discount tree. */ keepsake?: AnomalyId; discountTree?: TreeId }
+      /** WP8 additions: Keepsake Anomaly to keep (must be socketed), Branch Discount tree. UX Phase 2: `keepsake: null` keeps
+       * nothing (absent keeps meta.keepsake when it is still socketed). */ keepsake?: AnomalyId | null; discountTree?: TreeId }
   | { type: 'ascend' }
   | { type: 'buy_prestige'; node: NodeId }
   | { type: 'buy_star'; node: NodeId }
@@ -488,6 +502,14 @@ export type Command =
    * checkpoint), so Dual Doctrine can move to another tree. `delete_blueprint` frees a Blueprint slot.
    */
   | { type: 'clear_second_doctrine'; tree: TreeId }
+  /**
+   * UX Phase 2: "Change at next checkpoint". Queue a Doctrine change (or, with `second` and `doctrine: null`, clearing
+   * the second Doctrine); the sim applies it at the next checkpoint `between` and charges the Cores then. At a
+   * checkpoint it applies at once. Replaces any change already queued for the same tree and slot.
+   * `cancel_doctrine` drops the queued change for that tree and slot.
+   */
+  | { type: 'queue_doctrine'; tree: TreeId; doctrine: DoctrineId | null; second?: boolean }
+  | { type: 'cancel_doctrine'; tree: TreeId; second?: boolean }
   | { type: 'delete_blueprint'; index: number }
   /**
    * Quartermaster addition: patch the Quartermaster settings (only the fields given change). Rejected before the
@@ -645,6 +667,8 @@ export interface UiState {
     boons: BoonId[]; boonQueueLength: number; boonCap: number; boonRerollCost: number;
     /** UX Phase 1: boss-clear hold ticks left (the next wave waits while a decision is pending); 0 = no hold. */
     holdTicksLeft: number;
+    /** UX Phase 2: Doctrine changes queued for the next checkpoint (empty = none). */
+    pendingDoctrines: PendingDoctrine[];
   };
   /** Integration additions: the Trial being played (meta.activeTrial), or null. */
   activeTrial: TrialId | null;
@@ -742,6 +766,18 @@ export interface ShopEntry {
   /** How many consecutive ranks the current Scrap buys (0 when locked / unaffordable; ≤ 1 for Cores nodes; capped at 1000) and their total price. */
   affordableRanks: number;
   affordableTotal: number;
+  /**
+   * Before → after additions (stat rows only; absent when more ranks would not change a resolved value, e.g. a
+   * `set`-pinned key). The node's headline stat (its first effect) as StatResolver resolves it now, and after k more
+   * ranks: `statAfter[k-1]` for k = 1..min(10, ranks left); `statAfterMax` after `affordableRanks` ranks (when > 10).
+   * `statUnit`: '%' (a fraction shown as a percent), 'x' (a multiplier), '/s' (per second) or '' (a plain number).
+   */
+  statKey?: string;
+  statLabel?: string;
+  statUnit?: '%' | 'x' | '/s' | '';
+  statNow?: number;
+  statAfter?: number[];
+  statAfterMax?: number;
 }
 
 export interface Forecast {
@@ -787,6 +823,8 @@ export interface RunSave {
   /** WP8 additions (see RunState). */
   plannedHardpoints?: HardpointId[]; plannedAttunements?: ElementId[]; plannedDoctrines?: Partial<Record<TreeId, DoctrineId>>;
   minThreatDial?: number; discountTree?: TreeId | null; checkpointSeconds?: number[];
+  /** UX Phase 2 additions (see RunState). */
+  deepestDeath?: number; pendingDoctrines?: PendingDoctrine[];
   /** UX-review addition (see RunState.patrolMeasured). */
   patrolMeasured?: boolean;
   /** Code-health addition: an Anomaly draft offered but not yet picked (restored on load; it was lost before). */

@@ -41,7 +41,7 @@
 // Environment: PLAYWRIGHT_DIR (a directory holding the `playwright` package; default: the global npm root),
 // CHROMIUM (browser executable; default: Playwright's own), E2E_URL (skip the preview server and test this URL),
 // E2E_OUT (screenshots; default tests/e2e/out), E2E_SKIP_DESKTOP=1 / E2E_SKIP_PHONE=1 / E2E_SKIP_REACH=1 / E2E_SKIP_TOUCH=1 /
-// E2E_SKIP_ONBOARD=1 / E2E_SKIP_OVERLAYS=1 / E2E_SKIP_WALLET=1 / E2E_SKIP_UX=1 / E2E_SKIP_TELLS=1. The walkthroughs that need every tab run with ?showall=1 (Unlock everything for the session).
+// E2E_SKIP_ONBOARD=1 / E2E_SKIP_OVERLAYS=1 / E2E_SKIP_WALLET=1 / E2E_SKIP_UX=1 / E2E_SKIP_TELLS=1 / E2E_SKIP_VALUE=1 / E2E_SKIP_INFO=1 / E2E_SKIP_DECIDE=1. The walkthroughs that need every tab run with ?showall=1 (Unlock everything for the session).
 import { createRequire } from 'node:module';
 import { spawn, execSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -49,6 +49,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { auditOverlays } from './overlap.mjs';
 import { attention } from './attention.mjs';
+import { info } from './info.mjs';
+import { value } from './value.mjs';
+import { decisions } from './decisions.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const OUT = process.env.E2E_OUT ?? join(ROOT, 'tests', 'e2e', 'out');
@@ -148,6 +151,9 @@ try {
   if (!process.env.E2E_SKIP_UX) await calm();
   if (!process.env.E2E_SKIP_TELLS) await tells();
   if (!process.env.E2E_SKIP_ATTN) await attention({ browser, BASE, OUT, check, attachLogs });
+  if (!process.env.E2E_SKIP_INFO) await info({ browser, BASE, OUT, check, attachLogs });   // Phase 2 tap-to-explain, naming, return card (info.mjs)
+  if (!process.env.E2E_SKIP_VALUE) await value({ browser, BASE, OUT, check, attachLogs });   // Phase 2 value legibility (value.mjs)
+  if (!process.env.E2E_SKIP_DECIDE) await decisions({ browser, BASE, OUT, check, attachLogs });   // Phase 2 Prestige modal + Doctrine queue (decisions.mjs)
 } catch (e) {
   check('no exceptions', false, String(e && e.stack || e));
 } finally {
@@ -856,7 +862,7 @@ async function touchCheck() {
 // ================================================================ phone: overlays never block anything major (src/ui/lanes.ts)
 async function overlays() {
   // crafted saves: the overlays that can be up at once, at the stages where they first pile up
-  const LADDER = ['start', 'checkpoint', 'elements', 'build', 'abilities', 'boons', 'anomalies', 'bulk', 'prestige', 'machine', 'salvage', 'overcharge'];
+  const LADDER = ['start', 'checkpoint', 'elements', 'build', 'abilities', 'boons', 'anomalies', 'bulk', 'prestige', 'cross', 'inspector', 'cores', 'frame', 'exotics', 'patrol', 'machine', 'salvage', 'overcharge'];
   const OFFER = "s.run.boonOffer = ['iron_skin', 'thick_plating', 'miser']; s.run.boonOfferKind = 'boss'; s.run.boonOfferSeq = 3; s.run.boonOfferWave = 11; ";
   const combos = [
     { id: 'stage0', mut: `${OFFER}s.run.scrap = 60;`, prefs: null, toasts: true },
@@ -930,7 +936,7 @@ async function overlays() {
 
 // ================================================================ phone: boss tells respect the unlock ladder; no silent swaps (src/ui/tells.ts)
 async function tells() {
-  const LADDER = ['start', 'checkpoint', 'elements', 'build', 'abilities', 'boons', 'anomalies', 'bulk', 'prestige', 'machine', 'salvage', 'overcharge'];
+  const LADDER = ['start', 'checkpoint', 'elements', 'build', 'abilities', 'boons', 'anomalies', 'bulk', 'prestige', 'cross', 'inspector', 'cores', 'frame', 'exotics', 'patrol', 'machine', 'salvage', 'overcharge'];
   const viewports = [
     { id: '393', viewport: { width: 393, height: 852 }, safe: { top: 59, bottom: 34 } },
     { id: '375', viewport: { width: 375, height: 667 }, safe: { top: 20, bottom: 0 } },
@@ -1123,7 +1129,7 @@ async function wallet() {
     const views = [
       { id: 'upgrades-chassis', tab: 'upgrades', pick: '.screen.s-upgrades .cat-tabs .tab:has-text("Chassis")', scroller: '.screen.s-upgrades .shop-body', want: ['scrap', 'cores'] },
       { id: 'upgrades-cores', tab: 'upgrades', pick: '.screen.s-upgrades .cat-tabs .tab:has-text("Cores")', scroller: '.screen.s-upgrades .shop-body', want: ['scrap', 'cores'] },
-      { id: 'prestige-layers', tab: 'prestige', pick: '.screen.s-prestige .seg-btn:has-text("Upgrades")', scroller: '.screen.s-prestige', want: ['echoes'] },
+      { id: 'prestige-layers', tab: 'prestige', pick: '.screen.s-prestige .seg-btn:has-text("Echo tiers")', scroller: '.screen.s-prestige', want: ['echoes'] },
       { id: 'prestige-ascension', tab: 'prestige', pick: '.screen.s-prestige .seg-btn:has-text("Ascension")', scroller: '.screen.s-prestige', want: ['echoes', 'stars'] },
       { id: 'build', tab: 'build', pick: null, scroller: '.screen.s-build', want: ['cores'] },
     ];
@@ -1234,7 +1240,7 @@ async function calm() {
     if (s.meta.settings && s.meta.settings.quartermaster) s.meta.settings.quartermaster.on = true;
     s.savedAtMs = Date.now();`;
   const PREFS = { revealInit: true, hintsInit: true, contentInit: true, buyCoach: 3, contentSeen: ['fire', 'lightning', 'poison', 'frost', 'ordnance', 'drones', 'blade'],
-    coachSeen: ['start', 'checkpoint', 'elements', 'build', 'abilities', 'boons', 'anomalies', 'bulk', 'prestige', 'machine', 'salvage', 'overcharge', 'qm-on'], tabsVisited: ['battle', 'upgrades', 'build', 'prestige', 'more'] };
+    coachSeen: ['start', 'checkpoint', 'elements', 'build', 'abilities', 'boons', 'anomalies', 'bulk', 'prestige', 'cross', 'inspector', 'cores', 'frame', 'exotics', 'patrol', 'machine', 'salvage', 'overcharge', 'qm-on'], tabsVisited: ['battle', 'upgrades', 'build', 'prestige', 'more'] };
   for (const vp of viewports) {
     const ctx = await browser.newContext({ viewport: vp.viewport, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
     await ctx.route('**/favicon.ico', (r) => r.fulfill({ status: 204, body: '' }));
@@ -1269,7 +1275,7 @@ async function calm() {
       { id: 'upgrades-elements', tab: 'upgrades', pick: '.screen.s-upgrades .cat-tabs .tab:has-text("Elements")', sc: '.screen.s-upgrades .shop-body' },
       { id: 'upgrades-cores', tab: 'upgrades', pick: '.screen.s-upgrades .cat-tabs .tab:has-text("Cores")', sc: '.screen.s-upgrades .shop-body' },
       { id: 'build', tab: 'build', pick: null, sc: '.screen.s-build' },
-      { id: 'prestige-layers', tab: 'prestige', pick: '.screen.s-prestige .seg-btn:has-text("Upgrades")', sc: '.screen.s-prestige' },
+      { id: 'prestige-layers', tab: 'prestige', pick: '.screen.s-prestige .seg-btn:has-text("Echo tiers")', sc: '.screen.s-prestige' },
     ];
     for (const v of views) {
       await tapTab(v.tab);

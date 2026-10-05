@@ -23,6 +23,7 @@ import { allTrees, treeDef, nodeInfo, allNodes, type NodeInfo } from '../core/co
 import { nodeCost, CORE_COSTS } from './curves';
 import { progressionCostMul, effectiveMaxRank, triadsUnlocked } from './prestige';   // WP8
 import { inBulkTree } from './bulk';
+import { baseStat } from '../core/stats';
 
 type Eval = { visible: boolean; locked?: string; cost: number; currency: 'scrap' | 'cores'; rank: number; maxRank: number };
 
@@ -144,6 +145,45 @@ function preview(w: WorldImpl, info: NodeInfo, ev: Eval, ok: boolean): Pick<Shop
   return { nextCosts, affordableRanks: n, affordableTotal: total };
 }
 
+/** Short player-facing names of the headline stats (ShopEntry.statLabel); others show numbers only. */
+export const STAT_LABELS: Record<string, string> = {
+  'ballistics.damage': 'Damage', 'ballistics.attack_speed': 'Fire rate', 'ballistics.range': 'Range',
+  'ballistics.projectile_speed': 'Shot speed', 'ballistics.crit_chance': 'Crit chance', 'ballistics.crit_damage': 'Crit damage',
+  'bastion.max_hp': 'Hull', 'bastion.armor': 'Armor', 'bastion.shield_capacity': 'Shield', 'bastion.shield_recharge': 'Shield recharge',
+  'bastion.regeneration': 'Regen', 'bastion.resistance': 'Resistance', 'reactor.global_attack_speed': 'All fire rate',
+  'reactor.cooldown_reduction': 'Cooldown cut', 'economy.scrap_mul': 'Scrap gain', 'economy.ce_cap': 'CE cap',
+};
+const PER_SECOND = new Set(['ballistics.attack_speed']);
+
+/** How a resolved stat reads: '/s', 'x' (a multiplier around 1), '%' (a fraction), or '' (a plain number). Pure. */
+export function statUnit(key: string, op: 'add' | 'mul' | 'set', perRank: number): NonNullable<ShopEntry['statUnit']> {
+  if (PER_SECOND.has(key)) return '/s';
+  if (/(_mul|crit_damage|global_attack_speed)$/.test(key)) return 'x';
+  const b = baseStat(key);
+  if (op === 'add' && Math.abs(perRank) < 1 && Math.abs(b) <= 1) return '%';
+  return '';
+}
+
+/** Before → after fields for a stat row (empty when the stat would not change). */
+function statPreview(w: WorldImpl, info: NodeInfo, ev: Eval, pv: Pick<ShopEntry, 'affordableRanks'>): Partial<ShopEntry> {
+  const d = info.def;
+  if (entryKind(info) !== 'stat' || !d.effects.length) return {};
+  const eff = d.effects[0];
+  const left = Math.max(0, ev.maxRank - ev.rank);
+  if (left <= 0) return {};
+  const rank = w.stats.rank(d.id);
+  const scale = info.doctrine && info.tree ? w.stats.doctrineStrength(info.tree, info.doctrine) || 1 : 1;
+  const one = w.stats.previewEffect(eff, rank, scale, 1);
+  if (!one || !Number.isFinite(one.next) || Math.abs(one.next - one.now) <= 1e-9 * Math.max(1, Math.abs(one.now))) return {};
+  const statAfter: number[] = [one.next];
+  for (let k = 2; k <= Math.min(NEXT_COSTS, left); k++) statAfter.push(w.stats.previewEffect(eff, rank, scale, k)!.next);
+  const out: Partial<ShopEntry> = { statKey: one.key, statUnit: statUnit(one.key, eff.op, eff.perRank), statNow: one.now, statAfter };
+  const label = STAT_LABELS[one.key];
+  if (label) out.statLabel = label;
+  if (pv.affordableRanks > NEXT_COSTS) out.statAfterMax = w.stats.previewEffect(eff, rank, scale, pv.affordableRanks)!.next;
+  return out;
+}
+
 /** Every visible node, doctrine choice and exotic, in content order. Allocates (UI ≤ 10 Hz). */
 export function buildShop(w: WorldImpl): ShopEntry[] {
   const out: ShopEntry[] = [];
@@ -157,7 +197,7 @@ export function buildShop(w: WorldImpl): ShopEntry[] {
     const ok = affordable(w, ev);
     const pv = preview(w, info, ev, ok);
     out.push({ node: d.id, tree: entryTree(info), name: d.name, desc: d.desc, rank: ev.rank, maxRank: ev.maxRank, cost: ev.cost, currency: ev.currency,
-      affordable: ok, kind: entryKind(info), ...(ev.locked ? { locked: ev.locked } : {}), tier: d.tier, ...pv });
+      affordable: ok, kind: entryKind(info), ...(ev.locked ? { locked: ev.locked } : {}), tier: d.tier, ...pv, ...statPreview(w, info, ev, pv) });
   };
   for (const t of allTrees()) {
     if (!w.stats.treeActive(t.id)) continue;
@@ -176,6 +216,9 @@ export function buildShop(w: WorldImpl): ShopEntry[] {
   return out;
 }
 
+/** The lock a Doctrine change carries outside a checkpoint (UX Phase 2: `queue_doctrine` queues it instead). */
+export const CHECKPOINT_LOCK = 'Change at next checkpoint';
+
 /** Can `doctrine` be chosen in `tree` right now, and for how many Cores? */
 export function doctrineChoice(w: WorldImpl, tree: TreeId, doctrine: DoctrineId): { cost: number; locked?: string; second: boolean } {
   const t = treeDef(tree);
@@ -189,7 +232,7 @@ export function doctrineChoice(w: WorldImpl, tree: TreeId, doctrine: DoctrineId)
   if (!cur) return { cost: 0, second: false };
   if (!w.build.secondDoctrines[tree] && w.stats.secondDoctrineAllowed(tree)) return { cost: 0, second: true };
   const atCheckpoint = w.run.phase === 'between' && w.run.wave - 1 === w.run.checkpoint;
-  if (!atCheckpoint) return { cost: CORE_COSTS.doctrine, locked: 'Change only at a checkpoint', second: false };
+  if (!atCheckpoint) return { cost: CORE_COSTS.doctrine, locked: CHECKPOINT_LOCK, second: false };
   return { cost: CORE_COSTS.doctrine, second: false };
 }
 

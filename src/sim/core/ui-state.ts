@@ -48,6 +48,7 @@ export function buildUiState(w: WorldImpl, m: RunMachine): UiState {
       boonOffer: run.boonOffer ? [...run.boonOffer] : null, boonOfferSeq: run.boonOfferSeq, boonOfferKind: run.boonOfferKind,
       boons: [...w.build.boons], boonQueueLength: run.boonQueue.length, boonCap: BOON_CAP, boonRerollCost: boonRerollCost(run),
       holdTicksLeft: m.holdTicksLeft,
+      pendingDoctrines: (run.pendingDoctrines ?? []).map((p) => ({ ...p })),
     },
     activeTrial: w.meta.activeTrial ?? null,
     extraSystems: extraSystems(w),

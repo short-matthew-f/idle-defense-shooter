@@ -1,0 +1,18 @@
+/* Tap-to-explain info sheet (src/ui/info.ts): a bottom sheet on phones, a small card on desktop. */
+.modal-wrap.sheet { place-items: end center; padding: 0; }
+.modal-wrap.sheet .modal-backdrop { background: rgba(4, 6, 10, 0.45); }
+.modal-card.info-sheet {
+  width: min(520px, 100%); border-radius: 16px 16px 0 0; border-bottom: 0;
+  padding-bottom: var(--safe-bottom);
+}
+.info-sheet .modal-body { padding: 12px 16px 8px; }
+.info-sheet .info-text { margin: 0; font-size: 16px; line-height: 1.5; }
+.info-sheet .info-ok { min-height: 48px; }
+@media (min-width: 600px) {
+  .modal-wrap.sheet { place-items: center; padding: 12px; }
+  .modal-card.info-sheet { width: min(400px, 100%); border-radius: 14px; border-bottom: 1px solid var(--line-2); padding-bottom: 0; }
+}
+/* the tappable explainers */
+[data-info] { cursor: help; }
+[data-info]:focus-visible { outline: 2px solid var(--accent, #6cf); outline-offset: 2px; }
+.info-mark { opacity: 0.6; flex: none; }

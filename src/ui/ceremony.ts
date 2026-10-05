@@ -3,7 +3,8 @@
  * form: a short, warm modal says what you earn (the Forecast's exact Echoes), what resets and what stays (one sentence
  * each), where the Frontier moves, and has one primary button. Afterwards the Prestige tab opens on its Layer I picks
  * with a guide line ("Spend your Echoes…"); the affordable picks are highlighted (a class only). Nothing is ever
- * bought for the player. Second and later Prestiges use the full Prestige modal (prestige.ts), unchanged.
+ * bought for the player. Second and later Prestiges use the full Prestige modal (prestige.ts). UX Phase 2: both lead with the Forecast verdict
+ * (prestigeVerdict), and the guide marks ONE suggested pick (echoGuideSuggested).
  *
  * The guide flag lives in prefs (presentation state): it ends on "Got it", or once nothing in Layer I is affordable.
  */
@@ -28,6 +29,37 @@ export const ECHO_GUIDE_TEXT = 'Spend your Echoes: these make every run stronger
 const LAYER1_WAVE = 20;
 
 type CeremonyState = Pick<UiState, 'meta' | 'forecast' | 'run'> & Partial<Pick<UiState, 'activeTrial'>>;
+
+export interface PrestigeVerdict {
+  recommended: boolean;
+  /** "Recommended now" or "Waiting ~6 min likely adds +12 Echoes" (or a plain fallback without a Forecast). */
+  headline: string;
+  /** "Next boss (wave 30): +55 Echoes" or null. */
+  nextBoss: string | null;
+  /** "Frontier: wave 28 → 38" or null. */
+  frontier: string | null;
+  /** The next boss wave when it would add Echoes, else null. */
+  bossWave: number | null;
+}
+
+/** The modal's lead lines, from the Forecast (pure; tests and e2e). */
+export function prestigeVerdict(ui: Pick<UiState, 'forecast' | 'run'>): PrestigeVerdict {
+  const f = ui.forecast;
+  if (!f) return { recommended: false, headline: 'No Forecast yet', nextBoss: null, frontier: null, bossWave: null };
+  const nextCp = (Math.floor(ui.run.deepestCleared / 5) + 1) * 5;
+  const gain = Math.max(0, f.nextBossEchoes - f.echoesNow);
+  const nextBoss = gain > 0 ? `Next boss (wave ${nextCp}): +${fmtNum(gain)} Echoes` : null;
+  const frontier = f.frontier !== undefined && f.nextFrontier !== undefined && f.nextFrontier > f.frontier ? `Frontier: wave ${f.frontier} → ${f.nextFrontier}` : null;
+  const bossWave = gain > 0 ? nextCp : null;
+  if (f.recommended) return { recommended: true, headline: 'Recommended now', nextBoss, frontier, bossWave };
+  let headline = 'Not recommended yet: your Echo rate is still rising';
+  if (gain > 0 && f.nextBossRate > 0) {
+    const at = (f.nextBossEchoes * 3600) / f.nextBossRate;
+    const mins = Math.max(1, Math.round((at - ui.run.playSeconds) / 60));
+    headline = `Waiting ~${mins} min likely adds +${fmtNum(gain)} Echoes`;
+  }
+  return { recommended: false, headline, nextBoss, frontier, bossWave };
+}
 
 /** The ceremony replaces the full modal only for a plain first Prestige (nothing to choose yet) without Unlock everything. */
 export function useCeremony(ui: Pick<UiState, 'meta'>, unlockAll: boolean): boolean {
@@ -70,6 +102,32 @@ export function echoGuidePicks(ui: Pick<UiState, 'meta'>): string[] {
   }).map((d) => d.id);
 }
 
+/**
+ * The ONE suggested first pick (UX Phase 2 item 5), derived from the data: among the affordable Layer I picks, the one
+ * that changes behaviour (a mechanic, maxRank ≤ 5: Accelerated Clearing) before stat ranks; ties go to the cheapest,
+ * then content order. Only a marker: every affordable pick stays buyable and nothing is bought for the player.
+ */
+export function echoGuideSuggested(ui: Pick<UiState, 'meta'>): string | null {
+  const picks = echoGuidePicks(ui);
+  if (!picks.length) return null;
+  const m = ui.meta;
+  const defs = picks.map((id) => PRESTIGE_NODES.find((d) => d.id === id)!).filter(Boolean);
+  const score = (d: (typeof PRESTIGE_NODES)[number]): [number, number] => [d.kind === 'mechanic' ? 0 : 1, nextRankCost(d.cost, m.prestigeRanks[d.id] | 0)];
+  let best = defs[0];
+  for (const d of defs.slice(1)) {
+    const a = score(d), b = score(best);
+    if (a[0] < b[0] || (a[0] === b[0] && a[1] < b[1])) best = d;
+  }
+  return best.id;
+}
+
+/** "Suggested: Accelerated Clearing" for the guide line (null when nothing is affordable). */
+export function echoGuideSuggestedText(ui: Pick<UiState, 'meta'>): string | null {
+  const id = echoGuideSuggested(ui);
+  const d = id ? PRESTIGE_NODES.find((x) => x.id === id) : undefined;
+  return d ? `Suggested: ${d.name}` : null;
+}
+
 /** The guide is over once the Prestige has landed and nothing in Layer I is affordable. */
 export function echoGuideDone(ui: Pick<UiState, 'meta'>): boolean {
   return (ui.meta.prestigeCount | 0) >= 1 && echoGuidePicks(ui).length === 0;
@@ -83,11 +141,15 @@ export function openCeremony(ctx: UiCtx): void {
   const ui = ctx.state();
   if (!ui) return;
   const fx = ceremonyFacts(ui);
+  const v = prestigeVerdict(ui);
   const line = (ico: string, cls: string, text: string): HTMLElement => h('li', { class: `cer-line ${cls}` }, icon(ico, 'ico'), h('span', { text }));
   const body = h('div', { class: 'ceremony' },
     h('p', { class: 'cer-lead', text: `You pushed the machine to wave ${ui.run.deepestCleared}. Rebuild it stronger.` }),
     h('div', { class: 'cer-gain' }, icon('echo', 'ico big'), h('span', { class: 'cer-gain-val', text: fx.gain })),
     h('p', { class: 'cer-sub', text: 'Echoes buy upgrades that make every run stronger.' }),
+    // UX Phase 2: the Forecast verdict and the next boss, so "now or wait" is answered here too
+    h('p', { class: `cer-verdict${v.recommended ? ' rec' : ''}`, attrs: { role: 'status' } }, icon(v.recommended ? 'check' : 'forecast', 'ico tiny'),
+      h('span', { text: !v.recommended && v.bossWave !== null && v.headline.startsWith('Waiting') ? `${v.headline} (the wave ${v.bossWave} boss)` : v.headline })),
     h('ul', { class: 'cer-lines' },
       line('restart', 'resets', fx.resets),
       line('check', 'keeps', fx.keeps),

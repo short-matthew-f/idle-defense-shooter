@@ -385,6 +385,19 @@ export function spendEchoes(sim: Sim): string[] {
 }
 
 /**
+ * Send `prestige` and step once. `paid` is the Echoes the game paid (meta.echoes before → after, nothing spent yet;
+ * equal to prestigeEchoes() just before the command).
+ */
+export function prestigeOnce(sim: Sim, frame: FrameId): { ok: boolean; err: string | null; paid: number } {
+  const w = sim.world;
+  const before = w.meta.prestigeCount, deep = w.run.deepestCleared, echoesBefore = w.meta.echoes;
+  const err = applyCommand(sim.machine, { type: 'prestige', frame });
+  sim.step();
+  const ok = !err && !(w.meta.prestigeCount === before && sim.world.run.deepestCleared >= deep && deep > 0);
+  return { ok, err, paid: w.meta.echoes - echoesBefore };
+}
+
+/**
  * n Prestiges in one Sim: climb until the recommendation (Forecast, else the computed Echo-rate
  * rule) or the wall, send `prestige`, spend Echoes, repeat. If `prestige` has no effect
  * (not implemented yet), returns implemented=false after the first run.
@@ -400,19 +413,20 @@ export function runPrestige(cfg: RunConfig, n: number): PrestigeChainResult {
     out.runs.push(c.run());
     if (i === n - 1) break;
     const w = sim.world;
-    const before = w.meta.prestigeCount, deep = w.run.deepestCleared, echoesBefore = w.meta.echoes;
+    const deep = w.run.deepestCleared;
     const frames = w.meta.unlockedFrames as FrameId[];
     const pref = (agent as { preferredFrame?: FrameId }).preferredFrame;
     const frame: FrameId = pref && frames.includes(pref) ? pref : (cfg.frame ?? 'standard');
-    const err = applyCommand(sim.machine, { type: 'prestige', frame });
-    sim.step();
-    if (err || (w.meta.prestigeCount === before && sim.world.run.deepestCleared >= deep && deep > 0)) {
+    const p = prestigeOnce(sim, frame);
+    if (!p.ok) {
       out.implemented = false;
-      out.notes.push(`prestige command had no effect (${err ?? 'no state change'}); chain stopped after run ${i + 1}`);
+      out.notes.push(`prestige command had no effect (${p.err ?? 'no state change'}); chain stopped after run ${i + 1}`);
       break;
     }
     const bought = spendEchoes(sim);
-    out.notes.push(`prestige ${i + 1} (run stopped: ${out.runs[i].stopReason}): deepest ${deep}, echoes +${sim.world.meta.echoes - echoesBefore + 0} (bank ${Math.floor(sim.world.meta.echoes)}), bought ${bought.length} nodes`);
+    (out.paid ??= []).push(p.paid);
+    // `echoes +N` is what the game paid at this Prestige (before any is spent; it was printed after spending: "+3" for 43)
+    out.notes.push(`prestige ${i + 1} (run stopped: ${out.runs[i].stopReason}): deepest ${deep}, echoes +${p.paid} (bank ${Math.floor(sim.world.meta.echoes)} after buying ${bought.length} nodes)`);
   }
   return out;
 }

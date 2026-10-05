@@ -1,5 +1,5 @@
 /**
- * Prestige layers shop (design §14): four layers from PRESTIGE_NODES, opening at deepest-ever
+ * Echo tiers shop (design §14; the code still says layers): four tiers from PRESTIGE_NODES, opening at deepest-ever
  * waves 20 / 40 / 60 / 80, priced in Echoes (×1.5 per rank), bought with `buy_prestige`.
  * Calm like Upgrades: each row shows its headline effect on one line (the row body unfolds the rest); a layer not
  * open yet folds into one line ("9 upgrades · opens at deepest wave 60"), and an open layer's maxed rows into "N maxed".
@@ -14,13 +14,11 @@ import { PRESTIGE_NODES } from './content';
 import type { UiCtx } from './ctx';
 import { ECHO_GUIDE_TEXT, echoGuideDone, echoGuideOn, echoGuidePicks, endEchoGuide } from './ceremony';
 import { markCoachSeen } from './coach';
+import { ECHO_TIERS, tierLabel } from './echo-tiers';
 
-export const LAYERS: { layer: 1 | 2 | 3 | 4; name: string; wave: number; blurb: string }[] = [
-  { layer: 1, name: 'Prestige I: Inheritance', wave: 20, blurb: 'Compress content you have mastered.' },
-  { layer: 2, name: 'Prestige II: Arsenal Memory', wave: 40, blurb: 'Plan builds instead of rebuilding them.' },
-  { layer: 3, name: 'Prestige III: Command Network', wave: 60, blurb: 'Program the machine.' },
-  { layer: 4, name: 'Prestige IV: Evolution', wave: 80, blurb: 'Build strange engines.' },
-];
+/** The four Echo tiers (echo-tiers.ts is the data; the shop lists them with their full names). */
+export const LAYERS: { layer: 1 | 2 | 3 | 4; name: string; wave: number; blurb: string }[] =
+  ECHO_TIERS.map((t) => ({ layer: t.layer, name: tierLabel(t.layer, true), wave: t.wave, blurb: t.blurb }));
 
 interface Row { def: PrestigeNodeDef; el: HTMLElement; rank: HTMLElement; btn: HTMLButtonElement; price: HTMLElement; maxed: boolean }
 interface Layer { layer: number; el: HTMLElement; wave: number; rows: Row[]; fold: HTMLButtonElement; label: HTMLElement; act: HTMLElement; chev: HTMLElement; open: boolean; key: string }
@@ -118,7 +116,7 @@ export class PrestigeShop {
       L.key = key;
       show(L.fold, n > 0);
       for (const r of L.rows) show(r.el, L.open || (closed ? false : !maxed.includes(r)));
-      text(L.label, closed ? `${n} upgrades · open at deepest wave ${L.wave}` : `${n} maxed`);
+      text(L.label, closed ? `${n} upgrades · reach wave ${L.wave} to open ${tierLabel(L.layer)}` : `${n} maxed`);
       text(L.act, L.open ? 'Hide' : 'Show');
       L.chev.replaceChildren(icon(L.open ? 'up' : 'down', 'ico tiny chev'));
       L.fold.classList.toggle('closed', closed);

@@ -22,9 +22,9 @@ import type { DoctrineId, ElementId, HardpointId, TreeId } from '@sim/core/ids';
 import { Ev, type ShopEntry, type SimEvent, type UiState } from '@sim/core/types';
 import { inBulkTree } from '@sim/economy/bulk';
 import { button, h, holdRepeat, text, disable, show, attr, Keyed, clear } from './dom';
-import { buyLabel, buyLabelText, bulkToast, nextQty, parseQty, planBuyAll, qtyLabel, spendLabel, treeSpend, type BuyLabel, type BuyQty } from './bulk';
+import { buyLabel, buyLabelText, bulkToast, nextQty, parseQty, planBuyAll, qtyLabel, rowBuy, spendLabel, treeSpend, type BuyLabel, type BuyQty } from './bulk';
 import { icon } from './icons';
-import { fmtDuration, fmtNum, splitDesc, substituteDesc, titleCase } from './format';
+import { fmtDuration, fmtNum, fmtStatChange, splitDesc, substituteDesc, titleCase } from './format';
 import { nextPurchase } from './advice';
 import { CHASSIS, ELEMENTS, ELEMENT_BLURB, HARDPOINTS, HARDPOINT_BLURB, NODE_BY_ID, TREE_BY_ID, TREE_LABEL } from './content';
 import { confirmDialog, openModal } from './modal';
@@ -59,6 +59,54 @@ export function cheapestAffordable(shop: readonly ShopEntry[], n = 3): ShopEntry
     .sort((a, b) => a.cost - b.cost || (a.node < b.node ? -1 : 1)).slice(0, n);
 }
 
+/**
+ * Ranks a before → after preview covers at quantity `q`: what the Buy button would buy, else (nothing affordable)
+ * one rank (×1 / Max) or the next ≤10 (×10). Pure.
+ */
+export function previewRanks(e: ShopEntry, q: BuyQty): number {
+  const n = rowBuy(e, q).count;
+  if (n > 0) return n;
+  return q === 10 ? Math.max(1, Math.min(10, e.maxRank - e.rank)) : 1;
+}
+
+/** The resolved stat after `n` more ranks (sim previews), or null when the entry has none for `n`. Pure. */
+export function statAfter(e: ShopEntry, n: number): number | null {
+  if (e.statNow === undefined || !e.statAfter?.length || n < 1) return null;
+  if (n <= e.statAfter.length) return e.statAfter[n - 1];
+  return n === e.affordableRanks && e.statAfterMax !== undefined ? e.statAfterMax : null;
+}
+
+/** "Damage 13.2 → 14.8 (+12%)" for a stat row at quantity `q` (null: no preview; mechanics keep their text). Pure. */
+export function statLine(e: ShopEntry, q: BuyQty): string | null {
+  const after = statAfter(e, previewRanks(e, q));
+  if (after === null || e.statNow === undefined) return null;
+  return `${e.statLabel ? `${e.statLabel} ` : ''}${fmtStatChange(e.statNow, after, e.statUnit ?? '')}`;
+}
+
+/** The bottleneck line's two forms (tests). */
+export const BOTTLENECK_ALL = "Scrap can't buy anything new here. Push for Echoes or Prestige.";
+export const BOTTLENECK_CHEAP = 'Your Scrap covers everything left here many times over. Push for Echoes or Prestige.';
+/** Share of the Scrap the rest of a category may cost and still count as "nothing meaningful to buy". */
+export const BOTTLENECK_SHARE = 0.1;
+
+/**
+ * Late-game bottleneck (pure; derived from ShopEntry data only): the open category's Scrap rows (no doctrines). Every
+ * row maxed or locked (and at least one maxed) → BOTTLENECK_ALL; every open row affordable to its max rank, with the
+ * whole remainder costing ≤ BOTTLENECK_SHARE of the Scrap on hand → BOTTLENECK_CHEAP; otherwise null.
+ */
+export function scrapBottleneck(entries: readonly ShopEntry[], scrap: number): string | null {
+  const sc = entries.filter((e) => e.currency === 'scrap' && e.kind !== 'doctrine');
+  if (!sc.length || !(scrap > 0)) return null;
+  const open = sc.filter((e) => !e.locked && e.rank < e.maxRank);
+  if (!open.length) return sc.some((e) => e.rank >= e.maxRank) ? BOTTLENECK_ALL : null;
+  let total = 0;
+  for (const e of open) {
+    if (e.affordableRanks < e.maxRank - e.rank) return null;
+    total += e.affordableTotal;
+  }
+  return total <= scrap * BOTTLENECK_SHARE ? BOTTLENECK_CHEAP : null;
+}
+
 /** Fill a Buy button's two parts: the small count line ("×10", "Max ×7"; hidden for one rank) and the price. */
 function paintBuy(countEl: HTMLElement, price: HTMLElement, l: BuyLabel, currency: ShopEntry['currency']): void {
   text(countEl, l.count ?? '');
@@ -82,6 +130,8 @@ class NodeRow {
   private readonly rank = h('span', { class: 'node-rank' });
   private readonly chev = icon('down', 'ico tiny node-chev');
   private readonly desc = h('p', { class: 'node-desc' });
+  /** Before → after of the headline stat at the buy quantity (stat rows). */
+  private readonly stat = h('p', { class: 'node-stat' });
   private readonly lock = h('p', { class: 'node-lock' });
   private readonly main: HTMLElement;
   private readonly btn: HTMLButtonElement;
@@ -96,7 +146,7 @@ class NodeRow {
     this.btn = h('button', { type: 'button', class: 'btn buy' }, this.bcount, this.price);
     // hold-to-repeat only at ×1; a ×10 / Max press buys once
     holdRepeat(this.btn, () => { const l = buyLabel(this.entry, this.qty()); if (l.send !== null) send(this.entry, l.send); }, () => this.qty() === 1);
-    this.main = h('div', { class: 'node-main' }, h('div', { class: 'node-head' }, this.name, this.rank, this.chev), this.desc, this.lock);
+    this.main = h('div', { class: 'node-main' }, h('div', { class: 'node-head' }, this.name, this.rank, this.chev), this.stat, this.desc, this.lock);
     this.el = h('div', { class: 'node', data: { node: entry.node } }, this.main, this.btn);
     this.update(entry);
   }
@@ -110,8 +160,13 @@ class NodeRow {
   update(e: ShopEntry): void {
     this.entry = e;
     const q = this.qty();
-    const key = `${e.rank}|${e.maxRank}|${e.cost}|${e.affordable}|${e.locked ?? ''}|${e.currency}|${q}|${e.affordableRanks}|${e.affordableTotal}`;
+    const sl = e.rank < e.maxRank ? statLine(e, q) : null;
+    const key = `${e.rank}|${e.maxRank}|${e.cost}|${e.affordable}|${e.locked ?? ''}|${e.currency}|${q}|${e.affordableRanks}|${e.affordableTotal}|${sl ?? ''}`;
     if (key === this.lastKey) return;
+    text(this.stat, sl ?? '');
+    show(this.stat, !!sl);
+    // a labelled preview says what the headline would; the headline returns when the row unfolds
+    this.el.classList.toggle('has-stat', !!sl && !!e.statLabel);
     const first = this.lastKey === '';
     this.lastKey = key;
     if (first) {
@@ -122,7 +177,7 @@ class NodeRow {
       const s = splitDesc(this.full);
       this.headline = s.headline;
       // the headline effect (at most two lines); the row body unfolds the rest
-      const expandable = s.more || s.headline.length > 64;
+      const expandable = s.more || s.headline.length > 64 || (!!e.statLabel && e.statNow !== undefined);   // a labelled stat line folds the headline away
       this.el.classList.add(`k-${e.kind}`, `t${e.tier}`);
       this.el.classList.toggle('expandable', expandable);
       (this.chev as unknown as HTMLElement).style.display = expandable ? '' : 'none';
@@ -222,8 +277,9 @@ export class Shop {
   /** A stacked view's group to scroll to once rendered. */
   private pendingSec: string | null = null;
   /**
-   * Quartermaster card (quartermaster.ts), at the top of the Chassis and Hardpoints lists once 'quartermaster' is
-   * revealed, under a one-line summary that folds it: open while it is off (its switch is the decision), folded once on.
+   * Quartermaster card (quartermaster.ts), at the top of every Scrap category's list once 'quartermaster' is revealed.
+   * Phase 2: the full card shows the first time it is unlocked (prefs.qmSeen); after that it folds to one row with an
+   * inline on/off switch (data-hint quartermaster-toggle), and a tap on the row opens the card.
    */
   private readonly qm: QuartermasterPanel;
   private readonly qmState = h('span', { class: 'qmf-state' });
@@ -233,6 +289,13 @@ export class Shop {
   private readonly qmWrap: HTMLElement;
   /** The player's fold choice this session (null: the default above). */
   private qmOpen: boolean | null = null;
+  /** The card had not been seen when this session started: it stays open this session until folded. */
+  private readonly qmFirst = !prefs().qmSeen;
+  private readonly qmSwitch = h('input', { attrs: { type: 'checkbox', 'aria-label': 'Quartermaster on' } }) as HTMLInputElement;
+  private readonly qmSwitchWrap = h('label', { class: 'switch qm-inline', data: { hint: 'quartermaster-toggle' } }, this.qmSwitch, h('span', { class: 'slider' }));
+  /** Late game (Phase 2): "Scrap can't buy anything new here" + a Forecast button, at the top of the list. */
+  private readonly bneckText = h('span', { class: 'bn-text' });
+  private readonly bneck: HTMLElement;
 
   constructor(private readonly ctx: UiCtx) {
     const p = prefs();
@@ -299,7 +362,12 @@ export class Shop {
       this.qmOpen = this.qm.el.hidden;
       if (this.ui) this.syncQm(this.ui);
     }, { class: 'btn fold-btn qm-fold-btn' });
-    this.qmWrap = h('div', { class: 'qm-fold' }, this.qmSummary, this.qm.el);
+    this.qmSwitch.addEventListener('change', () => this.ctx.host.send({ type: 'set_quartermaster', on: this.qmSwitch.checked }));
+    this.qmWrap = h('div', { class: 'qm-fold' }, h('div', { class: 'qm-row' }, this.qmSummary, this.qmSwitchWrap), this.qm.el);
+    this.bneck = h('div', { class: 'bottleneck', attrs: { role: 'status' } }, icon('forecast', 'ico bn-ico'), this.bneckText,
+      button('Forecast', () => this.ctx.open('forecast'), { class: 'btn small bn-btn', label: 'Open the Forecast' }));
+    this.bneck.hidden = true;
+    this.body.insertBefore(this.bneck, this.body.firstChild);
   }
 
   /** The Quartermaster summary line and whether its card shows. */
@@ -307,9 +375,14 @@ export class Shop {
     const q = ui.quartermaster;
     // before it unlocks the card is already a one-line teaser: no summary over it
     const locked = !q?.unlocked;
-    const open = locked || (this.qmOpen ?? !q?.on);
+    const open = locked || (this.qmOpen ?? this.qmFirst);
     this.qm.el.hidden = !open;
+    if (!locked && open && !prefs().qmSeen) setPref('qmSeen', true);
     show(this.qmSummary, !locked);
+    // the card carries its own switch while open
+    show(this.qmSwitchWrap, !locked && !open);
+    if (q && this.qmSwitch.checked !== q.on) this.qmSwitch.checked = q.on;
+    this.qmSwitch.disabled = locked;
     const bank = qmBank(ui);
     text(this.qmState, !q ? '' : q.on ? `On${bank !== null ? ` · bank ${fmtExactish(bank)}` : ''}` : 'Off');
     if (this.qmChev.dataset.open !== String(open)) {
@@ -325,7 +398,30 @@ export class Shop {
   private pool(ui: UiState): ContentPool { return contentPool(ui, { unlockAll: this.f.unlockAll }); }
   /** The sim's shop without cross-system entries whose parts the pool does not offer yet. */
   private pooled(ui: UiState): ShopEntry[] { return poolShop(ui.shop, this.pool(ui)); }
-  private qmHere(): boolean { return this.f.quartermaster && (this.cat === 'chassis' || this.cat === 'hardpoints'); }
+  private qmHere(): boolean { return this.f.quartermaster && this.cat !== 'cores'; }
+
+  /** The open category's Scrap entries (pooled), for the bottleneck line. */
+  private catEntries(ui: UiState): ShopEntry[] {
+    const pooled = this.pooled(ui);
+    const inCat = (t: string): boolean => {
+      switch (this.cat) {
+        case 'chassis': return (CHASSIS as string[]).includes(t) || t === 'ability';
+        case 'elements': return (ELEMENTS as string[]).includes(t);
+        case 'hardpoints': return (HARDPOINTS as string[]).includes(t);
+        case 'cross': return t === 'fusion' || t === 'link' || t === 'infuse';
+        default: return false;
+      }
+    };
+    return pooled.filter((e) => inCat(e.tree as string));
+  }
+
+  /** The bottleneck line (shown only once the Forecast is revealed: it names Echoes and Prestige). */
+  private updateBottleneck(ui: UiState): void {
+    // not while a decision waits here (an empty slot, a free Doctrine fork): that is the next thing to do, not a Prestige
+    const b = this.f.forecast && this.f.prestigeTab && !this.decisionIn(ui, this.cat) ? scrapBottleneck(this.catEntries(ui), ui.run.scrap) : null;
+    show(this.bneck, !!b);
+    if (b) text(this.bneckText, b);
+  }
 
   private get f(): Features { return this.ctx.features(); }
   /** The category and tree chip on show (pointer hints chain through them). */
@@ -550,6 +646,7 @@ export class Shop {
     this.syncQty();
     this.ui = ui;
     this.updateSuggest(ui, scrapRate);
+    this.updateBottleneck(ui);
     if (this.qmHere()) this.syncQm(ui);
     this.updateSpend(ui);
 

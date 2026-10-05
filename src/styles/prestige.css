@@ -18,3 +18,12 @@
 /* Reachability: Frames not unlocked yet (not selectable; they say how to unlock) */
 .frame-card.locked { opacity: 0.6; border-style: dashed; cursor: default; }
 .frame-card.locked .fr-name { display: inline-flex; gap: 6px; align-items: center; }
+/* UX Phase 2: the Forecast verdict leads the modal; locked Frames fold into one line */
+.pr-verdict { border: 1px solid var(--line-2); border-radius: var(--radius); padding: 10px 12px; background: var(--bg-2); display: flex; flex-direction: column; gap: 3px; }
+.pr-verdict.rec { border-color: var(--ok); }
+.pr-verdict-head { display: flex; gap: 8px; align-items: center; font-weight: 700; font-size: 16px; }
+.pr-verdict.rec .pr-verdict-head { color: var(--ok); }
+.pr-verdict-line { font-size: 14px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.pr-locked { margin-top: 2px; }
+.pr-locked-sum { display: flex; gap: 6px; align-items: center; min-height: var(--touch); font-size: 14px; color: var(--text-dim); cursor: pointer; }
+.pr-locked[open] .frame-cards { margin-top: 6px; }

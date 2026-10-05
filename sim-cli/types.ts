@@ -166,6 +166,8 @@ export interface PrestigeChainResult {
   implemented: boolean;
   runs: RunResult[];
   notes: string[];
+  /** Echoes the game paid at each Prestige of the chain (before spending any). */
+  paid?: number[];
 }
 
 export interface OfflineResult {

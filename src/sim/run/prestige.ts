@@ -119,7 +119,8 @@ export function doPrestige(m: RunMachine, cmd: Extract<Command, { type: 'prestig
   }
   if (cmd.discountTree && prank(meta, 'prestige.branch_discount') <= 0) return 'Branch Discount locked';
   let keep: AnomalyId | null = null;
-  if (cmd.keepsake) {
+  if (cmd.keepsake === null) keep = null;   // UX Phase 2: an explicit "Keep nothing"
+  else if (cmd.keepsake) {
     if (prank(meta, 'prestige.keepsake') <= 0) return 'Keepsake locked';
     if (!w.build.anomalies.includes(cmd.keepsake)) return 'The Keepsake must be socketed';
     keep = cmd.keepsake;

@@ -61,3 +61,23 @@ body.shell-rail .arm-hint { order: 2; }
 body.shell-rail .ability-row[data-n="3"], body.shell-rail .ability-row[data-n="4"] { display: grid; grid-template-columns: repeat(2, 50px); gap: 12px 10px; }
 body.shell-rail .ability-row[data-n="3"] .btn.ability, body.shell-rail .ability-row[data-n="4"] .btn.ability { width: 50px; height: 50px; min-width: 50px; }
 body.shell-rail .ability-row[data-n="3"] .ab-ico, body.shell-rail .ability-row[data-n="4"] .ab-ico { width: 40px; height: 40px; }
+
+/* Phase 2 quick-buy chip (starter.ts QuickBuyChip): in the dock, left of the slot row (the row stays centred). Two short
+   lines (name, price; no icon, so "Fire Rate" fits), 44 px tall, at most 100 px wide so it fits the ~124 px left of a two-slot row on a 375 px phone. */
+.btn.quick-buy {
+  position: absolute; right: calc(100% + 12px); bottom: 6px;
+  display: flex; align-items: center; gap: 6px; min-height: 44px; max-width: 100px; padding: 4px 12px;
+  border-radius: 22px; border: 1px solid var(--line-2); background: var(--bg-1); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  font-weight: 600; text-align: left;
+}
+.qb-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+.qb-name { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.btn.quick-buy .price { font-size: 14px; }
+.btn.quick-buy.ready { border-color: var(--scrap); }
+.btn.quick-buy:disabled { opacity: 0.7; }
+/* three or four slots fill the middle: the chip sits above the row's left end instead (the Overcharge button lifts on the right) */
+.ability-row[data-n="3"] ~ .quick-buy, .ability-row[data-n="4"] ~ .quick-buy { right: auto; left: 0; bottom: calc(100% + 12px); }
+/* the armed hint takes the space above the row */
+body.arming .btn.quick-buy { display: none; }
+/* landscape phone: in the column, above the slots */
+body.shell-rail .btn.quick-buy { position: static; order: -1; }

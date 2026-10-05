@@ -18,7 +18,7 @@ import { aiStep } from './enemies/ai';
 import { updateProjectiles } from './core/projectiles';
 import { updateHazards } from './core/hazards';
 import { RunMachine } from './run/machine';
-import { applyCommand } from './run/commands';
+import { applyCommand, applyPendingDoctrines } from './run/commands';
 import { newBuild, newMeta, newRun, newTower } from './run/state';
 import { fromSave, toSave } from './save/serialize';
 import { SnapshotWriter, writeScene } from './core/snapshot';
@@ -88,6 +88,7 @@ export class Sim implements ISim {
       w.pendingCommands = [];
       for (const c of q) if (!isBoonCommand(c)) applyCommand(m, c);   // Boons are player-only: never from the sim's own queue
     }
+    applyPendingDoctrines(m);   // UX Phase 2: Doctrine changes queued for the next checkpoint
     m.preTick();
     m.spawnScheduled();
     this.statuses.update(w);

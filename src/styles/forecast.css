@@ -6,11 +6,13 @@
 }
 .recommend .ico { color: var(--warn); }
 .readouts { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
-.readout { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; }
-.ro-label { font-size: 14px; color: var(--text-dim); }
+.readout { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; min-height: 44px; }
+.ro-label { font-size: 14px; color: var(--text-dim); display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.fc-frontier[data-info] { cursor: help; }
 .ro-val { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .ro-sub { font-size: 14px; color: var(--text-dim); }
 .readout.warn .ro-val { color: var(--warn); font-size: 17px; }
+.readout.warn .ro-val, .ro-val { overflow-wrap: anywhere; }
 .fc-chart-wrap { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px; }
 .fc-chart { width: 100%; height: auto; display: block; }
 .fc-line { fill: none; stroke: var(--echo); stroke-width: 2.5; stroke-linejoin: round; }

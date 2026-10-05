@@ -174,6 +174,9 @@ export class GameUi {
     this.attn = new Attention({ host, death: this.death, feed: this.feed, offer: this.boonOffer, draft: this.draft, coach: this.coach,
       battleVisible: () => this.shell.battleVisible, changed: () => { this.lanes.schedule(); this.hints.refresh(); } });
     setArenaSource(() => host.arena?.() ?? null);
+    // UX Phase 2 item 10 (decision-hold.ts): a tab opened from the fight holds the run until Battle is back (≤ 30 s)
+    for (const el of [this.death.el, this.coach.el, this.boonOffer.el, this.boonOffer.chip]) el.addEventListener('click', () => this.shell.armDecision(), true);
+    this.shell.isGuided = (tab) => { const t = this.hints.pointer.targetEl; return !!t && t.closest('[data-tab]')?.getAttribute('data-tab') === tab; };
     const layout = this.shell.onLayout;
     this.shell.onLayout = () => { layout?.(); this.lanes.schedule(); this.hints.pointer.schedule(); };
     // the wallet follows the view at once (a category or segment switch, not only the next UiState)
@@ -301,7 +304,7 @@ export class GameUi {
     if (events.some((e) => (e.type === Ev.ScrapGain && e.src === 'offline') || e.type === Ev.Prestige || e.type === Ev.Ascend)) this.hud.resetRate();
     if (this.pendingOffline) {
       const off = events.find((e) => e.type === Ev.ScrapGain && e.src === 'offline');
-      if (off) { clearTimeout(this.pendingOffline.timer); this.pendingOffline = null; showOfflineReturn(off.a, off.b, false); }
+      if (off) { clearTimeout(this.pendingOffline.timer); this.pendingOffline = null; showOfflineReturn(off.a, off.b, false, this.latest); }
     }
   }
 
@@ -313,7 +316,8 @@ export class GameUi {
     if (this.pendingOffline) clearTimeout(this.pendingOffline.timer);
     const timer = window.setTimeout(() => {
       this.pendingOffline = null;
-      if (estimate > 0) showOfflineReturn(seconds, estimate, true);
+      // zero income is explained on the card (after a real absence), not a bare toast
+      if (estimate > 0 || seconds >= 300) showOfflineReturn(seconds, estimate, true, this.latest);
       else this.feed.toast('Welcome back', 'info');
     }, 4000);
     this.pendingOffline = { seconds, estimate, timer };

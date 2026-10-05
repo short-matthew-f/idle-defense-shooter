@@ -1,0 +1,4 @@
+/* Doctrine fork additions (UX Phase 2 item 7): the tradeoff line and the queued-change status. Cards: shop.css. */
+.doctrine .doc-trade { margin: 0; font-size: 14px; color: var(--text-dim); line-height: 1.4; font-variant-numeric: tabular-nums; }
+.doctrine .doc-pending { margin: 2px 0 0; font-size: 14px; color: var(--accent); display: flex; gap: 6px; align-items: center; line-height: 1.35; }
+.doctrine .doc-pending .ico { flex: none; }

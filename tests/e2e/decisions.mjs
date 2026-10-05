@@ -1,0 +1,163 @@
+// Phase 2 decisions (docs/reviews/HANDBOOK-EVAL.md Phase 2 items 5 and 7), run by e2e.mjs unless E2E_SKIP_DECIDE=1.
+// At 393×852 and 375×667 (DPR 2, notch insets):
+//   - first Prestige (the owner's wave-28 save, tests/fixtures/owner-save-w28.txt): the ceremony shows the Forecast verdict
+//   - a later Prestige (crafted: Prestige 2, Keepsake / Threat Dial / Dual Doctrine / Branch Discount owned, 2 Anomalies):
+//     the modal leads with the verdict (first child), the locked Frames fold into one line, the Keepsake select sits
+//     above the Frames (so above the pinned button's reach), and the confirm step names the Keepsake and the Threat Dial
+//   - stay with the fight (scripted through GameUi.shell): a tab opened from a decision source pauses the run and marks
+//     the Battle tab until Battle is back; a tab the player opens stays live
+//   - Doctrine "Change at next checkpoint": mid-wave the fork offers it; queueing shows the pending line and
+//     UiState.run.pendingDoctrines; Cancel change empties it
+// Screenshots: OUT/decide-<vp>-<view>.png.
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const VPS = [
+  { id: '393', viewport: { width: 393, height: 852 }, safe: { top: 59, bottom: 34 } },
+  { id: '375', viewport: { width: 375, height: 667 }, safe: { top: 20, bottom: 0 } },
+];
+
+function ownerSave() {
+  const s = readFileSync(join(ROOT, 'tests', 'fixtures', 'owner-save-w28.txt'), 'utf8').trim();
+  return JSON.parse(Buffer.from(s.slice(s.indexOf(':') + 1), 'base64').toString('utf8'));
+}
+
+export async function decisions({ browser, BASE, OUT, check, attachLogs }) {
+  for (const vp of VPS) {
+    const ctx = await browser.newContext({ viewport: vp.viewport, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+    await ctx.route('**/favicon.ico', (r) => r.fulfill({ status: 204, body: '' }));
+    await ctx.addInitScript((s) => {
+      const put = () => { const st = document.createElement('style'); st.textContent = `:root{--safe-top:${s.top}px!important;--safe-bottom:${s.bottom}px!important}`; document.head.appendChild(st); };
+      if (document.head) put(); else document.addEventListener('DOMContentLoaded', put);
+    }, vp.safe);
+    const page = await ctx.newPage();
+    const errors = [];
+    attachLogs(page, errors);
+    const ready = () => page.waitForFunction(() => !!window.__citadel?.game?.ready, null, { timeout: 60000 });
+    const prefs = { pointerHints: false, buyCoach: 3, qmSeen: true, onboarded: true, revealInit: true, contentInit: true };
+    const load = async (save) => {
+      await page.goto(`${BASE}icons/icon-192.png`);
+      await page.evaluate(async ({ save, prefs }) => {
+        localStorage.clear();
+        localStorage.setItem('citadel.prefs.v1', JSON.stringify(prefs));
+        await new Promise((res, rej) => {
+          const r = indexedDB.open('citadel', 1);
+          r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('saves')) r.result.createObjectStore('saves'); };
+          r.onsuccess = () => { const t = r.result.transaction('saves', 'readwrite'); t.objectStore('saves').put(save, 'main'); t.oncomplete = () => { r.result.close(); res(); }; t.onerror = () => rej(t.error); };
+          r.onerror = () => rej(r.error);
+        });
+      }, { save, prefs });
+      await page.goto(`${BASE}?fast=1`);
+      await ready();
+      await page.waitForTimeout(900);
+    };
+    const closeDialogs = async () => { for (let k = 0; k < 3; k++) { await page.keyboard.press('Escape').catch(() => {}); await page.waitForTimeout(150); } };
+
+    // ---- 1. first Prestige: the owner's save, the ceremony carries the verdict
+    const owner = ownerSave();
+    owner.savedAtMs = Date.now();
+    await load(owner);
+    await closeDialogs();
+    await page.evaluate(() => window.__citadel.game.ui.open('prestige'));
+    await page.waitForTimeout(500);
+    const cer = await page.evaluate(() => ({ verdict: document.querySelector('.ceremony-modal .cer-verdict')?.textContent ?? null, gain: document.querySelector('.ceremony-modal .cer-gain-val')?.textContent ?? null }));
+    await page.screenshot({ path: `${OUT}/decide-${vp.id}-first-prestige.png` });
+    check(`decide ${vp.id}: the first-Prestige ceremony shows the Forecast verdict`, !!cer.verdict && /Recommended now|Waiting ~\d+ min likely adds \+\d+ Echoes|Not recommended yet/.test(cer.verdict), cer);
+    await closeDialogs();
+
+    // ---- 2. a later Prestige: verdict first, locked Frames folded, choices above the Frames, summary in the confirm
+    const later = ownerSave();
+    Object.assign(later.meta, { prestigeCount: 2, echoes: 500, deepestEver: 45 });
+    later.meta.prestigeRanks = { ...later.meta.prestigeRanks, 'prestige.keepsake': 1, 'prestige.threat_dial': 1, 'prestige.dual_doctrine': 1, 'prestige.branch_discount': 1 };
+    later.run.build.anomalies = ['glass_cannon', 'spare_barrel'];
+    later.savedAtMs = Date.now();
+    await load(later);
+    await closeDialogs();
+    await page.evaluate(() => window.__citadel.game.ui.open('prestige'));
+    await page.waitForTimeout(500);
+    const pm = await page.evaluate(() => {
+      const root = document.querySelector('.prestige-modal .prestige');
+      if (!root) return null;
+      const kids = [...root.children];
+      const idx = (sel) => kids.findIndex((k) => k.matches(sel) || !!k.querySelector?.(sel));
+      const fs = parseFloat(getComputedStyle(root.querySelector('.pr-verdict-line') ?? root).fontSize);
+      return { first: kids[0]?.className ?? '', head: root.querySelector('.pr-verdict-head')?.textContent ?? '', lines: [...root.querySelectorAll('.pr-verdict-line')].map((e) => e.textContent),
+        fold: root.querySelector('.pr-locked-sum')?.textContent ?? null, foldOpen: !!root.querySelector('details.pr-locked')?.open,
+        moves: (() => { const f = window.__citadel.game.latestUi()?.forecast; return !!f && f.nextFrontier > f.frontier; })(),
+        keep: idx('select[aria-label="Keepsake"]'), dial: idx('input[aria-label="Threat Dial"]'), frames: idx('.frame-cards'), fs };
+    });
+    await page.screenshot({ path: `${OUT}/decide-${vp.id}-later-prestige.png` });
+    await page.locator('.prestige-modal .pr-locked-sum').first().scrollIntoViewIfNeeded().catch(() => {});
+    await page.screenshot({ path: `${OUT}/decide-${vp.id}-later-prestige-frames.png` });
+    check(`decide ${vp.id}: the later Prestige modal leads with the verdict, folds locked Frames, puts the choices above the Frames`,
+      !!pm && pm.first.includes('pr-verdict') && /Recommended now|Waiting ~|Not recommended yet/.test(pm.head) && (!pm.moves || pm.lines.some((l) => /^Frontier: wave \d+ → \d+$/.test(l)))
+      && /more Frames? locked/.test(pm.fold ?? '') && !pm.foldOpen && pm.keep >= 0 && pm.keep < pm.frames && pm.dial >= 0 && pm.dial < pm.frames && pm.fs >= 14, pm);
+    await page.locator('.prestige-modal').getByRole('button', { name: 'Prestige', exact: true }).first().tap().catch(() => {});
+    await page.waitForTimeout(400);
+    const conf = await page.evaluate(() => [...document.querySelectorAll('[role="dialog"]')].map((d) => d.textContent ?? '').join(' | '));
+    await page.screenshot({ path: `${OUT}/decide-${vp.id}-later-confirm.png` });
+    check(`decide ${vp.id}: the confirm step summarizes Keepsake and Threat Dial`, /Keepsake: /.test(conf) && /Threat Dial: level \d+/.test(conf) && /Branch Discount: /.test(conf), conf.slice(0, 400));
+    await closeDialogs();
+
+    // ---- 3. Doctrine "Change at next checkpoint": queue mid-wave, see it pending, cancel it
+    const doc = ownerSave();
+    Object.assign(doc.meta, { deepestEver: 45 });
+    await load({ ...doc, savedAtMs: Date.now() });
+    const save = await page.evaluate(async () => {
+      const g = window.__citadel.game, ui = g.latestUi();
+      const s = await g.client.requestSave();
+      const docs = ui.shop.filter((e) => e.tree === 'ballistics' && e.kind === 'doctrine').map((e) => e.node.split('.')[1]);
+      for (const e of ui.shop) if (e.tree === 'ballistics' && e.kind !== 'doctrine' && e.kind !== 'exotic' && e.currency === 'scrap') s.run.build.ranks[e.node] = Math.max(1, s.run.build.ranks[e.node] | 0);
+      s.run.build.doctrines = { ballistics: docs[0] };
+      s.run.build.secondDoctrines = {};
+      s.run.build.anomalies = [];
+      s.run.cores = 3;
+      s.savedAtMs = Date.now();
+      return { s, docs };
+    });
+    await load(save.s);
+    await page.waitForFunction(() => window.__citadel.game.latestUi()?.run.phase === 'combat', null, { timeout: 60000 });
+    // ---- 3a. stay with the fight: a tab opened from a decision source holds the run; a tab the player opens stays live
+    await page.locator('.tabbar .tab-btn[data-tab="build"]').first().tap();
+    await page.waitForTimeout(300);
+    const own = await page.evaluate(() => window.__citadel.game.paused);
+    await page.locator('.tabbar .tab-btn[data-tab="battle"]').first().tap();
+    await page.waitForTimeout(300);
+    await page.evaluate(() => { const sh = window.__citadel.game.ui.shell; sh.armDecision(); sh.go('build'); });
+    await page.waitForTimeout(300);
+    const held = await page.evaluate(() => ({ paused: window.__citadel.game.paused, mark: !!document.querySelector('.tab-btn.t-battle.held'), label: document.querySelector('.tab-btn.t-battle')?.getAttribute('aria-label') }));
+    await page.screenshot({ path: `${OUT}/decide-${vp.id}-held.png` });
+    await page.locator('.tabbar .tab-btn[data-tab="battle"]').first().tap();
+    await page.waitForTimeout(300);
+    const back = await page.evaluate(() => ({ paused: window.__citadel.game.paused, mark: !!document.querySelector('.tab-btn.t-battle.held') }));
+    check(`decide ${vp.id}: a decision-sourced tab holds the run until Battle (own tabs stay live)`, own === false && held.paused && held.mark && /paused for your decision/.test(held.label ?? '') && !back.paused && !back.mark, { own, held, back });
+    await page.locator('.tabbar .tab-btn[data-tab="upgrades"]').first().tap();
+    await page.waitForTimeout(300);
+    await page.locator('.screen.s-upgrades .cat-tabs .tab', { hasText: 'Chassis' }).first().tap().catch(() => {});
+    await page.locator('.screen.s-upgrades .tree-chip', { hasText: 'Ballistics' }).first().tap().catch(() => {});
+    await page.waitForTimeout(400);
+    const btn = page.locator('.screen.s-upgrades .doctrine button[data-action="change1"]').first();
+    const label = ((await btn.textContent().catch(() => '')) ?? '').trim();
+    await btn.scrollIntoViewIfNeeded().catch(() => {});
+    const card = await page.evaluate(() => { const c = document.querySelector('.screen.s-upgrades .doctrine:not(.chosen)'); return c ? { cap: c.querySelector('.doc-cap')?.textContent ?? '', trade: c.querySelector('.doc-trade')?.textContent ?? '' } : null; });
+    await page.screenshot({ path: `${OUT}/decide-${vp.id}-fork-tradeoff.png` });
+    await btn.tap().catch(() => {});
+    await page.locator('[role="dialog"]').getByRole('button', { name: 'Queue change' }).tap().catch(() => {});
+    await page.waitForFunction(() => (window.__citadel.game.latestUi()?.run.pendingDoctrines ?? []).length === 1, null, { timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(400);
+    const pend = await page.evaluate(() => ({ q: window.__citadel.game.latestUi()?.run.pendingDoctrines ?? [], line: document.querySelector('.screen.s-upgrades .doc-pending')?.textContent ?? null }));
+    await page.locator('.screen.s-upgrades .doc-pending').first().scrollIntoViewIfNeeded().catch(() => {});
+    await page.screenshot({ path: `${OUT}/decide-${vp.id}-fork-pending.png` });
+    check(`decide ${vp.id}: the fork card shows the capstone, a numeric tradeoff and "Change at next checkpoint"; queueing shows the pending change`,
+      label.startsWith('Change at next checkpoint') && !!card && /Capstone: .+\. .+/.test(card.cap) && /\d.*Scrap · capstone/.test(card.trade) && pend.q.length === 1 && /next checkpoint/.test(pend.line ?? ''), { label, card, pend });
+    await page.locator('.screen.s-upgrades .doctrine button[data-action="cancel"]').first().tap().catch(() => {});
+    await page.locator('[role="dialog"]').getByRole('button', { name: 'Cancel change' }).tap().catch(() => {});
+    await page.waitForFunction(() => (window.__citadel.game.latestUi()?.run.pendingDoctrines ?? []).length === 0, null, { timeout: 5000 }).catch(() => {});
+    const after = await page.evaluate(() => (window.__citadel.game.latestUi()?.run.pendingDoctrines ?? []).length);
+    check(`decide ${vp.id}: Cancel change empties the queue`, after === 0, { after });
+    check(`decide ${vp.id}: no console errors`, errors.length === 0, errors.slice(0, 5));
+    await ctx.close();
+  }
+}

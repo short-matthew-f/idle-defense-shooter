@@ -7,7 +7,7 @@ import { EnemyFlag, Ev, NO_ENTITY } from '../core/types';
 import type { WorldImpl } from '../core/world-impl';
 import type { RunMachine } from './machine';
 import type { DoctrineId, TreeId } from '../core/ids';
-import { doctrineChoice, purchaseCheapest, purchaseMany, spendKey } from '../economy/shop';
+import { CHECKPOINT_LOCK, doctrineChoice, purchaseCheapest, purchaseMany, spendKey } from '../economy/shop';
 import { validateCommand } from './validate';
 import { allNodes } from '../core/content';
 import { CORE_COSTS, REFIT_REFUND, offlineScrap } from '../economy/curves';
@@ -44,6 +44,8 @@ function dispatch(m: RunMachine, cmd: Command): string | null {
       if (cmd.second && b.doctrines[cmd.tree] && b.secondDoctrines[cmd.tree]) return changeSecondDoctrine(m, cmd.tree, cmd.doctrine);
       return chooseDoctrineCmd(w, cmd.tree, cmd.doctrine, cmd.second);   // WP8: explicit second doctrine
     case 'clear_second_doctrine': return clearSecondDoctrine(m, cmd.tree);   // Reachability: frees Dual Doctrine for another tree
+    case 'queue_doctrine': return queueDoctrine(m, cmd.tree, cmd.doctrine, !!cmd.second);   // UX Phase 2: change at next checkpoint
+    case 'cancel_doctrine': return cancelDoctrine(m, cmd.tree, !!cmd.second);
     case 'mount_hardpoint': {
       if (cmd.slot < 0 || cmd.slot >= run.hardpointSlotsOpen) return 'Slot not open';
       if (b.hardpoints[cmd.slot]) return 'Slot occupied (Refit instead)';
@@ -192,7 +194,71 @@ export function autoDesignateSlot(w: WorldImpl, i: number): { slot: 0 | 1; clear
 }
 
 /** Between waves at the start of a checkpoint (the Doctrine-change rule of economy/shop.doctrineChoice). */
-function atCheckpoint(w: WorldImpl): boolean { return w.run.phase === 'between' && w.run.wave - 1 === w.run.checkpoint; }
+export function atCheckpoint(w: WorldImpl): boolean { return w.run.phase === 'between' && w.run.wave - 1 === w.run.checkpoint; }
+
+// ---------------------------------------------------------------------------
+// UX Phase 2: "Change at next checkpoint" (run.pendingDoctrines)
+// ---------------------------------------------------------------------------
+/** Apply one Doctrine change now (the existing rules: checkpoint, price, second-Doctrine sources). */
+function applyDoctrineChange(m: RunMachine, tree: TreeId, doctrine: DoctrineId | null, second: boolean): string | null {
+  const b = m.w.build;
+  if (doctrine === null) return clearSecondDoctrine(m, tree);
+  if (second && b.doctrines[tree] && b.secondDoctrines[tree]) return changeSecondDoctrine(m, tree, doctrine);
+  return chooseDoctrineCmd(m.w, tree, doctrine, second);
+}
+
+/**
+ * `queue_doctrine`: at a checkpoint (or for a free pick) apply now; otherwise validate everything but the checkpoint
+ * rule and queue it (one per tree and slot; a new one replaces the old). Cores are checked now and charged on apply.
+ */
+function queueDoctrine(m: RunMachine, tree: TreeId, doctrine: DoctrineId | null, second: boolean): string | null {
+  const w = m.w, b = w.build;
+  let cost: number = CORE_COSTS.doctrine;
+  if (doctrine === null) {
+    if (!second) return 'Only a second Doctrine can be cleared';
+    if (!b.secondDoctrines[tree]) return 'No second Doctrine to clear';
+  } else {
+    if (second && !b.doctrines[tree]) return 'Choose the first Doctrine first';
+    if (second && !w.stats.secondDoctrineAllowed(tree)) return 'This tree cannot run a second Doctrine';
+    const c = doctrineChoice(w, tree, doctrine);
+    if (c.locked && c.locked !== CHECKPOINT_LOCK) return c.locked;
+    if (!c.locked) return applyDoctrineChange(m, tree, doctrine, second);   // a free pick, or already at a checkpoint
+    cost = c.cost;
+  }
+  if (doctrine === null && atCheckpoint(w)) return applyDoctrineChange(m, tree, null, true);
+  if (w.run.cores < cost) return 'Not enough Cores';
+  const q = (w.run.pendingDoctrines ??= []);
+  const i = q.findIndex((p) => p.tree === tree && p.second === second);
+  const entry = { tree, doctrine, second };
+  if (i >= 0) q[i] = entry; else q.push(entry);
+  return null;
+}
+
+/** `cancel_doctrine`: drop the queued change for `tree` (and slot). */
+function cancelDoctrine(m: RunMachine, tree: TreeId, second: boolean): string | null {
+  const q = m.w.run.pendingDoctrines;
+  const i = q ? q.findIndex((p) => p.tree === tree && p.second === second) : -1;
+  if (!q || i < 0) return 'No Doctrine change queued';
+  q.splice(i, 1);
+  if (!q.length) delete m.w.run.pendingDoctrines;
+  return null;
+}
+
+/**
+ * Sim.step, before the machine's preTick: at a checkpoint `between`, apply the queued Doctrine changes in queue
+ * order. A change that cannot be paid yet stays queued; one that is no longer valid (fork closed, tree gone, already
+ * chosen) is dropped. Deterministic: list order, no clocks.
+ */
+export function applyPendingDoctrines(m: RunMachine): void {
+  const w = m.w, q = w.run.pendingDoctrines;
+  if (!q || !q.length || !atCheckpoint(w)) return;
+  const keep = [];
+  for (const p of q) {
+    const err = applyDoctrineChange(m, p.tree, p.doctrine, p.second);
+    if (err === 'Not enough Cores') keep.push(p);
+  }
+  if (keep.length) w.run.pendingDoctrines = keep; else delete w.run.pendingDoctrines;
+}
 
 /** Reachability: change a chosen second Doctrine (1 Core, at a checkpoint, like changing the first). */
 function changeSecondDoctrine(m: RunMachine, tree: TreeId, doctrine: DoctrineId): string | null {
@@ -212,7 +278,7 @@ function changeSecondDoctrine(m: RunMachine, tree: TreeId, doctrine: DoctrineId)
 function clearSecondDoctrine(m: RunMachine, tree: TreeId): string | null {
   const w = m.w, b = w.build;
   if (!b.secondDoctrines[tree]) return 'No second Doctrine to clear';
-  if (!atCheckpoint(w)) return 'Change only at a checkpoint';
+  if (!atCheckpoint(w)) return CHECKPOINT_LOCK;
   if (w.run.cores < CORE_COSTS.doctrine) return 'Not enough Cores';
   w.run.cores -= CORE_COSTS.doctrine;
   delete b.secondDoctrines[tree];

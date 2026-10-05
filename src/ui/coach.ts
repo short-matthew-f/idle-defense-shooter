@@ -13,8 +13,8 @@ import { icon } from './icons';
 import { prefs, setPref } from './prefs';
 import type { FeatureId, Features } from './progression';
 
-export type CoachId = 'start' | 'checkpoint' | 'elements' | 'build' | 'abilities' | 'boons' | 'anomalies' | 'bulk' | 'prestige' | 'machine'
-  | 'salvage' | 'overcharge';
+export type CoachId = 'start' | 'checkpoint' | 'elements' | 'patrol' | 'build' | 'abilities' | 'boons' | 'anomalies' | 'bulk' | 'prestige' | 'cross' | 'inspector'
+  | 'cores' | 'frame' | 'exotics' | 'machine' | 'salvage' | 'overcharge';
 
 export interface CoachMsg {
   id: CoachId;
@@ -29,13 +29,19 @@ export const COACH: readonly CoachMsg[] = [
   { id: 'start', feature: 'tapAssist', icon: 'shield', text: 'Your tower fights on its own. Kills earn Scrap: tap Upgrade to spend it.' },
   { id: 'checkpoint', feature: 'upgradesTab', icon: 'restart', text: 'Boss down: a checkpoint. If the tower falls, it restarts here. More upgrades in the Upgrades tab.' },
   { id: 'elements', feature: 'elements', icon: 'bolt', text: 'Your first real choice: attune an element in Upgrades → Elements.' },
+  { id: 'patrol', feature: 'runControls', icon: 'restart', text: 'Push climbs and fights bosses. Patrol loops cleared waves and keeps earning, even while you are away.' },
   { id: 'build', feature: 'buildTab', icon: 'blueprint', text: 'A weapon slot is open: mount a second weapon on the Build tab.' },
   { id: 'abilities', feature: 'abilities', icon: 'target', text: 'Abilities: tap one to spend Command Energy (CE), then tap the field.' },
   { id: 'boons', feature: 'boons', icon: 'boon', text: 'Boons help until the tower falls. Pick one, or decline.' },
   { id: 'anomalies', feature: 'anomalies', icon: 'info', text: 'Anomaly drafts follow bosses: each card bends the rules until you Prestige.' },
   { id: 'bulk', feature: 'bulk', icon: 'upgrade', text: 'Upgrades now suggests buys: Buy all, or ×10 and Max per tap.' },
-  { id: 'prestige', feature: 'prestigeTab', icon: 'prestige', text: 'Something is coming. The Prestige tab shows when rebuilding pays off.' },
-  { id: 'machine', feature: 'quartermaster', icon: 'more', text: 'A new machine: every tab stays open. New weapons and elements arrive with later Prestiges; Automation and Trials unlock in More.' },
+  { id: 'prestige', feature: 'prestigeTab', icon: 'prestige', text: 'The Prestige tab is open: its Forecast shows when a fresh start pays off.' },
+  { id: 'cross', feature: 'cross', icon: 'bolt', text: 'Your parts can combine now: Upgrades → Cross has your first link.' },
+  { id: 'inspector', feature: 'inspector', icon: 'inspector', text: 'Pause opens the Kill-Chain Inspector, which traces why things died. The Codex in More records what you find.' },
+  { id: 'cores', feature: 'cores', icon: 'cores', text: 'Cores drop from bosses. Spend them in Upgrades → Cores and on the Build tab.' },
+  { id: 'frame', feature: 'frame', icon: 'shield', text: 'Build → Frame shows your machine\'s body. A new Frame is chosen when you Prestige.' },
+  { id: 'exotics', feature: 'exotics', icon: 'cores', text: 'Exotics: one Core-priced upgrade per tree, once its Doctrine fork opens (Upgrades → Cores).' },
+  { id: 'machine', feature: 'quartermaster', icon: 'more', text: 'A new machine: every tab stays open. Spend your Echoes under Prestige → Echo tiers; Trials and Automation are bought there too, deeper down.' },
   // active edge (docs/ACTIVE.md): shown only while their subject is on screen (LIVE_COACH)
   { id: 'salvage', feature: 'salvage', icon: 'scrap', text: 'Glowing crates: tap them for bonus Scrap. Quick taps chain.' },
   { id: 'overcharge', feature: 'overcharge', icon: 'bolt', text: 'Overcharge is full: hold the glowing button, let go in the bright band.' },
@@ -65,9 +71,10 @@ export function activeCoachLive(a: { crates: number; overcharge: { ready: boolea
 
 /**
  * Lines that introduce a verb (a thing the player must do or know to keep going): never retired unseen, i.e. reading a
- * later line never marks them read (staleWith).
+ * later line never marks them read (staleWith). 'cross' is here because its reveal depends on the build (the first Cross
+ * node), so it can arrive after later lines in the table.
  */
-export const VERB_COACH: ReadonlySet<CoachId> = new Set<CoachId>(['checkpoint', 'elements', 'build', 'abilities']);
+export const VERB_COACH: ReadonlySet<CoachId> = new Set<CoachId>(['checkpoint', 'elements', 'patrol', 'build', 'abilities', 'cross']);
 
 /**
  * The message to show now, or null, among unread messages whose feature is on: an event explainer whose subject is

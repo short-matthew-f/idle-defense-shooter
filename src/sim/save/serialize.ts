@@ -16,7 +16,7 @@ import type { SaveState, RunSave, RunState, BuildState, MetaState } from '../cor
 import type { AnomalyId, BoonId } from '../core/ids';
 import { SAVE_VERSION } from '../core/types';
 import { newBuild, newMeta, newRun, WAVE_TABLE_SIZE } from '../run/state';
-import { anomalyDef, boonDef } from '../core/content';
+import { anomalyDef, boonDef, treeDef } from '../core/content';
 import { BOON_CAP, BOON_QUEUE_CAP } from '../data/boons';
 import { FRAMES, TRIALS } from '../data/index';
 import { Prng } from '../math/prng';
@@ -38,7 +38,7 @@ function table(src: readonly number[] | undefined, min: number): Uint8Array {
 }
 
 /** WP8: optional progression fields shared by RunState and RunSave (copied when present). */
-const RUN_EXTRAS = ['plannedHardpoints', 'plannedAttunements', 'plannedDoctrines', 'minThreatDial', 'discountTree', 'checkpointSeconds', 'patrolMeasured'] as const;
+const RUN_EXTRAS = ['plannedHardpoints', 'plannedAttunements', 'plannedDoctrines', 'minThreatDial', 'discountTree', 'checkpointSeconds', 'patrolMeasured', 'deepestDeath', 'pendingDoctrines'] as const;
 function runExtras(src: RunState | RunSave): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const k of RUN_EXTRAS) { const v = src[k]; if (v !== undefined && v !== null) out[k] = clone(v); }
@@ -224,6 +224,21 @@ function sanitizeRun(r: RunSave): void {
   if (r.boonSpent !== undefined) r.boonSpent = Array.isArray(r.boonSpent) ? r.boonSpent.filter((v, i, a) => knownBoon(v) && a.indexOf(v) === i) : [];
   if (r.attemptEnded !== undefined && r.attemptEnded !== true) delete r.attemptEnded;
   b.anomalySockets = Math.max(0, Math.floor(finiteOr(b.anomalySockets, 3)));
+  // UX Phase 2: deepest death (Forecast Frontier rule) and queued Doctrine changes (known tree/doctrine, one per tree and slot)
+  if (r.deepestDeath !== undefined) r.deepestDeath = Math.max(0, Math.floor(finiteOr(r.deepestDeath, 0)));
+  if (r.pendingDoctrines !== undefined) {
+    const seen = new Set<string>();
+    r.pendingDoctrines = Array.isArray(r.pendingDoctrines) ? r.pendingDoctrines.filter((p) => {
+      if (!isObj(p) || typeof p.tree !== 'string') return false;
+      const t = treeDef(p.tree), second = p.second === true;
+      if (!t || (p.doctrine === null ? !second : !t.doctrines.some((d) => d.id === p.doctrine))) return false;
+      const k = `${p.tree}:${second}`;
+      if (seen.has(k)) return false;
+      seen.add(k); p.second = second;
+      return true;
+    }) : [];
+    if (!r.pendingDoctrines.length) delete r.pendingDoctrines;
+  }
   if (r.quartermaster !== undefined) { const q = sanitizeQuartermasterRun(r.quartermaster); if (q) r.quartermaster = q; else delete r.quartermaster; }
 }
 

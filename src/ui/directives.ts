@@ -13,6 +13,7 @@ import { ABILITY_BY_ID, FRAME_BY_ID, TREE_BY_ID, TREE_LABEL, nodeName } from './
 import { confirmDialog } from './modal';
 import type { UiCtx } from './ctx';
 import { contentPool } from './progression';
+import { nodeGate, nodeTier } from './echo-tiers';
 
 export type AutoTab = 'directives' | 'targeting' | 'queue' | 'blueprints';
 const TABS: { id: AutoTab; label: string }[] = [
@@ -100,7 +101,7 @@ export class DirectivesPanel {
   // ------------------------------------------------------------ Directives
   private renderDirectives(ui: UiState): void {
     const r = rank(ui, 'directives');
-    if (r <= 0) { this.locked('Directives unlock with the Prestige III node "Directives" (deepest-ever wave 60). Rules read WHEN condition AND condition → DO action, checked in priority order.'); return; }
+    if (r <= 0) { this.locked(`Directives: ${nodeGate('directives', ui.meta.deepestEver)?.text}. Rules read WHEN condition AND condition → DO action, checked in priority order.`); return; }
     const slots = directiveSlots(r);
     const autonomy = rank(ui, 'autonomy') > 0;
     const list = h('ol', { class: 'rules' });
@@ -110,7 +111,7 @@ export class DirectivesPanel {
     const save = button('Save', () => { this.ctx.host.send({ type: 'set_directives', directives: clone(this.draft) }); this.savedKey = serializeDirectives(this.draft); this.editing = -1; this.ctx.toast('Directives saved', 'good'); this.render(); }, { class: 'btn primary', disabled: !dirty });
     const revert = button('Revert', () => { const u = this.ctx.state(); if (u) this.draft = clone(u.meta.directives); this.editing = -1; this.render(); }, { class: 'btn ghost', disabled: !dirty });
     this.content.append(
-      h('p', { class: 'dim small', text: `${this.draft.length}/${slots} rule slots. Checked top to bottom; the first rule whose conditions all hold acts (${reactionDelay(rank(ui, 'directive_tuning')).toFixed(2).replace(/0$/, '')} s reaction delay).${autonomy ? '' : ' Adept conditions and the Prestige action need Autonomy (Prestige IV).'}` }),
+      h('p', { class: 'dim small', text: `${this.draft.length}/${slots} rule slots. Checked top to bottom; the first rule whose conditions all hold acts (${reactionDelay(rank(ui, 'directive_tuning')).toFixed(2).replace(/0$/, '')} s reaction delay).${autonomy ? '' : ` Adept conditions and the Prestige action need the Autonomy upgrade (${nodeTier('autonomy')}).`}` }),
       this.draft.length ? list : h('p', { class: 'note', text: 'No rules yet. Example: WHEN 5 enemies in the inner ring → Repulsor Pulse.' }),
       h('div', { class: 'row gap wrap' }, add, h('span', { class: 'grow' }), revert, save));
   }
@@ -191,7 +192,7 @@ export class DirectivesPanel {
 
   // ------------------------------------------------------------ Targeting
   private renderTargeting(ui: UiState): void {
-    if (rank(ui, 'directives') <= 0) { this.locked('Targeting Profiles unlock with the Prestige III node "Directives".'); return; }
+    if (rank(ui, 'directives') <= 0) { this.locked(`Targeting Profiles: ${nodeGate('directives', ui.meta.deepestEver)?.text}.`); return; }
     // slotted systems plus those that run without a slot (Frame free mount, Borrowed Blade): all of them target
     const systems: WeaponSystemId[] = ['primary', ...ui.build.hardpoints.filter((x): x is NonNullable<typeof x> => !!x), ...(ui.extraSystems ?? []).map((x) => x.system)];
     const grid = h('div', { class: 'targeting' });
@@ -206,7 +207,7 @@ export class DirectivesPanel {
 
   // ------------------------------------------------------------ Upgrade Queue
   private renderQueue(ui: UiState): void {
-    if (rank(ui, 'directives') <= 0) { this.locked('The Upgrade Queue unlocks with the Prestige III node "Directives".'); return; }
+    if (rank(ui, 'directives') <= 0) { this.locked(`The Upgrade Queue: ${nodeGate('directives', ui.meta.deepestEver)?.text}.`); return; }
     const buyable = ui.shop.filter((e) => e.currency === 'scrap' && e.kind !== 'doctrine');
     const byTree = new Map<string, typeof buyable>();
     for (const e of buyable) { const k = String(e.tree); if (!byTree.has(k)) byTree.set(k, []); byTree.get(k)!.push(e); }
@@ -249,7 +250,7 @@ export class DirectivesPanel {
   // ------------------------------------------------------------ Blueprints
   private renderBlueprints(ui: UiState): void {
     const slots = rank(ui, 'blueprint_slots');
-    if (slots <= 0) { this.locked('Blueprints unlock with the Prestige II node "Blueprint Slots" (deepest-ever wave 40). A Blueprint saves Frame, Hardpoints, Attunements, Doctrines, Targeting Profiles and the Upgrade Queue, loadable at Prestige start.'); return; }
+    if (slots <= 0) { this.locked(`Blueprints: ${nodeGate('blueprint_slots', ui.meta.deepestEver)?.text}. A Blueprint saves Frame, Hardpoints, Attunements, Doctrines, Targeting Profiles and the Upgrade Queue, loadable at Prestige start.`); return; }
     const list = h('div', { class: 'bp-list' });
     const current = (u: UiState, nm: string): Blueprint => ({
       name: nm, frame: u.build.frame,
@@ -305,7 +306,7 @@ export function ruleWarning(d: Directive, ui: Pick<UiState, 'build' | 'meta' | '
     if (i < 0 || i >= n) return `${name} is not in an ability slot, so this rule cannot fire. Slot it on the Battle bar or the Build tab.`;
   }
   if (a.kind === 'prestige') {
-    if ((ui.meta.prestigeRanks['prestige.autonomy'] | 0) <= 0) return 'The Prestige action needs Autonomy (Prestige IV).';
+    if ((ui.meta.prestigeRanks['prestige.autonomy'] | 0) <= 0) return `The Prestige action needs Autonomy: ${nodeGate('autonomy', ui.meta.deepestEver)?.text}.`;
     if (!ui.meta.settings.autoPrestige) return 'Auto-Prestige is off (More → Settings): this rule will not Prestige until you switch it on.';
   }
   return null;

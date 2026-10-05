@@ -19,6 +19,7 @@ import type { UiCtx } from './ctx';
 import { UNLOCKS, type Features } from './progression';
 import { tellDecision } from './tells';
 import { pastFrontier } from './forecast';
+import { infoOnHold, markInfo, setInfoFeatures } from './info';
 
 const SPEEDS = [1, 2, 4, 8] as const;
 
@@ -110,15 +111,20 @@ export class Hud {
   private feats: Pick<Features, 'runControls' | 'abilities' | 'inspector' | 'moreTab' | 'cores' | 'boons'> | null = null;
 
   constructor(ctx: UiCtx) {
+    let modeHold = { consumed: () => false }, speedHold = { consumed: () => false };
     this.modeBtn = button('Push', () => {
+      if (modeHold.consumed()) return;   // a long press opened the info sheet
       const s = ctx.state(); if (!s) return;
       ctx.host.send({ type: 'set_mode', mode: s.run.mode === 'push' ? 'patrol' : 'push' });
     }, { class: 'btn ctl mode-btn', title: 'Push: advance and fight bosses. Patrol: loop the four waves after the checkpoint. (P)' });
     this.speedBtn = button('×1', () => {
+      if (speedHold.consumed()) return;
       const s = ctx.state(); if (!s) return;
       const next = speedCycle(s.run.speedMultiplier, s.speedAllowed ?? 1);
       if (next !== s.run.speedMultiplier) ctx.host.send({ type: 'set_speed', speed: next });
     }, { class: 'btn ctl speed-btn', title: 'Simulation speed: tap to cycle (solved waves only)' });
+    modeHold = infoOnHold(this.modeBtn, 'mode');
+    speedHold = infoOnHold(this.speedBtn, 'speed');
     const restart = this.restartBtn = button(icon('restart'), async () => {
       const s = ctx.state();
       const ok = await confirmDialog('Restart from checkpoint?', `The current attempt ends and you restart at wave ${(s?.run.checkpoint ?? 0) + 1}. Scrap and upgrades are kept.`, 'Restart');
@@ -127,6 +133,7 @@ export class Hud {
     this.pauseBtn = button(icon('pause'), () => ctx.open('inspector'), { class: 'btn ctl icon pause-btn', label: 'Pause and open the Kill-Chain Inspector (Space)' });
 
     this.ce.el.appendChild(this.ceMarks);
+    markInfo(this.ce.el, 'ce');
     this.hp.el.append(this.barrierStrip, this.shieldStrip, this.shieldLbl);
     this.cycle.appendChild(this.cycleFill);
     for (let i = 0; i < 5; i++) { const t = h('i', { class: 'tick' }); this.cycleTicks.push(t); this.cycle.appendChild(t); }
@@ -144,9 +151,9 @@ export class Hud {
       h('div', { class: 'tb-row tb-head' },
         h('div', { class: 'wave-line' }, this.waveNum, this.waveSub),
         h('div', { class: 'res' },
-          h('div', { class: 'res-item scrap', title: 'Scrap: spend it on upgrades. Banks on every kill and survives death.' }, icon('scrap', 'ico res-ico'), h('span', { class: 'res-stack' }, this.scrap, this.scrapRate)),
-          this.qmItem = h('div', { class: 'res-item qm-bank-chip', title: 'Quartermaster bank: its share of your income. It spends only this, on your stat upgrades.' }, icon('bank', 'ico res-ico'), this.qmBank),
-          this.coresItem = h('div', { class: 'res-item cores', title: 'Cores: commitment currency (Exotics, Refits, Doctrine changes, rerolls).' }, icon('cores', 'ico res-ico'), this.cores)),
+          h('div', { class: 'res-item scrap', title: 'Scrap: spend it on upgrades. Banks on every kill and survives death.', data: { info: 'scrap' } }, icon('scrap', 'ico res-ico'), h('span', { class: 'res-stack' }, this.scrap, this.scrapRate)),
+          this.qmItem = h('div', { class: 'res-item qm-bank-chip', title: 'Quartermaster bank: its share of your income. It spends only this, on your stat upgrades.', data: { info: 'qmBank' } }, icon('bank', 'ico res-ico'), this.qmBank),
+          this.coresItem = h('div', { class: 'res-item cores', title: 'Cores: commitment currency (Exotics, Refits, Doctrine changes, rerolls).', data: { info: 'cores' } }, icon('cores', 'ico res-ico'), this.cores)),
         this.pauseBtn),
       h('div', { class: 'tb-row tb-bars' }, this.hp.el, this.ce.el),
       this.cycle);
@@ -164,6 +171,7 @@ export class Hud {
    */
   setFeatures(f: Features): void {
     this.feats = f;
+    setInfoFeatures(f);
     this.bossBar.revealed = f.abilities;
     show(this.restartBtn, f.runControls);
     show(this.ce.el, f.abilities);
@@ -257,6 +265,7 @@ export class Hud {
       text(this.desigLabel, d.live === 0 ? 'designators' : 'designated');   // hidden on a landscape phone (narrow control column)
       attr(this.desig, 'aria-label', `2 designators, ${d.live} in use. Tap enemies to designate them; tap a designated enemy to clear it.`);
       this.desig.title = '2 designators: tap two enemies; a third tap replaces the older; tap a designated enemy to clear it';
+      markInfo(this.desig, 'designators');
     }
   }
 }

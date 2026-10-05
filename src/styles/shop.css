@@ -123,6 +123,17 @@ body.shell-rail .tree-chips.more { -webkit-mask-image: none; mask-image: none; p
 .qmf-state { color: var(--text-dim); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .qm-fold-btn .fold-label { flex: none; }
 .qmf-chev { display: inline-flex; }
+/* Phase 2: folded, the summary is one row with an inline switch beside it (the card carries its own when open) */
+.qm-row { display: flex; align-items: center; gap: 10px; }
+.qm-row .qm-fold-btn { flex: 1; min-width: 0; }
+.qm-row .qm-fold-btn .fold-act { display: none; }
+.qm-row .qmf-chev { margin-left: auto; }
+/* Phase 2 bottleneck line: leads the list when Scrap can't buy anything new in this category */
+.bottleneck { display: flex; align-items: center; gap: 10px; margin: 10px 0 2px; padding: 8px 8px 8px 12px; border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--echo) 55%, var(--line)); background: color-mix(in srgb, var(--echo) 10%, transparent); }
+.bottleneck .bn-ico { flex: none; color: var(--echo); }
+.bn-text { flex: 1; min-width: 0; font-size: 14px; line-height: 1.35; }
+.btn.bn-btn { flex: none; min-height: var(--touch); }
 
 /* node rows: name + rank, the headline effect on one line (the row body unfolds the rest), the price on the button */
 .node { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); }
@@ -135,6 +146,9 @@ body.shell-rail .tree-chips.more { -webkit-mask-image: none; mask-image: none; p
 .node.open .node-chev { transform: rotate(180deg); }
 .node-desc { margin: 3px 0 0; font-size: 14px; color: var(--text-dim); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .node.open .node-desc { display: block; }
+/* Before → after of the headline stat (stat rows): numbers first; with a labelled line the headline shows on unfold */
+.node-stat { margin: 3px 0 0; font-size: 14px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.35; }
+.node.has-stat:not(.open) .node-desc { display: none; }
 .node-lock { margin: 4px 0 0; font-size: 14px; color: var(--text-dim); }
 .node-lock::before { content: '🔒︎ '; }
 .node.k-exotic .node-name { color: var(--cores); }

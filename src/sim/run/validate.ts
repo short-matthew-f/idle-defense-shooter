@@ -54,7 +54,7 @@ export function validateCommand(cmd: unknown): string | null {
     case 'prestige':
       if (!str(c.frame)) return bad('frame');
       if (!optInt(c.blueprint) || !optFin(c.threatDial)) return bad('blueprint/threatDial');
-      return (c.keepsake === undefined || str(c.keepsake)) && (c.discountTree === undefined || str(c.discountTree)) ? null : bad('keepsake/discountTree');
+      return (c.keepsake === undefined || c.keepsake === null || str(c.keepsake)) && (c.discountTree === undefined || str(c.discountTree)) ? null : bad('keepsake/discountTree');
     case 'set_directives': return Array.isArray(c.directives) ? null : bad('directives');
     case 'set_upgrade_queue': return Array.isArray(c.rules) ? null : bad('rules');
     case 'save_blueprint': {
@@ -66,6 +66,8 @@ export function validateCommand(cmd: unknown): string | null {
     case 'start_trial': return str(c.trial) ? null : bad('trial');
     // Reachability additions
     case 'clear_second_doctrine': return str(c.tree) ? null : bad('tree');
+    case 'queue_doctrine': return !str(c.tree) ? bad('tree') : !(c.doctrine === null || str(c.doctrine)) ? bad('doctrine') : optBool(c.second) ? null : bad('second');
+    case 'cancel_doctrine': return !str(c.tree) ? bad('tree') : optBool(c.second) ? null : bad('second');
     case 'delete_blueprint': return int(c.index) ? null : bad('index');
     // Active edge (systems/active.ts)
     case 'tap_assist': case 'collect_salvage': return fin(c.x) && fin(c.y) ? null : bad('x/y');

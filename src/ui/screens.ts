@@ -14,6 +14,7 @@ import type { PrestigeShop } from './prestige-shop';
 import type { ConstellationPanel } from './constellation';
 import type { UiCtx } from './ctx';
 import type { Features, FeatureId } from './progression';
+import { earliestGate, gateText } from './echo-tiers';
 
 const pr = (ui: UiState, id: string): number => ui.meta.prestigeRanks[`prestige.${id}`] | 0;
 
@@ -22,7 +23,7 @@ const pr = (ui: UiState, id: string): number => ui.meta.prestigeRanks[`prestige.
 export type PrestigeSeg = 'forecast' | 'layers' | 'ascension';
 export const PRESTIGE_SEGS: { id: PrestigeSeg; label: string; lock: (ui: UiState) => string | null }[] = [
   { id: 'forecast', label: 'Forecast', lock: (ui) => (ui.run.deepestCleared < 20 && ui.meta.prestigeCount === 0 ? 'Opens at wave 20' : null) },
-  { id: 'layers', label: 'Upgrades', lock: (ui) => (ui.meta.deepestEver < 20 ? 'Reach wave 20' : null) },
+  { id: 'layers', label: 'Echo tiers', lock: (ui) => (ui.meta.deepestEver < 20 ? 'Reach wave 20 to open Echo tier I' : null) },
   { id: 'ascension', label: 'Ascension', lock: (ui) => (ui.meta.ascension === 0 && ui.run.deepestCleared < 100 ? 'Beat wave 100' : null) },
 ];
 
@@ -103,8 +104,8 @@ interface MoreItem { id: MoreSub | 'inspector'; label: string; icon: string; hin
 export const MORE_ITEMS: MoreItem[] = [
   { id: 'inspector', label: 'Kill-Chain Inspector', icon: 'inspector', hint: 'Pause the field and trace why things died', reveal: 'inspector' },
   { id: 'codex', label: 'Chain Codex', icon: 'codex', hint: 'Discovered interactions and rumours', reveal: 'codex' },
-  { id: 'automation', label: 'Automation', icon: 'directives', hint: 'Directives, Targeting, Upgrade Queue, Blueprints', lock: (ui) => (pr(ui, 'directives') || pr(ui, 'blueprint_slots') ? null : 'Prestige II'), reveal: 'automation' },
-  { id: 'trials', label: 'Trials', icon: 'trials', hint: 'Constraint runs with permanent rewards', lock: (ui) => (pr(ui, 'trials') ? null : 'Prestige II'), reveal: 'trials' },
+  { id: 'automation', label: 'Automation', icon: 'directives', hint: 'Directives, Targeting, Upgrade Queue, Blueprints', lock: (ui) => (pr(ui, 'directives') || pr(ui, 'blueprint_slots') ? null : earliestGate(['directives', 'blueprint_slots'], ui.meta.deepestEver)?.text ?? null), reveal: 'automation' },
+  { id: 'trials', label: 'Trials', icon: 'trials', hint: 'Constraint runs with permanent rewards', lock: (ui) => gateText('trials', ui.meta.deepestEver, pr(ui, 'trials')), reveal: 'trials' },
   { id: 'settings', label: 'Settings', icon: 'settings', hint: 'Clarity, sound, saves, unlock everything, start over' },
   { id: 'help', label: 'Help & shortcuts', icon: 'info', hint: 'Tips, gestures, keys' },
 ];
@@ -118,6 +119,7 @@ export class MoreScreen {
   private readonly subTitle = h('h2', { class: 'sub-title' });
   private readonly subBody = h('div', { class: 'sub-body' });
   private readonly locks = new Map<string, HTMLElement>();
+  private readonly hints = new Map<string, HTMLElement>();
   private readonly rows = new Map<string, HTMLElement>();
   private current: MoreSub | null = null;
   private hidden = true;
@@ -130,10 +132,12 @@ export class MoreScreen {
   constructor(private readonly subs: Record<MoreSub, SubScreen>, nav: { go: (sub: MoreSub) => void; back: () => void; inspector: () => void }) {
     for (const it of MORE_ITEMS) {
       const lock = h('span', { class: 'mi-lock' });
+      const hintEl = h('span', { class: 'mi-hint', text: it.hint });
       this.locks.set(it.id, lock);
+      this.hints.set(it.id, hintEl);
       const row = button([
         icon(it.icon, 'ico'),
-        h('span', { class: 'mi-main' }, h('span', { class: 'mi-label', text: it.label }), h('span', { class: 'mi-hint', text: it.hint })),
+        h('span', { class: 'mi-main' }, h('span', { class: 'mi-label', text: it.label }), hintEl),
         lock, icon('right', 'ico tiny chev'),
       ], () => (it.id === 'inspector' ? nav.inspector() : nav.go(it.id)), { class: 'menu-item' });
       this.rows.set(it.id, row);
@@ -189,7 +193,9 @@ export class MoreScreen {
       this.rows.get(it.id)!.hidden = !shown(it);
       const el = this.locks.get(it.id)!;
       const lock = it.lock ? it.lock(ui) : null;
-      el.replaceChildren(...(lock ? [icon('lock', 'ico tiny'), lock] : []));
+      // the lock names its real gate ("Reach wave 40 · buy Trials (120 Echoes)") in the row's own line; the badge just says Locked
+      el.replaceChildren(...(lock ? [icon('lock', 'ico tiny'), 'Locked'] : []));
+      text(this.hints.get(it.id)!, lock ?? it.hint);
       el.parentElement?.classList.toggle('locked', !!lock);
     }
   }

@@ -45,7 +45,7 @@ function deathBuys() {
 
 export async function attention({ browser, BASE, OUT, check, attachLogs }) {
   const SHOTS = process.env.ATTN_SHOTS ?? OUT;
-  const LADDER = ['start', 'checkpoint', 'elements', 'build', 'abilities', 'boons', 'anomalies', 'bulk', 'prestige', 'machine', 'salvage', 'overcharge'];
+  const LADDER = ['start', 'checkpoint', 'elements', 'build', 'abilities', 'boons', 'anomalies', 'bulk', 'prestige', 'cross', 'inspector', 'cores', 'frame', 'exotics', 'patrol', 'machine', 'salvage', 'overcharge'];
   const viewports = [
     { id: '393', viewport: { width: 393, height: 852 }, safe: { top: 59, bottom: 34 } },
     { id: '375', viewport: { width: 375, height: 667 }, safe: { top: 20, bottom: 0 } },

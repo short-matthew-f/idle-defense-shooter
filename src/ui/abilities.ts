@@ -14,6 +14,7 @@ import { openModal } from './modal';
 import type { UiCtx } from './ctx';
 import { bossForWave } from '@sim/data/bosses';
 import { equipTarget, preBossInfo, preBossKey, tellDecision, type PreBossInfo } from './tells';
+import { QuickBuyChip } from './starter';
 
 /** How long the replace question and the Undo stay up (ms). */
 const CONFIRM_MS = 10000;
@@ -49,6 +50,8 @@ export class AbilityBar {
   /** The armed hint ("… armed: tap the field" + Cancel); the overlay lanes place it on a landscape phone (lanes.ts). */
   readonly hint = h('div', { class: 'arm-hint', attrs: { role: 'status' } });
   private readonly hintText = h('span');
+  /** Phase 2: the dock's quick-buy chip (starter.ts), left of the slot row; it keeps a buy on Battle after stage 4. */
+  readonly quick: QuickBuyChip;
   private slots: Slot[] = [];
   private slotKey = '';
   /** Usable slot count last seen (-1 before the first UiState): a rise toasts "new ability slot". */
@@ -67,7 +70,8 @@ export class AbilityBar {
     this.preBoss.hidden = true;
     this.hint.append(this.hintText, button('Cancel', () => this.cancel(), { class: 'btn small' }));
     this.hint.hidden = true;
-    this.el = h('div', { class: 'abilities' }, this.hint, this.row);
+    this.quick = new QuickBuyChip(ctx);
+    this.el = h('div', { class: 'abilities' }, this.hint, this.row, this.quick.el);
   }
 
   private build(ui: UiState): void {
@@ -94,6 +98,8 @@ export class AbilityBar {
     if (this.usable >= 0 && usable > this.usable) this.ctx.toast(`New ability slot ${usable}: tap it to choose an ability`, 'good');
     this.usable = usable;
     this.syncPreBoss(ui);
+    this.quick.update(ui, this.ctx.features());
+    this.el.classList.toggle('qb-on', !this.quick.el.hidden);
     if (this.arming.sync(ui.build.abilities)) this.renderArmed();
     const info = new Map(ui.abilities.map((a) => [a.id, a]));
     ui.build.abilities.forEach((id, i) => {

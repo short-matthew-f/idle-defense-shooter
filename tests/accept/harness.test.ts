@@ -50,3 +50,23 @@ describe('WP10 simulator harness', () => {
     expect(report.rows.find((r) => r.name === 'Determinism')!.pass).toBe(true);
   }, 900_000);
 });
+
+// UX Phase 2 item 5: the Prestige-chain report printed the bank after spending ("echoes +3" at wave 28 where the game pays 43)
+describe('harness Prestige Echo report', () => {
+  it('prestigeOnce reports what the game pays, before any Echoes are spent', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { Sim } = await import('../../src/sim/index');
+    const { importString } = await import('../../src/sim/save/serialize');
+    const { prestigeEchoes } = await import('../../src/sim/economy/prestige');
+    const { prestigeOnce, spendEchoes } = await import('../../sim-cli/runner');
+    const sim = new Sim(importString(readFileSync(join(__dirname, '../fixtures/owner-save-w28.txt'), 'utf8').trim()), 1);
+    const due = prestigeEchoes(sim.world);
+    expect(due).toBe(43);
+    const p = prestigeOnce(sim, 'standard');
+    expect(p.ok).toBe(true);
+    expect(p.paid).toBe(due);
+    expect(spendEchoes(sim).length).toBeGreaterThan(0);   // spending afterwards no longer changes the reported number
+    expect(p.paid).toBe(43);
+  });
+});

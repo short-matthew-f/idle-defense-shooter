@@ -9,7 +9,9 @@ import type { DoctrineId, TreeId } from '../../src/sim/core/ids';
 import type { UiState } from '../../src/sim/core/types';
 import { TREES, FRAMES, STAR_NODES } from '../../src/sim/data/index';
 import { applyCommand } from '../../src/sim/run/commands';
-import { confirmText, forkModel, freeDoctrineTrees, secondNote } from '../../src/ui/doctrine';
+import { QUEUE_LOCK, confirmText, doctrineTradeoff, doctrinesShown, forkModel, freeDoctrineTrees, secondNote } from '../../src/ui/doctrine';
+import { CHECKPOINT_LOCK } from '../../src/sim/economy/shop';
+import { DOCTRINES_REVEAL_WAVE } from '../../src/sim/data/content-pool';
 import { reactionDelay, ruleWarning } from '../../src/ui/directives';
 import { autocastOn, setAutocast } from '../../src/ui/abilities';
 import { grantedExotic } from '../../src/ui/shop';
@@ -43,6 +45,7 @@ describe('Doctrine fork model', () => {
 
   it('Spare Barrel: the other cards offer "Choose as 2nd · 50%" and the command carries second: true', () => {
     const sim = new Sim(null, 43);
+    sim.world.meta.deepestEver = 10;   // Doctrines revealed (DOCTRINES_REVEAL_WAVE)
     const [a, b] = forkReady(sim, 'ballistics');
     applyCommand(sim.machine, { type: 'choose_doctrine', tree: 'ballistics', doctrine: a });
     let ui = sim.uiState();
@@ -82,8 +85,10 @@ describe('Doctrine fork model', () => {
     expect(act(ui, 'ballistics', b).actions[0]).toMatchObject({ kind: 'clear2', cost: 1, blocked: null, cmd: { type: 'clear_second_doctrine', tree: 'ballistics' } });
     sim.world.run.phase = 'combat';
     ui = sim.uiState();
-    expect(act(ui, 'ballistics', c).actions[0].blocked).toMatch(/checkpoint/);
-    expect(act(ui, 'ballistics', b).actions[0].blocked).toMatch(/checkpoint/);
+    // UX Phase 2: outside the window the change is queued for the next checkpoint (not blocked)
+    expect(act(ui, 'ballistics', c).actions[0]).toMatchObject({ kind: 'change1', blocked: null, queued: true, label: 'Replace 1st at next checkpoint', cmd: { type: 'queue_doctrine', tree: 'ballistics', doctrine: c } });
+    expect(act(ui, 'ballistics', b).actions[0]).toMatchObject({ kind: 'clear2', blocked: null, queued: true, cmd: { type: 'queue_doctrine', tree: 'ballistics', doctrine: null, second: true } });
+    expect(confirmText(ui, 'ballistics', act(ui, 'ballistics', c), act(ui, 'ballistics', c).actions[0]).body).toMatch(/next checkpoint/);
     // every action the model offers is accepted by the sim at a checkpoint
     sim.world.run.phase = 'between';
     ui = sim.uiState();
@@ -92,6 +97,37 @@ describe('Doctrine fork model', () => {
     ui = sim.uiState();
     expect(applyCommand(sim.machine, act(ui, 'ballistics', c).actions[0].cmd)).toBeNull();
     expect(sim.world.build.secondDoctrines.ballistics).toBeUndefined();
+  });
+
+  it('queued change: the target card shows it with Cancel; the sim applies it at the checkpoint', () => {
+    const sim = new Sim(null, 48);
+    const [a, b] = forkReady(sim, 'ballistics');
+    applyCommand(sim.machine, { type: 'choose_doctrine', tree: 'ballistics', doctrine: a });
+    sim.world.run.cores = 1;
+    sim.world.run.phase = 'combat';
+    let ui = sim.uiState();
+    expect(applyCommand(sim.machine, act(ui, 'ballistics', b).actions[0].cmd)).toBeNull();
+    ui = sim.uiState();
+    expect(act(ui, 'ballistics', b)).toMatchObject({ pending: 'Becomes your Doctrine at the next checkpoint', actions: [{ kind: 'cancel', cmd: { type: 'cancel_doctrine', tree: 'ballistics' } }] });
+    expect(act(ui, 'ballistics', a).pending).toMatch(/^Switches to /);
+    expect(applyCommand(sim.machine, act(ui, 'ballistics', b).actions[0].cmd)).toBeNull();   // cancel
+    expect(sim.uiState().run.pendingDoctrines).toEqual([]);
+  });
+
+  it('cards say what the capstone does and one numeric tradeoff; QUEUE_LOCK is the sim lock', () => {
+    const sim = new Sim(null, 49);
+    forkReady(sim, 'ballistics');
+    const card = forkModel(sim.uiState(), 'ballistics')!.cards.find((c) => c.doctrine === 'piercing')!;
+    expect(card.capstone).toBe('Last Rites');
+    expect(card.capstoneDesc).toMatch(/×4 damage/);
+    expect(card.tradeoff).toBe('3 nodes from 300 Scrap · capstone 9.6K · instead of Multishot, Ricochet, Heavy Rounds');
+    expect(doctrineTradeoff('ballistics', 'piercing')).toBe(card.tradeoff);
+    expect(QUEUE_LOCK).toBe(CHECKPOINT_LOCK);
+    expect(DOCTRINES_REVEAL_WAVE).toBe(10);
+    expect(doctrinesShown(sim.uiState())).toBe(false);
+    expect(doctrinesShown(sim.uiState(), true)).toBe(true);
+    sim.world.meta.deepestEver = 10;
+    expect(doctrinesShown(sim.uiState())).toBe(true);
   });
 
   it('Dual Doctrine used on another tree: the fork says so', () => {

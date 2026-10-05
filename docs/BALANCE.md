@@ -300,6 +300,44 @@ Before (first balance pass, `sim-out/tuned`): 53 → 64 → 79, reclimb 29% / 25
 Prestige. The P4 reclimb (42–49%) is outside the §3 band but outside the harness (a 3-Prestige chain); it comes from
 P3 walling sharply after ~25 min, so the ratio's denominator is short.
 
+## Forecast at the Frontier (UX Phase 2) — 2026-10-05
+
+**Report (owner, first Prestige):** at the Frontier the death card said "A Prestige pays here" while the Forecast still
+said not yet. The owner's save (deepest 28 = Frontier, 21.8 min of play, 43 Echoes due) loads with
+`recommended: false`; the rate rule (≥15% below the peak for one checkpoint cycle, ≥ 300 s) lags the Frontier wall by
+several minutes, because the Frontier's ×3.5 HP per wave stops progress at once while the rate decays slowly.
+
+**Rule added** (`economy/forecast.ts frontierRecommends`, also used by the `forecast_recommends` Directive condition):
+`recommended` is also true, from wave 20 on and outside Trials, once
+
+- the tower has died on a wave **past** the Frontier this Prestige (`run.deepestDeath`, set by the run machine on every
+  death, saved), or
+- the Frontier wave is cleared and the Echo rate has stopped rising (≥ `FRONTIER_FLAT` = 2% below its peak).
+
+The rate rule is unchanged and still covers everything that is not a Frontier wall.
+
+| Measure | Before | After | How |
+| --- | --- | --- | --- |
+| Owner's save (loaded, idle, seed 1) | not recommended at 21.8 min | not recommended on load; **recommended at 23.3 min** (first death, wave 28; rate 110.7/h vs peak 113.1/h) | simulator, `tests/progression/forecast-frontier.test.ts` |
+| First wall (full `sim:accept`, s1–s3) | wave 28, 28, 28 | wave 28, 28, 28 | simulator |
+| Forecast row | worst 0% off the peak wave | worst 0% off the peak wave | simulator |
+| Chain run 1 (Generalist s1) stops at | wave 28 after 44.0 min of play | wave 28 after **33.0 min** | simulator (`accept/chain.json`) |
+| Chain run 2 stops at | wave 39 after 36.7 min (its Echo-rate peak was wave 38) | wave 38 after 19.8 min (peak 38) | simulator |
+| Push | +11, +12 (28 → 39 → 51) | +10, +11 (28 → 38 → 49) | simulator |
+| Reclimb (time to the previous best ÷ the previous run's time) | 35.2%, 28.5% (PASS) | 39.8%, 54% (**FAIL**) | simulator |
+
+**Open: Reclimb.** The reclimbs themselves did not get slower (absolute: 15.5 → 13.1 min, 10.5 → 10.7 min); the
+ratio rose because the denominator lost the minutes the old rule spent waiting at the wall (44.0 → 33.0 min,
+36.7 → 19.8 min of play). The 25–40% band was calibrated on runs that included that lag. Either the band is re-baselined against
+wall-free run times, or the Frontier rule waits longer; the second brings back what the owner reported. Decision for
+the owner. Every other row is identical to master and to the branch before this change (full `npm run sim:accept`, 3
+seeds; master 12/5, branch before 12/5, after 11/6: the new failure is Reclimb).
+
+**Harness fix (same pass).** The Prestige-chain report printed `echoes +3` at wave 28 where the game pays 43: it
+took the bank delta after `spendEchoes` had spent 40 of them. `sim-cli/runner.ts prestigeOnce` now records the
+payout before anything is spent (`PrestigeChainResult.paid`), and the note reads `echoes +43 (bank 3 after buying 4
+nodes)` (`tests/accept/harness.test.ts`).
+
 ## Stalls and knockback
 
 **Report (owner, many Prestiges deep):** waves could not be finished although damage was fine: knockback carried

@@ -8,6 +8,7 @@ import { TRIALS } from '@sim/data/index';
 import { confirmDialog } from './modal';
 import { prefs, setPref } from './prefs';
 import type { UiCtx } from './ctx';
+import { nodeGate } from './echo-tiers';
 
 /** The active Trial (UiState.activeTrial = meta.activeTrial); before the first UiState, what this device started. */
 export function activeTrial(ui: UiState | null): TrialId | null {
@@ -15,6 +16,19 @@ export function activeTrial(ui: UiState | null): TrialId | null {
   return prefs().activeTrial;
 }
 export function trialName(id: TrialId | null): string | null { return id ? TRIALS.find((t) => t.id === id)?.name ?? id : null; }
+
+/** The text of the collapsed card: "10 Trials unlock at: Reach wave 40 · buy Trials (120 Echoes)". Pure (tests). */
+export function lockedTrialsText(n: number, deepestEver: number): string {
+  return `${n} Trial${n === 1 ? '' : 's'} unlock at: ${nodeGate('trials', deepestEver)?.text ?? 'a later Echo upgrade'}.`;
+}
+
+function lockedTrialsCard(deepestEver: number): HTMLElement {
+  return h('div', { class: 'locked-card trials-locked' }, icon('lock', 'ico'),
+    h('div', null,
+      h('p', { class: 'tl-head', text: lockedTrialsText(TRIALS.length, deepestEver) }),
+      h('p', { class: 'dim small', text: 'A Trial is a separate run slot: your main run pauses and is preserved. Each has a constraint and a permanent reward.' }),
+      h('p', { class: 'dim small', text: TRIALS.map((t) => t.name).join(' · ') })));
+}
 
 export class TrialsPanel {
   shown = false;
@@ -36,12 +50,16 @@ export class TrialsPanel {
     if (!this.isOpen) return;
     const unlocked = (ui.meta.prestigeRanks['prestige.trials'] | 0) > 0;
     const act = activeTrial(ui);
-    const key = JSON.stringify([unlocked, act, ui.meta.trials]);
+    const key = JSON.stringify([unlocked, act, ui.meta.trials, unlocked ? 0 : ui.meta.deepestEver >= (nodeGate('trials', 0)?.wave ?? 0)]);
     if (key === this.key) return;
     this.key = key;
     clear(this.el);
-    if (!unlocked) this.el.appendChild(h('div', { class: 'locked-card' }, icon('lock', 'ico'), h('p', { text: 'Trials unlock with the Prestige II node "Trials". A Trial is a separate run slot: your main run pauses and is preserved.' })));
     this.el.appendChild(h('p', { class: 'dim small', text: 'Three tiers each: reach waves 30, 60 and 90 under the constraint. Echo upgrades apply.' }));
+    if (!unlocked) {
+      // one card instead of a dim Start button per Trial
+      this.el.appendChild(lockedTrialsCard(ui.meta.deepestEver));
+      return;
+    }
     for (const t of TRIALS) {
       const done = ui.meta.trials[t.id] ?? 0;
       const pips = h('div', { class: 'tiers', attrs: { 'aria-label': `${done} of 3 tiers complete` } },

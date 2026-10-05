@@ -257,4 +257,27 @@ export class StatResolver implements DerivedStats {
   frameFlag(flag: string): boolean { return frameDef(this.build.frame).flags.includes(flag); }
   /** All resolved keys (debug / UI). */
   entries(): [string, number][] { return [...this.values.entries()]; }
+
+  /**
+   * Shop before → after (read-only, no rebuild): the resolved value of `effect`'s key now and with `extra` more
+   * ranks of the node that carries it (effective rank `rank`, doctrine `scale`). Same rule as rebuild(): add / mul sum
+   * into the additive formula, `@final` multiplies its own (1 + perRank·rank) factor. Null when the key is pinned by a
+   * `set` effect or an override (more ranks would not change it), or for `set` effects.
+   */
+  previewEffect(effect: StatEffect, rank: number, scale: number, extra: number): { key: string; now: number; next: number } | null {
+    if (effect.op === 'set') return null;
+    const fin = effect.stat.endsWith(FINAL);
+    const k = fin ? effect.stat.slice(0, -FINAL.length) : effect.stat;
+    if (this.set.has(k) || this.overrides.has(k)) return null;
+    const a = this.add.get(k) ?? 0, m = this.mul.get(k) ?? 0, f = this.fin.get(k) ?? 1;
+    const codex = k === 'combat.power_mul' || k === 'economy.scrap_mul' ? codexMultiplier(this.meta) : 1;
+    const val = (a2: number, m2: number, f2: number): number => (baseStat(k) + a2) * (1 + m2) * f2 * codex;
+    const d = effect.perRank * extra * scale;
+    let next: number;
+    if (fin) {
+      const cur = 1 + effect.perRank * rank * scale;
+      next = val(a, m, cur !== 0 ? (f / cur) * (1 + effect.perRank * (rank + extra) * scale) : f);
+    } else next = effect.op === 'add' ? val(a + d, m, f) : val(a, m + d, f);
+    return { key: k, now: this.get(k), next };
+  }
 }

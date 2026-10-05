@@ -1,6 +1,11 @@
 /**
  * Prestige modal: choose the next Frame (caps + trait), an optional Blueprint, the Threat Dial
  * (Prestige III), a Keepsake Anomaly (Prestige II) and a Branch Discount tree, then confirm.
+ *
+ * UX Phase 2 item 5 (order, top to bottom): the Forecast verdict ("Recommended now" / "Waiting ~N min likely adds +X
+ * Echoes"), the next-boss gain and the Frontier move (prestigeVerdict, pure); the gain; the choices (Keepsake, Threat
+ * Dial, Dual Doctrine, Branch Discount, Blueprint) above the Frames; the unlocked Frames, with the locked ones folded
+ * into one line; then the reset note. The confirm step repeats every choice (prestigeSummary).
  */
 import '../styles/prestige.css';
 import type { AnomalyId, FrameId, TreeId } from '@sim/core/ids';
@@ -12,9 +17,24 @@ import { ANOMALY_BY_ID, FRAME_BY_ID, FRAMES, TREES, TREE_LABEL } from './content
 import type { FrameDef } from '@sim/data/schema';
 import { confirmDialog, openModal } from './modal';
 import type { UiCtx } from './ctx';
-import { openCeremony, useCeremony } from './ceremony';
+import { openCeremony, prestigeVerdict, useCeremony } from './ceremony';
+
+export { prestigeVerdict, type PrestigeVerdict } from './ceremony';
 import { blueprintInPool } from './progression';
 import { echoesAfter, walletChip } from './wallet';
+
+export interface PrestigeChoices { echoes: number; frame: string; keepsake?: string | null; dial?: number; discount?: string | null; blueprint?: string | null; dual?: boolean }
+
+/** The confirm step's summary of every choice (pure). */
+export function prestigeSummary(c: PrestigeChoices): string {
+  const parts = [`You gain ${fmtNum(c.echoes)} Echoes and start over at wave 1 with the ${c.frame} Frame.`];
+  if (c.blueprint) parts.push(`Blueprint: ${c.blueprint}.`);
+  if (c.keepsake !== undefined) parts.push(c.keepsake ? `Keepsake: ${c.keepsake} stays socketed.` : 'Keepsake: none (every Anomaly is lost).');
+  if (c.dial !== undefined) parts.push(`Threat Dial: level ${c.dial}.`);
+  if (c.discount !== undefined) parts.push(c.discount ? `Branch Discount: ${c.discount} −25%.` : 'Branch Discount: none.');
+  if (c.dual) parts.push('Dual Doctrine: available on the first tree you give a second Doctrine.');
+  return parts.join(' ');
+}
 
 type PrestigeCmd = Extract<Command, { type: 'prestige' }>;
 
@@ -32,7 +52,8 @@ export function openPrestige(ctx: UiCtx): void {
   let frame: FrameId = frames.includes(ui.build.frame) ? ui.build.frame : frames[0];
   let blueprint: number | undefined;
   let dial = ui.run.threatDial;
-  let keepsake: AnomalyId | undefined;
+  // the sim keeps last Prestige's Keepsake when it is still socketed and nothing else is chosen: show that, not "Keep nothing"
+  let keepsake: AnomalyId | null = ui.meta.keepsake && ui.build.anomalies.includes(ui.meta.keepsake) ? ui.meta.keepsake : null;
   let discount: TreeId | undefined;
 
   const frameCards = h('div', { class: 'frame-cards', attrs: { role: 'radiogroup', 'aria-label': 'Frame' } });
@@ -49,19 +70,30 @@ export function openPrestige(ctx: UiCtx): void {
       b.setAttribute('role', 'radio');
       b.setAttribute('aria-checked', id === frame ? 'true' : 'false');
       return b;
-    }), ...locked.map((f) => h('div', { class: 'frame-card locked', attrs: { 'aria-disabled': 'true' } },
-      h('span', { class: 'fr-name' }, icon('lock', 'ico tiny'), f.name),
-      h('span', { class: 'fr-caps', text: `Unlock: ${f.unlock}` }),
-      h('span', { class: 'fr-trait', text: f.trait }))));
+    }));
   };
   renderFrames();
+  // locked Frames fold into one line (tap to see how to unlock each)
+  const lockedFold = locked.length ? h('details', { class: 'pr-locked' },
+    h('summary', { class: 'pr-locked-sum' }, icon('lock', 'ico tiny'), `${locked.length} more Frame${locked.length === 1 ? '' : 's'} locked`),
+    h('div', { class: 'frame-cards' }, ...locked.map((f) => h('div', { class: 'frame-card locked', attrs: { 'aria-disabled': 'true' } },
+      h('span', { class: 'fr-name' }, icon('lock', 'ico tiny'), f.name),
+      h('span', { class: 'fr-caps', text: `Unlock: ${f.unlock}` }),
+      h('span', { class: 'fr-trait', text: f.trait }))))) : null;
 
+  const v = prestigeVerdict(ui);
+  const verdict = h('div', { class: `pr-verdict${v.recommended ? ' rec' : ''}`, attrs: { role: 'status' } },
+    h('div', { class: 'pr-verdict-head' }, icon(v.recommended ? 'check' : 'forecast', 'ico'), h('span', { text: v.headline })),
+    v.nextBoss ? h('div', { class: 'pr-verdict-line', text: v.nextBoss }) : null,
+    v.frontier ? h('div', { class: 'pr-verdict-line', text: v.frontier }) : null);
   const sections: HTMLElement[] = [
-    h('div', { class: 'pr-gain' }, icon('echo', 'ico'), h('span', { text: `+${fmtNum(echoes)} Echoes` }), h('span', { class: 'dim', text: ` (deepest cleared: wave ${ui.run.deepestCleared})` })),
-    h('p', { class: 'dim', text: 'Prestige resets the wave, Scrap, upgrades, Cores and Anomalies. Echoes, Prestige upgrades, the Codex and unlocked Frames stay.' }),
-    h('h3', { class: 'sec-title', text: 'Frame' }), frameCards,
+    verdict,
+    h('div', { class: 'pr-gain' }, icon('echo', 'ico'), h('span', { text: `+${fmtNum(echoes)} Echoes now` }), h('span', { class: 'dim', text: ` (deepest cleared: wave ${ui.run.deepestCleared})` })),
   ];
+  const frameSection: HTMLElement[] = [h('h3', { class: 'sec-title', text: 'Frame' }), frameCards];
+  if (lockedFold) frameSection.push(lockedFold);
 
+  const blueprintSection: HTMLElement[] = [];
   if (ui.meta.blueprints.length) {
     const sel = h('select', { class: 'select', attrs: { 'aria-label': 'Blueprint' } }, h('option', { attrs: { value: '' }, text: 'No blueprint' }),
       // content pool (progression.ts): a Blueprint naming a system the next Prestige does not offer yet cannot be loaded
@@ -74,7 +106,7 @@ export function openPrestige(ctx: UiCtx): void {
       const bp = blueprint !== undefined ? ui.meta.blueprints[blueprint] : null;
       if (bp && frames.includes(bp.frame)) { frame = bp.frame; renderFrames(); }
     });
-    sections.push(h('h3', { class: 'sec-title', text: 'Blueprint' }), sel, h('p', { class: 'dim small', text: 'Mounts, attunements, Doctrines, Targeting Profiles and the Upgrade Queue follow the plan as slots open.' }));
+    blueprintSection.push(h('h3', { class: 'sec-title', text: 'Blueprint' }), sel, h('p', { class: 'dim small', text: 'Mounts, attunements, Doctrines, Targeting Profiles and the Upgrade Queue follow the plan as slots open.' }));
   }
 
   if (prestigeRank(ui, 'threat_dial') > 0) {
@@ -88,10 +120,11 @@ export function openPrestige(ctx: UiCtx): void {
   }
 
   if (prestigeRank(ui, 'keepsake') > 0 && ui.build.anomalies.length) {
-    const sel = h('select', { class: 'select', attrs: { 'aria-label': 'Keepsake' } }, h('option', { attrs: { value: '' }, text: 'Keep nothing' }),
-      ...ui.build.anomalies.map((a) => h('option', { attrs: { value: a }, text: ANOMALY_BY_ID.get(a)?.name ?? a })));
-    sel.addEventListener('change', () => { keepsake = (sel.value || undefined) as AnomalyId | undefined; });
-    sections.push(h('h3', { class: 'sec-title', text: 'Keepsake' }), sel);
+    const sel = h('select', { class: 'select', attrs: { 'aria-label': 'Keepsake' } }, h('option', { attrs: { value: '' }, text: 'Keep nothing (every Anomaly is lost)' }),
+      ...ui.build.anomalies.map((a) => h('option', { attrs: { value: a, ...(a === keepsake ? { selected: '' } : {}) }, text: ANOMALY_BY_ID.get(a)?.name ?? a }))) as HTMLSelectElement;
+    sel.value = keepsake ?? '';
+    sel.addEventListener('change', () => { keepsake = (sel.value || null) as AnomalyId | null; });
+    sections.push(h('h3', { class: 'sec-title', text: 'Keepsake' }), sel, h('p', { class: 'dim small', text: 'One socketed Anomaly carries over into the next Prestige.' }));
   }
 
   if (prestigeRank(ui, 'dual_doctrine') > 0) {
@@ -105,14 +138,23 @@ export function openPrestige(ctx: UiCtx): void {
     sel.addEventListener('change', () => { discount = (sel.value || undefined) as TreeId | undefined; });
     sections.push(h('h3', { class: 'sec-title', text: 'Branch Discount' }), sel);
   }
+  sections.push(...blueprintSection, ...frameSection,
+    h('p', { class: 'dim', text: 'Prestige resets the wave, Scrap, upgrades, Cores and Anomalies. Echoes, Prestige upgrades, the Codex and unlocked Frames stay.' }));
 
   const go = button([icon('prestige'), 'Prestige'], async () => {
-    const ok = await confirmDialog('Prestige now?', `You gain ${fmtNum(echoes)} Echoes and start over at wave 1 as a ${FRAME_BY_ID.get(frame)?.name ?? frame}.`, 'Prestige', { danger: echoes <= 0, wallet: walletChip(['echoes'], ctx.state(), echoesAfter(echoes)) });
+    const hasKeep = prestigeRank(ui, 'keepsake') > 0 && ui.build.anomalies.length > 0;
+    const summary = prestigeSummary({ echoes, frame: FRAME_BY_ID.get(frame)?.name ?? frame,
+      ...(blueprint !== undefined ? { blueprint: ui.meta.blueprints[blueprint]?.name ?? null } : {}),
+      ...(hasKeep ? { keepsake: keepsake ? ANOMALY_BY_ID.get(keepsake)?.name ?? keepsake : null } : {}),
+      ...(prestigeRank(ui, 'threat_dial') > 0 ? { dial } : {}),
+      ...(prestigeRank(ui, 'branch_discount') > 0 ? { discount: discount ? TREE_LABEL[discount] ?? discount : null } : {}),
+      dual: prestigeRank(ui, 'dual_doctrine') > 0 });
+    const ok = await confirmDialog(v.recommended ? 'Prestige now?' : 'Prestige now? (not recommended yet)', summary, 'Prestige', { danger: echoes <= 0, wallet: walletChip(['echoes'], ctx.state(), echoesAfter(echoes)) });
     if (!ok) return;
     const cmd: PrestigeCmd = { type: 'prestige', frame };
     if (blueprint !== undefined) cmd.blueprint = blueprint;
     if (prestigeRank(ui, 'threat_dial') > 0) cmd.threatDial = dial;
-    if (keepsake) cmd.keepsake = keepsake;
+    if (prestigeRank(ui, 'keepsake') > 0 && ui.build.anomalies.length) cmd.keepsake = keepsake;   // null = keep nothing (as shown)
     if (discount) cmd.discountTree = discount;
     ctx.host.send(cmd);
     ctx.host.saveNow();

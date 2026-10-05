@@ -10,6 +10,8 @@ import { icon } from './icons';
 import { echoesFor, fmtDuration, fmtNum } from './format';
 import { chartGeometry } from './chart';
 import type { UiCtx } from './ctx';
+import { markInfo } from './info';
+import { TREE_LABEL } from './content';
 
 const SVG = 'http://www.w3.org/2000/svg';
 function svg<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string> = {}): SVGElementTagNameMap[K] {
@@ -40,10 +42,38 @@ export function frontierText(ui: Pick<UiState, 'forecast'>): string | null {
   return `The Frontier: past wave ${f.frontier} enemies harden fast.${f.nextFrontier !== undefined && f.nextFrontier !== f.frontier ? ` A Prestige moves it to wave ${f.nextFrontier}.` : ''}`;
 }
 
+/**
+ * The upgrade the Wall gauge is counting down to: the cheapest behaviour-changing Scrap unlock not yet owned. This mirrors
+ * the sim's own pick (economy/forecast.ts cheapestMechanic) from the shop list in UiState, since Forecast does not name it.
+ */
+export function wallTarget(shop: UiState['shop']): { name: string; tree: string; cost: number } | null {
+  let best: UiState['shop'][number] | null = null;
+  for (const e of shop) {
+    if (e.currency !== 'scrap' || e.locked || e.rank >= e.maxRank) continue;
+    if (e.kind !== 'mechanic' && e.kind !== 'fusion' && e.kind !== 'linkage' && e.kind !== 'infusion') continue;
+    if (!best || e.cost < best.cost) best = e;
+  }
+  if (!best) return null;
+  const tree = (TREE_LABEL as Record<string, string>)[best.tree] ?? '';
+  return { name: best.name, tree, cost: best.cost };
+}
+
+/** The Wall gauge's two lines: "Now" / "In 3m" over "Execution (Ballistics) ◆150". null seconds: nothing in reach. */
+export function wallGaugeLines(seconds: number | null | undefined, target: ReturnType<typeof wallTarget>): { val: string; sub: string; warn: boolean } {
+  if (seconds === null || seconds === undefined) {
+    return target
+      ? { val: 'No income', sub: `Next: ${target.name}${target.tree ? ` (${target.tree})` : ''} ◆${fmtNum(target.cost)}`, warn: true }
+      : { val: 'None in reach', sub: 'Only stat ranks remain', warn: true };
+  }
+  const what = target ? `${target.name}${target.tree ? ` (${target.tree})` : ''} ◆${fmtNum(target.cost)}` : 'the next new behaviour';
+  return { val: seconds <= 0 ? 'Now' : `In ${fmtDuration(seconds)}`, sub: what, warn: false };
+}
+
 interface Readout { el: HTMLElement; val: HTMLElement; sub: HTMLElement }
-function readout(label: string, hint: string): Readout {
+function readout(label: string, hint: string, info: string): Readout {
   const val = h('div', { class: 'ro-val' }), sub = h('div', { class: 'ro-sub' });
-  return { el: h('div', { class: 'readout', title: hint }, h('div', { class: 'ro-label', text: label }), val, sub), val, sub };
+  const el = h('div', { class: 'readout', title: hint }, h('div', { class: 'ro-label' }, label, icon('info', 'ico tiny info-mark')), val, sub);
+  return { el: markInfo(el, info), val, sub };
 }
 
 export class ForecastPanel {
@@ -53,11 +83,11 @@ export class ForecastPanel {
   private readonly banner = h('div', { class: 'recommend', attrs: { role: 'status' } }, icon('prestige', 'ico'), this.bannerText);
   private readonly locked = h('p', { class: 'note' });
   private readonly frontier = h('p', { class: 'note fc-frontier' });
-  private readonly echoesNow = readout('Echoes now', 'Echoes if you Prestige this second');
-  private readonly rate = readout('Echo rate', 'Echoes now ÷ hours since this Prestige began');
-  private readonly next = readout('Next boss', 'Projected Echoes and rate after the next checkpoint');
-  private readonly reclimb = readout('Reclimb', 'Time a new Prestige would need to reach this depth');
-  private readonly wall = readout('Wall gauge', 'Time until the next affordable behaviour-changing unlock at current income');
+  private readonly echoesNow = readout('Echoes now', 'Echoes if you Prestige this second', 'fc.echoesNow');
+  private readonly rate = readout('Echo rate', 'Echoes now ÷ hours since this Prestige began', 'fc.rate');
+  private readonly next = readout('Next boss', 'Projected Echoes and rate after the next checkpoint', 'fc.next');
+  private readonly reclimb = readout('Reclimb', 'Time a new Prestige would need to reach this depth', 'fc.reclimb');
+  private readonly wall = readout('Wall gauge', 'Time until the next affordable behaviour-changing unlock at current income', 'fc.wall');
   private readonly chart = svg('svg', { viewBox: '0 0 320 120', class: 'fc-chart', role: 'img', 'aria-label': 'Echo rate over time' });
   private readonly line = svg('path', { class: 'fc-line' });
   private readonly area = svg('path', { class: 'fc-area' });
@@ -99,6 +129,7 @@ export class ForecastPanel {
       : 'Prestige recommended: your Echo rate has passed its peak.');
     const ft = frontierText(ui);
     text(this.frontier, ft ?? '');
+    markInfo(this.frontier, 'frontier');
     show(this.frontier, !!ft);
     const early = ui.run.deepestCleared < 20;
     show(this.locked, !f || early);
@@ -114,9 +145,10 @@ export class ForecastPanel {
     text(this.reclimb.val, f ? fmtDuration(f.reclimbSeconds) : '—');
     text(this.reclimb.sub, f ? `vs ${fmtDuration(ui.run.playSeconds)} this run` : '');
     const wg = f?.wallGaugeSeconds ?? ui.wallGaugeSeconds;
-    text(this.wall.val, wg === null || wg === undefined ? 'None in reach' : fmtDuration(wg));
-    text(this.wall.sub, wg === null || wg === undefined ? 'Only stat ranks remain' : 'to the next new behaviour');
-    this.wall.el.classList.toggle('warn', wg === null || wg === undefined);
+    const wl = wallGaugeLines(wg, wallTarget(ui.shop));
+    text(this.wall.val, wl.val);
+    text(this.wall.sub, wl.sub);
+    this.wall.el.classList.toggle('warn', wl.warn);
 
     const curve = f?.curve ?? [];
     const key = curve.length + ':' + (curve[curve.length - 1]?.rate ?? 0);

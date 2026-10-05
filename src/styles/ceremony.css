@@ -27,3 +27,6 @@
 /* the guide line lives on the Prestige tab: phones hide toast-layer coach lines off Battle (coach.css), not this one */
 body .pshop .coach-banner.ps-guide:not([hidden]) { display: flex; }
 .btn.coach-act { flex: none; }
+/* UX Phase 2: the Forecast verdict on the first-Prestige modal */
+.cer-verdict { display: flex; gap: 6px; align-items: center; margin: 4px 0 0; font-size: 14px; color: var(--text-dim); }
+.cer-verdict.rec { color: var(--ok); }

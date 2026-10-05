@@ -44,7 +44,7 @@ export const FEATURE_IDS = [
   // stage 6
   'prestigeTab', 'forecast', 'cross', 'inspector', 'codex',
   // stage 7
-  'cores', 'frame', 'automation', 'trials', 'quartermaster',
+  'cores', 'frame', 'exotics', 'automation', 'trials', 'quartermaster',
 ] as const;
 export type FeatureId = (typeof FEATURE_IDS)[number];
 
@@ -78,11 +78,12 @@ export const UNLOCKS: Readonly<Record<FeatureId, Unlock>> = {
   bulk: W(15, 'Suggested card, Buy all, ×1 · ×10 · Max, Spend here'),
   prestigeTab: W(20, 'Prestige tab (teaser, Forecast)'),
   forecast: W(20, 'Forecast'),
-  cross: W(20, 'Upgrades → Cross (Fusions, Linkages, Infusions)'),
+  cross: W(20, 'Upgrades → Cross (Fusions, Linkages, Infusions): from wave 20, once the first Cross node can be bought (or one is owned)'),
   inspector: W(20, 'Kill-Chain Inspector (pause)'),
   codex: W(20, 'Chain Codex'),
   cores: W(STAGE7_WAVE, 'Upgrades → Cores, Build → Cores'),
   frame: W(STAGE7_WAVE, 'Build → Frame'),
+  exotics: W(STAGE7_WAVE + 5, 'Exotics (the Core-priced upgrades in Upgrades → Cores)'),
   automation: W(null, 'More → Automation (Directives, Autocast, Blueprints)'),
   trials: W(null, 'More → Trials'),
   quartermaster: W(null, 'Quartermaster card at the top of Upgrades (Chassis, Hardpoints); a coach line offers to turn it on'),
@@ -188,7 +189,10 @@ export function features(s: ProgressState, opts: FeatureOpts = {}): Features {
   if ((s.run.boonOffer && s.run.boonOffer.length > 0) || (s.run.boons ?? []).length > 0) f.boons = true;
   if (ranked((e) => e.tree === 'ability')) f.abilities = true;
   if (ranked((e) => CROSS_TREES.has(e.tree))) f.cross = true;
-  if (ranked((e) => e.kind === 'exotic')) f.cores = true;
+  // Cross waits for its first node: the sim lists Fusions, Linkages and Infusions only once their parts are attuned /
+  // mounted, so "an entry exists" is stable (it does not flicker with the Scrap balance). Before that the tab is all empty-state notes.
+  else if (!all && pc < 1 && f.cross && !shop.some((e) => CROSS_TREES.has(e.tree) && !e.locked)) f.cross = false;
+  if (ranked((e) => e.kind === 'exotic')) { f.cores = true; f.exotics = true; }
   if (ranked((e) => !STARTER_IDS.has(e.node) && e.kind !== 'ability')) f.chassisAll = true;
   if (b.frame && b.frame !== 'standard') f.frame = true;
   if (s.forecast?.recommended) { f.prestigeTab = true; f.forecast = true; }

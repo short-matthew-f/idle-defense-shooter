@@ -102,3 +102,35 @@ export function nextRankCost(cost: { base: number; growth: number } | { flat: nu
   if ('flat' in cost) return cost.flat[Math.min(rank, cost.flat.length - 1)] ?? 0;
   return Math.ceil(cost.base * Math.pow(cost.growth, rank));
 }
+
+/** Unit of a shop stat preview (ShopEntry.statUnit). */
+export type StatUnit = '%' | 'x' | '/s' | '';
+
+/** One resolved stat value at `digits` decimals: 13.2, "5.5%", "×1.6", "2.2/s"; large plain values use suffixes (1.2K). */
+export function fmtStat(v: number, unit: StatUnit = '', digits = 1): string {
+  if (!Number.isFinite(v)) return '—';
+  const dec = (x: number): string => trimZero(x.toFixed(digits));
+  switch (unit) {
+    case '%': return `${dec(v * 100)}%`;
+    case 'x': return `×${trimZero(v.toFixed(Math.max(2, digits)))}`;
+    case '/s': return `${dec(v)}/s`;
+    default: return Math.abs(v) >= 1000 ? fmtNum(v) : dec(v);
+  }
+}
+
+/**
+ * Before → after for a shop row or the starter button (pure): "13.2 → 14.8 (+12%)". Decimals grow (to 3) until the two
+ * sides differ. Percent stats show points ("5% → 6%") without a relative change; others add the relative change.
+ */
+export function fmtStatChange(now: number, next: number, unit: StatUnit = '', opts: { digits?: number; rel?: boolean } = {}): string {
+  let d = opts.digits ?? 1, a = fmtStat(now, unit, d), b = fmtStat(next, unit, d);
+  while (a === b && d < 3) { d++; a = fmtStat(now, unit, d); b = fmtStat(next, unit, d); }
+  let rel = '';
+  if (opts.rel !== false && unit !== '%' && now !== 0 && Number.isFinite(next)) {
+    const r = (next / now - 1) * 100;
+    const ar = Math.abs(r);
+    const s = ar >= 10 ? Math.round(ar).toString() : trimZero(ar.toFixed(1));
+    if (s !== '0') rel = ` (${r >= 0 ? '+' : '−'}${s}%)`;
+  }
+  return `${a} → ${b}${rel}`;
+}
