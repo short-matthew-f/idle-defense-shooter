@@ -12,7 +12,7 @@ import { icon } from './icons';
 import { fmtNum, nextRankCost, splitDesc } from './format';
 import { PRESTIGE_NODES } from './content';
 import type { UiCtx } from './ctx';
-import { ECHO_GUIDE_TEXT, echoGuideDone, echoGuideOn, echoGuidePicks, endEchoGuide } from './ceremony';
+import { ECHO_GUIDE_TEXT, echoGuideDone, echoGuideSuggested, echoGuideSuggestedText, echoGuideOn, echoGuidePicks, endEchoGuide } from './ceremony';
 import { markCoachSeen } from './coach';
 import { ECHO_TIERS, tierLabel } from './echo-tiers';
 
@@ -29,12 +29,13 @@ export class PrestigeShop {
   private readonly layerEls: Layer[] = [];
   /** First-Prestige guide (ceremony.ts): an inline coach line; the affordable Layer I picks get the class `guide`. */
   private readonly guide: HTMLElement;
+  private readonly guideText = h('span', { class: 'coach-text', text: ECHO_GUIDE_TEXT });
   readonly el: HTMLElement;
 
   constructor(private readonly ctx: UiCtx) {
     const ok = button('Got it', () => { endEchoGuide(); markCoachSeen(['echoes']); const ui = this.ctx.state(); if (ui) this.update(ui); }, { class: 'btn small coach-ok' });
     this.guide = h('div', { class: 'coach-banner ps-guide', attrs: { role: 'status', 'aria-live': 'polite' } },
-      h('span', { class: 'coach-ico' }, icon('echo', 'ico')), h('span', { class: 'coach-text', text: ECHO_GUIDE_TEXT }), ok);
+      h('span', { class: 'coach-ico' }, icon('echo', 'ico')), this.guideText, ok);
     this.guide.hidden = true;
     // the Echoes balance is in the wallet bar pinned above the screen (wallet.ts)
     this.el = h('div', { class: 'pshop' }, this.guide);
@@ -49,7 +50,7 @@ export class PrestigeShop {
         const d = splitDesc(def.desc);
         const desc = h('p', { class: 'node-desc', text: d.headline });
         const chev = icon('down', 'ico tiny node-chev');
-        const main = h('div', { class: 'node-main' }, h('div', { class: 'node-head' }, h('span', { class: 'node-name', text: def.name }), rank, chev), desc);
+        const main = h('div', { class: 'node-main' }, h('div', { class: 'node-head' }, h('span', { class: 'node-name', text: def.name }), h('span', { class: 'node-tag', text: 'Suggested' }), rank, chev), desc);
         const el = h('div', { class: 'node' }, main, btn);
         // the headline on one line; the row body (never the Buy button) unfolds the full description
         const expandable = d.more || d.headline.length > 64;
@@ -90,6 +91,9 @@ export class PrestigeShop {
     const guideOn = echoGuideOn();
     const picks = new Set(guideOn ? echoGuidePicks(ui) : []);
     show(this.guide, guideOn);
+    const sugId = guideOn ? echoGuideSuggested(ui) : null;
+    const sugText = guideOn ? echoGuideSuggestedText(ui) : null;
+    text(this.guideText, sugText ? `${ECHO_GUIDE_TEXT} ${sugText}.` : ECHO_GUIDE_TEXT);
     for (const r of this.rows) {
       const rank = m.prestigeRanks[r.def.id] | 0;
       const open = m.deepestEver >= (LAYERS[r.def.layer - 1]?.wave ?? 0);
@@ -102,6 +106,7 @@ export class PrestigeShop {
       disable(r.btn, !can);
       r.el.classList.toggle('affordable', can);
       r.el.classList.toggle('guide', picks.has(r.def.id));
+      r.el.classList.toggle('suggested', r.def.id === sugId);
       r.el.classList.toggle('maxed', maxed);
       r.maxed = maxed;
       attr(r.btn, 'aria-label', maxed ? `${r.def.name}: max rank` : `Buy ${r.def.name} for ${fmtNum(cost)} Echoes`);

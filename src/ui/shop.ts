@@ -219,6 +219,7 @@ interface SlotDecision { slot: number; offer: boolean }
 
 export class Shop {
   readonly el: HTMLElement;
+  private readonly sgTitle = h('span', { class: 'sg-title', text: 'Suggested' });
   /** The Suggested line (top of the list). */
   readonly quick: HTMLElement;
   /** Buy quantity: one chip cycling ×1 → ×10 → Max (Q); GameUi puts it in the shell's top row. */
@@ -340,7 +341,7 @@ export class Shop {
     this.doneChip = button([icon('forecast', 'ico tiny'), 'All owned: see the Forecast'], () => this.ctx.open('forecast'), { class: 'btn chip next-chip done-chip' });
     this.doneChip.hidden = true;
     // the Suggested line: chevron + title + count (expands to the chips, remembered) and Buy all on the right
-    this.sgToggle = button([icon('down', 'ico tiny sg-chev'), h('span', { class: 'sg-title', text: 'Suggested' }), this.sgCount], () => {
+    this.sgToggle = button([icon('down', 'ico tiny sg-chev'), this.sgTitle, this.sgCount], () => {
       setPref('suggestExpanded', !prefs().suggestExpanded);
       this.syncSuggest();
     }, { class: 'btn ghost sg-toggle' });
@@ -719,6 +720,10 @@ export class Shop {
     show(this.buyAll, plan.cmds.length > 0);
     show(this.sgToggle, !empty);
     text(this.sgCount, sugg.length ? String(sugg.length) : '');
+    // the late-game bottleneck line is up for this category while every Suggested buy lives in another one: say so
+    const catNodes = new Set(this.catEntries(ui).map((e) => e.node));
+    const bn = this.f.forecast && this.f.prestigeTab && !this.decisionIn(ui, this.cat) && scrapBottleneck(this.catEntries(ui), ui.run.scrap);
+    text(this.sgTitle, bn && sugg.length && sugg.every((e) => !catNodes.has(e.node)) ? 'Suggested elsewhere' : 'Suggested');
     if (plan.cmds.length) {
       const plus = plan.open ? '+' : '';
       text(this.buyAllText, 'Buy all');   // the rank counts live on the chips; keeps the line short in a 300 px column

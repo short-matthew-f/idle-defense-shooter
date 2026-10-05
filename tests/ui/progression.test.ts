@@ -59,7 +59,7 @@ describe('unlock ladder: stages', () => {
   it('then one layer at a time', () => {
     const added = (a: number, b: number): FeatureId[] => { const x = features(state(a)), y = features(state(b)); return FEATURE_IDS.filter((id) => y[id] && !x[id]); };
     expect(added(5, 6)).toEqual(['elements']);
-    expect(added(6, 10)).toEqual(['buildTab', 'hardpoints', 'moreTab']);
+    expect(added(6, 10)).toEqual(['buildTab', 'hardpoints', 'moreTab', 'doctrines']);
     expect(added(10, 12)).toEqual(['abilities', 'overcharge']);
     expect(added(12, 15)).toEqual(['boons', 'anomalies', 'bulk']);
     expect(added(15, 20)).toEqual(['prestigeTab', 'forecast', 'inspector', 'codex']);   // Cross waits for its first node (below)
@@ -202,14 +202,14 @@ describe('coach banners', () => {
     expect(pendingCoach(features(state(5)), new Set(['start']))?.id).toBe('checkpoint');
     expect(pendingCoach(features(state(6)), new Set())?.id).toBe('start');   // oldest unread first
     expect(pendingCoach(features(state(6)), new Set(['start']))?.id).toBe('checkpoint');
-    expect(pendingCoach(features(state(12)), new Set(['start', 'checkpoint', 'elements', 'patrol', 'build']))?.id).toBe('abilities');
+    expect(pendingCoach(features(state(12)), new Set(['start', 'checkpoint', 'elements', 'patrol', 'build', 'doctrines']))?.id).toBe('abilities');
     // reading a line never retires an unseen verb line (checkpoint, elements, patrol, build, abilities, cross); plain older lines go
     expect(staleWith('elements')).toEqual(['start', 'elements']);
     expect(staleWith('abilities')).toEqual(['start', 'abilities']);
     expect(staleWith('bulk')).toEqual(['start', 'bulk']);
     for (const v of VERB_COACH) for (const m of COACH) if (m.id !== v) expect(staleWith(m.id)).not.toContain(v);
     expect(staleWith('boons')).toEqual(['boons']);
-    const stage15 = ['start', 'checkpoint', 'elements', 'patrol', 'build', 'abilities', 'bulk'];
+    const stage15 = ['start', 'checkpoint', 'elements', 'patrol', 'build', 'doctrines', 'abilities', 'bulk'];
     expect(pendingCoach(features(state(15)), new Set(stage15))?.id).toBe('boons');   // event explainers after the stage ones
     const offer = features(state(0, { run: { deepestCleared: 0, boonOffer: ['x'] as never } }));
     expect(pendingCoach(offer, new Set(), { boonOffer: true, draft: false })?.id).toBe('boons');
@@ -234,7 +234,7 @@ describe('coach banners', () => {
     expect(pendingCoach(features(state(4)), new Set(['start']), { boonOffer: false, draft: false, crate: true })).toBeNull();   // not revealed yet
     expect(pendingCoach(features(state(5)), read5, { boonOffer: false, draft: false, crate: true })?.id).toBe('salvage');
     expect(pendingCoach(features(state(5)), new Set(['start']), { boonOffer: false, draft: false, crate: true })?.id).toBe('checkpoint');   // stage first
-    const read12 = ['start', 'checkpoint', 'elements', 'patrol', 'build', 'abilities', 'salvage'];
+    const read12 = ['start', 'checkpoint', 'elements', 'patrol', 'build', 'doctrines', 'abilities', 'salvage'];
     expect(pendingCoach(features(state(12)), new Set(read12), { boonOffer: false, draft: false, overchargeReady: true })?.id).toBe('overcharge');
     expect(pendingCoach(features(state(12)), new Set(read12))).toBeNull();
     expect(staleWith('salvage')).toEqual(['salvage']);
@@ -248,7 +248,7 @@ describe('reveal pacing (Phase 2)', () => {
   const cross = entry('infuse.fire+ordnance', { tree: 'infuse', kind: 'infusion' });
   it('stage 6 arrives as separate coach lines, one per reveal, oldest first', () => {
     const f = features(state(20));
-    const seen = new Set(COACH.filter((m) => ['start', 'checkpoint', 'elements', 'patrol', 'build', 'abilities', 'bulk', 'salvage', 'overcharge', 'boons', 'anomalies'].includes(m.id)).map((m) => m.id));
+    const seen = new Set(COACH.filter((m) => ['start', 'checkpoint', 'elements', 'patrol', 'build', 'doctrines', 'abilities', 'bulk', 'salvage', 'overcharge', 'boons', 'anomalies'].includes(m.id)).map((m) => m.id));
     const order: string[] = [];
     for (let i = 0; i < 6; i++) { const m = pendingCoach(f, seen); if (!m) break; order.push(m.id); seen.add(m.id); }
     expect(order).toEqual(['prestige', 'inspector']);   // Cross waits for its node; Cores etc. wait for wave 25
@@ -295,5 +295,14 @@ describe('tab bar under the ladder', () => {
     const d = tabBadges({ ...base, run: { ...base.run, pendingDraft: ['tithe'] } }, new Set(['build']));
     expect(d.build?.kind).toBe('alert');
     expect(tabBadges(base).upgrades).toBeNull();
+  });
+});
+
+describe('doctrines rung', () => {
+  it('opens at DOCTRINES_REVEAL_WAVE, with its own coach line (a verb line, never retired unseen)', () => {
+    expect(features(state(9)).doctrines).toBe(false);
+    expect(features(state(10)).doctrines).toBe(true);
+    expect(COACH.some((m) => m.id === 'doctrines' && m.feature === 'doctrines')).toBe(true);
+    expect(VERB_COACH.has('doctrines')).toBe(true);
   });
 });

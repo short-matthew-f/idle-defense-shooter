@@ -29,12 +29,25 @@ Best wave = `max(meta.deepestEver, run.deepestCleared)`. A first Prestige reveal
 | 0 | 0 | The tower and the single Upgrade button (Damage, Fire Rate, Hull); tap assist |
 | 1 | 5 (first boss) | Tab bar; Upgrades tab with every Chassis node; Push / Patrol and Restart; salvage |
 | 2 | 6 | Upgrades → Elements (first attunement) |
-| 3 | 10 | Build tab; Upgrades → Hardpoints (first hardpoint slot); More tab |
+| 3 | 10 | Build tab; Upgrades → Hardpoints (first hardpoint slot); More tab; **Doctrine forks** (`doctrines` rung, `DOCTRINES_REVEAL_WAVE`: the fork heading, cards, decision row and dot stay hidden below it) |
 | 4 | 12 | Ability bar, Command Energy; Overcharge |
 | 5 | 15 | Boons and Anomalies on Build (offers and drafts always show); the Suggested line, Buy all, the ×1 → ×10 → Max chip, Spend here |
-| 6 | 20 | Prestige tab and Forecast; Upgrades → Cross (Fusions, Linkages, Infusions); Inspector; Codex |
+| 6 | 20 | Prestige tab and Forecast; Upgrades → Cross (Fusions, Linkages, Infusions), shown once the first Cross node can be bought or one is owned; Inspector; Codex |
 | 7 | 25, or the first Prestige | Cores; Build → Frame |
+| 7 | 30, or the first Prestige | Exotics (the Core-priced upgrades in Upgrades → Cores) |
 | 7 | the first Prestige only | More → Automation; More → Trials; the Quartermaster |
+
+**Coach lines** (`COACH`, oldest unread first, at most one new line per wave clear). Phase 2 added: `patrol` (Push vs Patrol),
+`doctrines` ("Doctrine fork: pick one path for this tree. You can change it at a checkpoint."), `cross`, `inspector`,
+`cores`, `frame` and `exotics`. `checkpoint`, `elements`, `patrol`, `build`, `doctrines`, `abilities` and `cross` are
+verb lines (`VERB_COACH`): reading a later line never retires them unseen. `cross` waits for the build (its first node),
+so it can arrive after later lines.
+
+**Tap to explain** (`src/ui/info.ts`): any element with `data-info` opens a small info sheet on tap (a long press on
+controls that already act on tap). Help's "What is…" list is built from the same table and only names revealed features.
+
+**Echo tiers:** the Prestige shop's Echo upgrades are called Echo tiers I to IV everywhere in the UI (never "Layers");
+a tier opens when the deepest wave ever reaches its number (tier I at wave 20), not by Prestige count.
 
 The bulk tools also appear from wave 10 once 12 or more Scrap rows are affordable at once.
 
@@ -94,7 +107,9 @@ names the wall.
 2. **Guided first Echo spend.** After the Prestige, the Prestige tab opens on Upgrades (Layer I). An inline line reads
    "Spend your Echoes: these make every run stronger." The affordable Layer I picks are highlighted (the class `guide`
    only). **Nothing is ever bought for the player.** The guide ends on "Got it", or once nothing in Layer I is
-   affordable.
+   affordable. While the guide runs, ONE affordable pick (`echoGuideSuggested`: a mechanic before stat ranks, then the
+   cheapest, normally Accelerated Clearing) also carries a small "Suggested" tag (class `suggested`) and is named in the
+   guide line ("Suggested: Accelerated Clearing"). Every affordable pick stays buyable.
 3. **Coach lines, in order, on Battle:**
    - "A new machine: every tab stays open. New weapons and elements arrive with later Prestiges; Automation and
      Trials unlock in More." This line is held back while the Echo guide runs.

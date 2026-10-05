@@ -15,6 +15,8 @@
 
 /* guided first Echo spend (Prestige tab → Upgrades): an inline coach line and highlighted affordable picks */
 .pshop .coach-banner.ps-guide { width: auto; margin: 0 0 8px; }
+.pshop .node .node-tag { display: none; }
+.pshop .node.suggested .node-tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; font-size: 11px; line-height: 16px; font-weight: 700; color: var(--bg-1, #000); background: var(--echo); }
 .pshop .node.guide .node-name { color: var(--echo); }
 .pshop .node.guide .btn.buy { border-color: var(--echo); background: color-mix(in srgb, var(--echo) 22%, var(--bg-3)); box-shadow: 0 0 12px color-mix(in srgb, var(--echo) 45%, transparent); }
 @media (prefers-reduced-motion: no-preference) { .pshop .node.guide .btn.buy { animation: guide-glow 1.8s ease-in-out infinite; } }
