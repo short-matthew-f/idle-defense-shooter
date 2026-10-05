@@ -81,7 +81,7 @@ export function aiStep(world: World): void {
     const m = e.speedMul[i];
     if (m < 1 && m > 0 && e.attackT[i] > 0 && e.attackT[i] < 65535 && ((tick * 7 + i) % 8) < Math.round((1 - m) * 8)) e.attackT[i]++;
     if (e.rallyR[i] > 0 || e.rushT[i] > 0) recoverySpeed(w, i, rec);   // knockback Rally / anti-stall Rush
-    if (f & F_BOSS) { if (!bossMovement(w, i)) steerEnemy(w, i); continue; }
+    if (f & F_BOSS) { if (e.rushT[i] > 0 || !bossMovement(w, i)) steerEnemy(w, i); continue; }   // a stepping-in boss (run/stall.ts) walks straight in
     const mods = e.eliteMods[i];
     if (mods !== 0) { eliteTick(w, i, regenAllowed(w, i, rec)); if (mods & M_PHASING) phaseToggle(w, i); }
     if (e.maxShield[i] > 0 && (e.kind[i] === K_SHIELDED || (mods & M_SHIELDED)) && regenAllowed(w, i, rec)) shieldRegen(w, i);

@@ -481,6 +481,8 @@ export type Command =
   | { type: 'pick_boon'; boon: BoonId; replace?: BoonId }
   | { type: 'reroll_boon' }
   | { type: 'decline_boon' }
+  /** UX Phase 1: end the boss-clear hold now (the UI's "Later" / set-aside); the pending decision stays. */
+  | { type: 'release_hold' }
   /**
    * Reachability additions. `clear_second_doctrine` drops the tree's second Doctrine (same rule as a change: 1 Core, at a
    * checkpoint), so Dual Doctrine can move to another tree. `delete_blueprint` frees a Blueprint slot.
@@ -641,6 +643,8 @@ export interface UiState {
     /* Boons additions */ | 'boonOffer' | 'boonOfferSeq' | 'boonOfferKind'> & {
     /** Boons additions: active boons (oldest first), offers queued behind the pending one, the cap, the next reroll's Core cost. */
     boons: BoonId[]; boonQueueLength: number; boonCap: number; boonRerollCost: number;
+    /** UX Phase 1: boss-clear hold ticks left (the next wave waits while a decision is pending); 0 = no hold. */
+    holdTicksLeft: number;
   };
   /** Integration additions: the Trial being played (meta.activeTrial), or null. */
   activeTrial: TrialId | null;
@@ -672,7 +676,9 @@ export interface UiState {
   tower: Pick<TowerState, 'hp' | 'maxHp' | 'shield' | 'maxShield' | 'barrier' | 'maxBarrier' | 'tempHp' | 'ce' | 'ceCap'>;
   build: BuildState;
   meta: MetaState;
-  wave: { sector: string; isBoss: boolean; bossId: BossId | null; bossPhase: number; bossHp: number; bossMaxHp: number; bossPhaseMarks: number[]; tellActive: AbilityId | 'designate' | null; tellTicksLeft: number; enemiesAlive: number; enemiesTotal: number; spawned: number; formation: FormationId | null; progress: number; weakPointOpen: boolean };
+  wave: { sector: string; isBoss: boolean; bossId: BossId | null; bossPhase: number; bossHp: number; bossMaxHp: number; bossPhaseMarks: number[]; tellActive: AbilityId | 'designate' | null; tellTicksLeft: number; enemiesAlive: number; enemiesTotal: number; spawned: number; formation: FormationId | null; progress: number; weakPointOpen: boolean;
+    /** UX Phase 1 (run/stall.ts): 'boss' = the boss was not taking damage and stepped in; 'wave' = the wave stalled and Rushes; null. Kept through `dead` until the next attempt. */
+    stalled: 'boss' | 'wave' | null };
   shop: ShopEntry[];             // every currently visible node with price and affordability
   /**
    * Bulk-buy addition: per tree key (as `buy_cheapest` takes it), roughly what `buy_cheapest` Max
@@ -793,6 +799,8 @@ export interface RunSave {
    */
   boonOffer?: BoonId[]; boonOfferWave?: number; boonOfferKind?: 'start' | 'boss'; boonOfferSeq?: number; boonRerolls?: number;
   boonQueue?: number[]; boonsSeenFirst?: boolean;
+  /** UX Phase 1: one-use boons used up this attempt (RunState.boonSpent), and "saved while the tower was dead" (the load is that death). */
+  boonSpent?: BoonId[]; attemptEnded?: boolean;
   /** Quartermaster (save v3): its bank and this Prestige's bookkeeping (see RunState.quartermaster). Optional. */
   quartermaster?: QuartermasterRun;
 }

@@ -12,7 +12,13 @@ import { ABILITIES, ABILITY_BY_ID } from './content';
 import { AbilityArming, type ArmResult } from './arming';
 import { openModal } from './modal';
 import type { UiCtx } from './ctx';
+import { bossForWave } from '@sim/data/bosses';
+import { equipTarget, preBossInfo, preBossKey, tellDecision, type PreBossInfo } from './tells';
 
+/** How long the replace question and the Undo stay up (ms). */
+const CONFIRM_MS = 8000;
+const UNDO_MS = 5000;
+const act = (b: HTMLButtonElement, name: string): HTMLButtonElement => { b.dataset.act = name; return b; };
 const MIN_ABILITY_COST = Math.min(...ABILITIES.map((a) => a.cost));
 
 interface Slot { el: HTMLButtonElement; ico: HTMLSpanElement; cost: HTMLSpanElement; key: HTMLSpanElement; ability: AbilityId | null | undefined }
@@ -48,7 +54,17 @@ export class AbilityBar {
   /** Usable slot count last seen (-1 before the first UiState): a rise toasts "new ability slot". */
   private usable = -1;
 
+  /** Under the boss tell: "Equip X in slot N (replaces Y)?" Equip / Cancel, then Undo for UNDO_MS. */
+  readonly tellPanel = h('div', { class: 'tell-confirm', attrs: { role: 'group', 'aria-label': 'Equip the counter ability' } });
+  /** On Battle between waves before a boss: the counter is not slotted. Dismissible; never equips by itself. */
+  readonly preBoss = h('div', { class: 'preboss-card', attrs: { role: 'group', 'aria-label': 'Next boss' } });
+  private preBossHandled: string | null = null;
+  private preBossShown: PreBossInfo | null = null;
+  private panelTimer = 0;
+
   constructor(private readonly ctx: UiCtx) {
+    this.tellPanel.hidden = true;
+    this.preBoss.hidden = true;
     this.hint.append(this.hintText, button('Cancel', () => this.cancel(), { class: 'btn small' }));
     this.hint.hidden = true;
     this.el = h('div', { class: 'abilities' }, this.hint, this.row);
@@ -77,6 +93,7 @@ export class AbilityBar {
     // Reachability: a third / fourth slot appears the moment it is earned; say so once
     if (this.usable >= 0 && usable > this.usable) this.ctx.toast(`New ability slot ${usable}: tap it to choose an ability`, 'good');
     this.usable = usable;
+    this.syncPreBoss(ui);
     if (this.arming.sync(ui.build.abilities)) this.renderArmed();
     const info = new Map(ui.abilities.map((a) => [a.id, a]));
     ui.build.abilities.forEach((id, i) => {
@@ -146,14 +163,77 @@ export class AbilityBar {
 
   cancel(): void { this.arming.cancel(); this.renderArmed(); }
 
-  /** Put `ability` in the first empty slot (or slot 1) — the boss-tell banner's "tap to equip". */
+  /** Put `ability` in the first empty slot (or slot 1) with no question asked (the picker-free path; callers decide first). */
   equip(ability: AbilityId): void {
     const ui = this.ctx.state();
     if (!ui || !ui.build.abilities.length) return;
-    let slot = ui.build.abilities.indexOf(null);
-    if (slot < 0) slot = 0;
+    const { slot } = equipTarget({ slots: ui.build.abilities, usable: ui.abilitySlots });
     this.ctx.host.send({ type: 'set_ability_slot', slot, ability });
     this.ctx.toast(`${ABILITY_BY_ID.get(ability)?.name ?? ability} equipped in slot ${slot + 1}`, 'good');
+  }
+
+  /**
+   * A tap on the boss-tell banner (tells.ts rules): cast when slotted, equip into an empty slot, else ask before replacing.
+   * Before the abilities reveal the banner has no action, so this is not reached.
+   */
+  tellTap(ability: AbilityId): void {
+    const ui = this.ctx.state();
+    if (!ui) return;
+    const view = { slots: ui.build.abilities, usable: ui.abilitySlots };
+    const d = tellDecision({ ...view, revealed: this.ctx.features().abilities, counter: ability });
+    if (d === 'info') return;
+    if (d === 'cast') { const i = this.slotOf(ability); if (i >= 0) this.press(i); return; }
+    if (d === 'equip-empty') { this.equip(ability); return; }
+    const t = equipTarget(view);
+    this.confirmReplace(ability, t.slot, t.replaces);
+  }
+
+  /** The replace question (and, once answered, the Undo) in `panel`; closes itself after `ms`. */
+  private confirmReplace(ability: AbilityId, slot: number, replaces: AbilityId | null, panel: HTMLElement = this.tellPanel, after?: () => void): void {
+    const name = ABILITY_BY_ID.get(ability)?.name ?? ability;
+    const old = replaces ? ABILITY_BY_ID.get(replaces)?.name ?? replaces : null;
+    clearTimeout(this.panelTimer);
+    const close = (): void => { clearTimeout(this.panelTimer); panel.hidden = true; panel.replaceChildren(); };
+    const equip = act(button('Equip', () => {
+      this.ctx.host.send({ type: 'set_ability_slot', slot, ability });
+      this.ctx.toast(`${name} equipped in slot ${slot + 1}`, 'good');
+      after?.();
+      if (!replaces) { close(); return; }
+      panel.replaceChildren(h('span', { class: 'tc-text', text: `${name} equipped (slot ${slot + 1})` }),
+        button('Undo', () => { this.ctx.host.send({ type: 'set_ability_slot', slot, ability: replaces }); this.ctx.toast(`${old} restored in slot ${slot + 1}`, 'info'); close(); }, { class: 'btn small' }));
+      this.panelTimer = window.setTimeout(close, UNDO_MS);
+    }, { class: 'btn primary small' }), 'equip');
+    panel.replaceChildren(
+      h('span', { class: 'tc-text', text: `Equip ${name} in slot ${slot + 1}${old ? ` (replaces ${old})` : ''}?` }),
+      equip, act(button('Cancel', close, { class: 'btn small' }), 'cancel'));
+    panel.hidden = false;
+    this.panelTimer = window.setTimeout(close, CONFIRM_MS);
+  }
+
+  /** Show / hide the pre-boss card from the latest state (once per boss wave per attempt). */
+  private syncPreBoss(ui: UiState): void {
+    const info = this.preBossShown
+      ? (ui.run.phase === 'between' && preBossKey(ui.run.attempts, ui.run.wave) === this.preBossHandled ? this.preBossShown : null)
+      : preBossInfo({
+        slots: ui.build.abilities, usable: ui.abilitySlots, phase: ui.run.phase, wave: ui.run.wave, attempts: ui.run.attempts,
+        revealed: this.ctx.features().abilities, bossFor: bossForWave, handled: this.preBossHandled,
+      });
+    if (info === this.preBossShown) return;
+    this.preBossShown = info;
+    if (!info) { this.preBoss.hidden = true; this.preBoss.replaceChildren(); return; }
+    this.preBossHandled = preBossKey(ui.run.attempts, ui.run.wave);
+    const name = ABILITY_BY_ID.get(info.ability)?.name ?? info.ability;
+    const old = info.replaces ? ABILITY_BY_ID.get(info.replaces)?.name ?? info.replaces : null;
+    const dismiss = (): void => { this.preBossShown = null; this.preBoss.hidden = true; this.preBoss.replaceChildren(); };
+    const eq = act(button(`Equip in slot ${info.slot + 1}${old ? ` (replaces ${old})` : ''}`, () => {
+      this.ctx.host.send({ type: 'set_ability_slot', slot: info.slot, ability: info.ability });
+      this.ctx.toast(`${name} equipped in slot ${info.slot + 1}`, 'good');
+      dismiss();
+    }, { class: 'btn primary small' }), 'equip');
+    this.preBoss.replaceChildren(
+      h('span', { class: 'pb-text', text: `Next: ${info.bossName}. ${info.tellName}: countered by ${name}.` }),
+      h('span', { class: 'pb-btns' }, eq, act(button('Not now', dismiss, { class: 'btn small' }), 'dismiss')));
+    this.preBoss.hidden = false;
   }
 
   /** Slot index holding `ability`, or -1. */

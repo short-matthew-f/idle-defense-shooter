@@ -16,6 +16,7 @@ import type { ElementId, HardpointId } from '@sim/core/ids';
 import type { ShopEntry, UiState } from '@sim/core/types';
 import { CHASSIS_LINKAGES, FUSIONS, INFUSIONS, TRIADS, WEAPON_LINKAGES } from '@sim/data/index';
 import { etaSeconds, nextPurchase } from './advice';
+import { ABILITIES_REVEAL_WAVE, CONTENT_POOL } from '@sim/data/content-pool';
 
 // ---------------------------------------------------------------- the table
 
@@ -70,7 +71,7 @@ export const UNLOCKS: Readonly<Record<FeatureId, Unlock>> = {
   buildTab: W(10, 'Build tab'),
   hardpoints: W(10, 'Upgrades → Hardpoints (first hardpoint slot opens at 10)'),
   moreTab: W(10, 'More tab (Settings and Help are reachable from a Battle chip before this)'),
-  abilities: W(12, 'Ability bar, Command Energy, tap-to-cast'),
+  abilities: W(ABILITIES_REVEAL_WAVE, 'Ability bar, Command Energy, tap-to-cast'),
   overcharge: W(12, 'Overcharge (wired by another system)'),
   boons: W(15, 'Boons on the Build tab and the boon explainer (offers themselves always show)'),
   anomalies: W(15, 'Anomalies on the Build tab and the draft explainer (drafts themselves always show)'),
@@ -215,28 +216,8 @@ export function allFeatures(): Features {
 
 // ---------------------------------------------------------------- content pool
 
-/**
- * THE content pool: Prestiges needed before an element / weapon system is OFFERED (slot pickers, Refit, Blueprints,
- * Directive system pickers; Fusions / Linkages / Infusions follow their parts, see poolAllows). UI only: the sim
- * accepts any attune / mount command. One new system per early Prestige, each a "New" moment (docs/ONBOARDING.md):
- *
- *   P0  fire, lightning, poison · ordnance, drones   the starters: 3 elements for 2 attunement slots (waves 5, 25), 2 weapons
- *   P1  + frost                                       Superconductivity, Thermal Shock, Cryotoxin become possible
- *   P2  + blade (Orbital Blade)                       the second hardpoint slot (wave 30, reached from P1 on) becomes a choice
- *   P3  + laser (Laser Polygon)                       in time for the third hardpoint slot (wave 55; P3 reaches ~61)
- *   P4  + gravitics                                   everything offered
- *
- * Anything owned (attuned, mounted, run by the Frame or borrowed) is always offered, whatever the Prestige count
- * (existing saves keep what they use); Unlock everything offers all of it.
- */
-export const CONTENT_POOL: { readonly elements: Readonly<Record<ElementId, number>>; readonly hardpoints: Readonly<Record<HardpointId, number>> } = {
-  elements: { fire: 0, lightning: 0, poison: 0, frost: 1 },
-  hardpoints: { ordnance: 0, drones: 0, blade: 2, laser: 3, gravitics: 4 },
-};
-export const STARTER_ELEMENTS: readonly ElementId[] = ['fire', 'lightning', 'poison'];
-export const STARTER_HARDPOINTS: readonly HardpointId[] = ['ordnance', 'drones'];
-/** The Prestige count at which every id is offered. */
-export const POOL_COMPLETE_AT = Math.max(...Object.values(CONTENT_POOL.elements), ...Object.values(CONTENT_POOL.hardpoints));
+// THE content pool lives in the sim (src/sim/data/content-pool.ts: boon and Anomaly offers use it too); re-exported here.
+export { CONTENT_POOL, STARTER_ELEMENTS, STARTER_HARDPOINTS, POOL_COMPLETE_AT } from '@sim/data/content-pool';
 
 export interface ContentPool { elements: ElementId[]; hardpoints: HardpointId[] }
 

@@ -4,7 +4,8 @@
  * modal. Which ones were read is per-device presentation state in prefs (coachSeen); what is revealed
  * never depends on it. Help lists every message the player has unlocked. Where the banner sits on Battle (and
  * whether it has room for its whole sentence) is the overlay lanes' call (lanes.ts); an info-only line shrinks to one
- * line after COACH_SHRINK_MS, and only its buttons (and a shrunk line's text) take taps.
+ * line after COACH_SHRINK_MS on Battle, and only its buttons (and a shrunk line's text) take taps. The queue (oldest unread
+ * first, one new line per wave clear, verb lines never retired unseen) is pendingCoach + CoachBanner.update.
  */
 import '../styles/coach.css';
 import { button, h, show, text } from './dom';
@@ -63,9 +64,16 @@ export function activeCoachLive(a: { crates: number; overcharge: { ready: boolea
 }
 
 /**
+ * Lines that introduce a verb (a thing the player must do or know to keep going): never retired unseen, i.e. reading a
+ * later line never marks them read (staleWith).
+ */
+export const VERB_COACH: ReadonlySet<CoachId> = new Set<CoachId>(['checkpoint', 'elements', 'build', 'abilities']);
+
+/**
  * The message to show now, or null, among unread messages whose feature is on: an event explainer whose subject is
- * live (a boon offer, an Anomaly draft) first; else the NEWEST stage message (an older unread one is stale: reading
- * the newer one retires it, see staleWith); else an event explainer (the active-edge ones only while their subject is live).
+ * live (a boon offer, an Anomaly draft, a crate, a full Overcharge meter) first; else the OLDEST unread stage message
+ * (the coach queue: lines come in the order they were unlocked, at most one new one per wave clear, see CoachBanner);
+ * else an event explainer (the active-edge ones only while their subject is live).
  */
 export function pendingCoach(f: Features, seen: ReadonlySet<string>, live: CoachLive = { boonOffer: false, draft: false }): CoachMsg | null {
   if (f.unlockAll) return null;
@@ -74,14 +82,20 @@ export function pendingCoach(f: Features, seen: ReadonlySet<string>, live: Coach
   if (!open.length) return null;
   const urgent = open.find((m) => (m.id === 'boons' && live.boonOffer) || (m.id === 'anomalies' && live.draft));
   const stage = open.filter((m) => !EVENT_COACH.has(m.id));
-  return urgent ?? stage[stage.length - 1] ?? open[0];
+  return urgent ?? stage[0] ?? open[0];
 }
 
-/** Reading `id` also retires these: the older stage messages (an event explainer retires only itself). */
+/** Explainers that jump the queue (their subject is on screen): they are not new "stage" lines for the per-wave limit. */
+export function isEventCoach(id: string): boolean { return EVENT_COACH.has(id as CoachId); }
+
+/**
+ * Reading `id` also retires these: the older stage messages that do not introduce a verb (an event explainer retires
+ * only itself; a verb line is never retired by reading another one).
+ */
 export function staleWith(id: CoachId): CoachId[] {
   if (EVENT_COACH.has(id)) return [id];
   const i = COACH.findIndex((m) => m.id === id);
-  return COACH.slice(0, i + 1).filter((m) => !EVENT_COACH.has(m.id)).map((m) => m.id);
+  return COACH.slice(0, i + 1).filter((m) => !EVENT_COACH.has(m.id) && (m.id === id || !VERB_COACH.has(m.id))).map((m) => m.id);
 }
 
 /** Messages the player has unlocked (Help lists them). */
@@ -105,8 +119,22 @@ export function initialSeen(f: Features, stage: number): CoachId[] {
  */
 export interface CoachExtra { id: string; icon: string; text: string; action?: { label: string; run: () => void } }
 
-/** An info-only line (no action button) shrinks to one line after this long on screen (ms); a tap on it expands it again. */
-export const COACH_SHRINK_MS = 6000;
+/**
+ * An info-only line (no action button) shrinks to its compact form (up to two lines) once it has been on screen on Battle
+ * this long (ms), or as soon as the player acts (taps a control elsewhere) after reading it for COACH_ACT_MS; a tap on it
+ * expands it again.
+ */
+export const COACH_SHRINK_MS = 15000;
+/** A tap on another control shrinks the line only after it has been visible this long (ms): a glance, not a mis-tap. */
+export const COACH_ACT_MS = 2500;
+
+/**
+ * The per-wave limit of the coach queue: may a NEW line be introduced now? `introducedAt` is the wave token at which the
+ * last new line came up (null: none yet this session); event explainers (their subject live) are exempt.
+ */
+export function mayIntroduce(introducedAt: number | null, wave: number, id: string): boolean {
+  return isEventCoach(id) || introducedAt === null || introducedAt !== wave;
+}
 
 export class CoachBanner {
   readonly el: HTMLElement;
@@ -115,37 +143,93 @@ export class CoachBanner {
   private readonly act: HTMLButtonElement;
   private cur: CoachMsg | null = null;
   private extra: CoachExtra | null = null;
-  private shrinkTimer = 0;
-  /** Shrunk by its timer (info-only lines): the overlay lanes give it the one-line height (lanes.ts). */
+  /** Shrunk (info-only lines): the overlay lanes give it the compact height (lanes.ts). */
   shrunk = false;
   /** Called when the banner changes (a new line, shown / hidden, shrunk / expanded): the overlay lanes re-fit. */
   onChange: (() => void) | null = null;
+  /** The banner has a line to show (it may still be held). */
+  private want = false;
+  /** Held by the attention plan (attention.ts): a celebration, a decision, a boss fight, a fresh death card. */
+  private held = false;
+  /** The wave token now (Attention.update) and the one at which the last new line came up (the per-wave limit). */
+  private wave = 0;
+  private introducedAt: number | null = null;
+  /** Time on screen on Battle for the current line (ms), and the last sample. */
+  private visibleMs = 0;
+  private lastSample = 0;
   constructor() {
     const ok = button('Got it', () => this.dismiss(), { class: 'btn small coach-ok' });
     this.act = button('', () => { const x = this.extra; this.dismiss(); x?.action?.run(); }, { class: 'btn small primary coach-act' });
     this.act.hidden = true;
     this.el = h('div', { class: 'coach-banner', attrs: { role: 'status', 'aria-live': 'polite' } }, this.ico, this.msg, this.act, ok);
     this.el.hidden = true;
-    // a one-line (compact) banner opens again on a tap on its text
+    // a compact banner opens again on a tap on its text
     this.msg.addEventListener('click', () => { if (this.el.classList.contains('compact')) this.expand(); });
+    // the player acting elsewhere (a control, not the arena) after reading the line: it makes room
+    if (typeof document !== 'undefined') document.addEventListener('pointerdown', (e) => {
+      const t = e.target as Element | null;
+      if (!t || this.el.hidden || this.shrunk || !this.act.hidden || this.el.contains(t)) return;
+      if (this.visibleMs >= COACH_ACT_MS && t.closest('button, [role="button"], a')) this.shrink();
+    }, { capture: true, passive: true });
   }
 
   get current(): CoachId | null { return this.cur?.id ?? null; }
+  /** The id on the banner (a ladder line or an extra), shown or held. */
+  get currentId(): string | null { return this.cur?.id ?? this.extra?.id ?? null; }
+
+  /** The attention plan holds the banner (it keeps its line; it shows again when released). */
+  setHeld(on: boolean): void {
+    if (on === this.held) return;
+    this.held = on;
+    this.sync();
+  }
+
+  /** The wave token (any number that changes when a wave is cleared); the queue introduces at most one line per token. */
+  setWave(w: number): void { this.wave = w; }
+
+  /**
+   * Time on Battle: `visible` says whether the banner is on screen there now (placed by the lanes, Battle in view). An
+   * info-only line shrinks after COACH_SHRINK_MS of it.
+   */
+  sample(visible: boolean, now = performance.now()): void {
+    const dt = this.lastSample ? Math.min(1000, Math.max(0, now - this.lastSample)) : 0;
+    this.lastSample = now;
+    if (!visible || this.el.hidden) return;
+    this.visibleMs += dt;
+    if (!this.shrunk && this.act.hidden && this.visibleMs >= COACH_SHRINK_MS) this.shrink();
+  }
+
+  private shrink(): void { this.shrunk = true; this.onChange?.(); }
+
+  private sync(): void {
+    const on = this.want && !this.held;
+    if (on === !this.el.hidden) return;
+    show(this.el, on);
+    this.onChange?.();
+  }
 
   /** `extras` wait behind the ladder; `hold` ids count as read for now (e.g. 'machine' while the Echo guide runs). */
   update(f: Features, live: CoachLive, extras: readonly CoachExtra[] = [], hold: readonly string[] = []): void {
     const seen = new Set([...prefs().coachSeen, ...hold]);
-    const next = pendingCoach(f, seen, live);
+    let next = pendingCoach(f, seen, live);
+    // the queue: at most one new line per wave clear (a line already up stays; an urgent explainer may jump in)
+    if (next && next.id !== this.cur?.id && !mayIntroduce(this.introducedAt, this.wave, next.id)) {
+      if (this.cur && !seen.has(this.cur.id)) next = this.cur;
+      else return;   // it waits for the next wave clear (whatever is up stays)
+    }
     if (!next && !f.unlockAll && !(this.cur && LIVE_COACH.has(this.cur.id) && !seen.has(this.cur.id))) {
-      const x = extras.find((e) => !seen.has(e.id)) ?? null;
+      let x = extras.find((e) => !seen.has(e.id)) ?? null;
+      if (x && x.id !== this.extra?.id && !mayIntroduce(this.introducedAt, this.wave, x.id)) x = this.extra && !seen.has(this.extra.id) ? this.extra : null;
       if (x || this.extra) { this.showExtra(x); return; }
     } else if (this.extra) { this.extra = null; this.act.hidden = true; }
-    if (next?.id === this.cur?.id) { if (next && this.el.hidden) { show(this.el, true); this.fresh(); } return; }
+    if (next?.id === this.cur?.id) { if (next && !this.want) { this.want = true; this.sync(); this.fresh(); } return; }
     // a live explainer stays up until read, even after its crate is gone (unless something else is due)
     if (!next && this.cur && LIVE_COACH.has(this.cur.id) && !seen.has(this.cur.id) && !f.unlockAll) return;
     this.cur = next;
-    show(this.el, !!next);
+    this.want = !!next;
+    this.sync();
     if (!next) { this.fresh(); return; }
+    if (!isEventCoach(next.id)) this.introducedAt = this.wave;
     this.ico.replaceChildren(icon(next.icon, 'ico'));
     text(this.msg, next.text);
     this.el.dataset.coach = next.id;
@@ -156,11 +240,13 @@ export class CoachBanner {
 
   private showExtra(x: CoachExtra | null): void {
     this.cur = null;
-    if (x?.id === this.extra?.id && x?.text === this.extra?.text) return;
+    if (x?.id === this.extra?.id && x?.text === this.extra?.text) { if (x && !this.want) { this.want = true; this.sync(); } return; }
     this.extra = x;
-    show(this.el, !!x);
+    this.want = !!x;
+    this.sync();
     this.act.hidden = !x?.action;
     if (!x) { this.fresh(); return; }
+    this.introducedAt = this.wave;
     text(this.act, x.action?.label ?? '');
     this.ico.replaceChildren(icon(x.icon, 'ico'));
     text(this.msg, x.text);
@@ -169,24 +255,24 @@ export class CoachBanner {
     this.fresh();
   }
 
-  /** A new line (or the banner shown / hidden): full size again; an info-only line shrinks after COACH_SHRINK_MS. */
+  /** A new line (or the banner shown / hidden): full size again, its time on Battle from zero. */
   private fresh(): void {
-    clearTimeout(this.shrinkTimer);
     this.shrunk = false;
-    if (!this.el.hidden && this.act.hidden) this.shrinkTimer = window.setTimeout(() => { this.shrunk = true; this.onChange?.(); }, COACH_SHRINK_MS);
+    this.visibleMs = 0;
     this.onChange?.();
   }
 
-  /** Tap on a one-line banner: the whole sentence again (it shrinks back after COACH_SHRINK_MS). */
+  /** Tap on a compact banner: the whole sentence again (it shrinks back after COACH_SHRINK_MS more on Battle). */
   expand(): void { this.fresh(); }
 
   dismiss(): void {
-    if (this.extra) { markCoachSeen([this.extra.id]); this.extra = null; this.act.hidden = true; show(this.el, false); this.fresh(); return; }
+    if (this.extra) { markCoachSeen([this.extra.id]); this.extra = null; this.act.hidden = true; this.want = false; this.sync(); this.fresh(); return; }
     const id = this.cur?.id;
     if (!id) return;
     markCoachSeen(staleWith(id));
     this.cur = null;
-    show(this.el, false);
+    this.want = false;
+    this.sync();
     this.fresh();
   }
 }

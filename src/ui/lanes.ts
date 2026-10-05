@@ -13,7 +13,9 @@
  * The arena-top column always ends above the tower (the death card shrinks and scrolls inside it). The boon offer card
  * takes B (S on a landscape phone) and scrolls when taller than the room (never under MIN_OFFER). Then, in priority
  * order: the armed hint on a landscape phone (T), the coach banner (its whole sentence where it fits, else one line,
- * else it waits), the toasts (as many as fit, in the slot that fits most; the rest wait their turn in the Feed). Every
+ * else it waits), the toasts (as many as fit, in the slot that fits most; the rest wait their turn in the Feed). While the
+ * attention plan gives the death card the lane (attention.ts: death first, the offer held as its chip) the card goes
+ * whole into the roomiest slot before the coach. Every
  * overlay keeps its own look; only its position, width cap and height cap are written, and only when they change.
  * Off Battle (a phone tab covers the arena) nothing is managed: the CSS defaults put the toasts above the tab bar.
  *
@@ -152,7 +154,7 @@ export class OverlayLanes {
     const a = this.src.arena();
     return [this.src.layout(), this.src.battleVisible(), innerWidth, innerHeight, r(P.battle), a ? `${Math.round(a.cx)},${Math.round(a.cy)},${Math.round(a.r)}` : '-',
       P.offer.hidden ? '-' : P.offer.scrollHeight, P.coach.el.hidden ? '-' : `${P.coach.el.dataset.coach}|${P.coach.shrunk}|${P.coach.el.textContent?.length}`,
-      P.death.el.hidden ? '-' : `${P.death.folded}|${P.death.wantFull}|${P.death.el.scrollHeight}`, P.feed.el.childElementCount,
+      P.death.el.hidden ? '-' : `${P.death.folded}|${P.death.wantFull}|${P.death.first}|${P.death.el.scrollHeight}`, P.feed.el.childElementCount,
       r(P.row), r(P.starter), r(P.oc), r(P.armHint), ...[...P.arenaTop.children].map(r)].join(';');
   }
 
@@ -287,12 +289,13 @@ export class OverlayLanes {
       const opts: LaneOpt[] = [];
       if (D.folded) for (const id of ids) opts.push({ slot: id, h: folded(id), compact: true });
       else {
-        // asked for in full: the roomiest slot, whatever it holds
-        const ranked = D.wantFull ? [...ids].sort((x, y) => (slot(y)!.b - slot(y)!.t) - (slot(x)!.b - slot(x)!.t)) : ids;
+        // asked for in full, or the card owns the lane (death first, attention.ts): the roomiest slot, whatever it holds
+        const whole = D.wantFull || D.first;
+        const ranked = whole ? [...ids].sort((x, y) => (slot(y)!.b - slot(y)!.t) - (slot(x)!.b - slot(x)!.t)) : ids;
         for (const id of ranked) opts.push({ slot: id, h: full(id), minH: MIN_DEATH });
-        if (!D.wantFull) for (const id of ids) opts.push({ slot: id, h: folded(id), compact: true });
+        if (!whole) for (const id of ids) opts.push({ slot: id, h: folded(id), compact: true });
       }
-      items.push({ id: 'death', kind: 'card', opts, floor: D.wantFull ? MIN_DEATH : undefined });
+      items.push({ id: 'death', kind: 'card', opts, floor: D.wantFull || D.first ? MIN_DEATH : undefined });
     }
     const order = (L === 'rail' ? ['T', 'S', 'B'] : ['B', 'T']).filter((id) => !(L === 'rail' && id === 'S' && offerOn));
     const hs: Record<string, number[]> = {};
@@ -300,6 +303,11 @@ export class OverlayLanes {
     items.push({ id: 'toasts', kind: 'stack', slots: order, hs });
 
     const rooms = slots.map((s) => ({ id: s.id, room: s.b - s.t }));
+    if (deathOn && (D.first || D.wantFull)) {
+      // the card owns the lane: it is placed before the coach banner (held then anyway) and the toasts
+      const d = items.findIndex((x) => x.id === 'death'), c = items.findIndex((x) => x.id === 'coach');
+      if (c >= 0 && d > c) { const [it] = items.splice(d, 1); items.splice(c, 0, it); }
+    }
     let plan = planLanes(rooms, items, G);
     if (deathOn && !plan.death) {
       // no room left for even the death card's headline: it goes before the coach banner (which can still shrink or wait)

@@ -3,15 +3,21 @@
  * localStorage (export-string format) when IndexedDB is unavailable (private mode, blocked).
  * Saves are versioned by SAVE_VERSION; older saves are migrated by the sim (save/serialize.ts
  * migrate), newer ones are refused and parked so they are never overwritten.
+ *
+ * Backup (UX Phase 1, "never lose a purchase"): the main thread keeps the latest save it stored as an export
+ * string and writes it SYNCHRONOUSLY to localStorage (BACKUP_KEY) on pagehide / hidden, where an async IndexedDB
+ * write may never finish. A load takes the newer (savedAtMs) of the IndexedDB save and the backup.
  */
 import type { SaveState } from '@sim/core/types';
 import { SAVE_VERSION } from '@sim/core/types';
 import { exportString, importString } from '@sim/save/serialize';
+import { newerSave } from './autosave';
 
 const DB_NAME = 'citadel';
 const STORE = 'saves';
 const KEY = 'main';
 const LS_KEY = 'citadel.save.v1';
+const BACKUP_KEY = 'citadel.save.backup';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let idbBroken = false;
@@ -57,6 +63,8 @@ export async function loadSave(): Promise<SaveState | null> {
   if (!s) {
     try { const str = localStorage.getItem(LS_KEY); if (str) s = importString(str); } catch (e) { console.warn('[save] localStorage read failed:', e); }
   }
+  const backup = readBackup();
+  s = newerSave(isSave(s) ? s : null, backup);
   if (!isSave(s)) return null;
   if (s.version > SAVE_VERSION) {
     console.warn(`[save] save version ${s.version} is newer than this build (${SAVE_VERSION}); parking it and starting fresh`);
@@ -84,6 +92,22 @@ export async function parkSave(save: SaveState, why: string): Promise<void> {
 export async function clearSave(): Promise<void> {
   try { await idbDelete(KEY); } catch { /* ignore */ }
   try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ }
+  clearBackup();
+}
+
+/** Write the backup snapshot now (synchronous; pagehide / hidden). `text` is an export string (exportToString). */
+export function writeBackup(text: string): boolean {
+  try { localStorage.setItem(BACKUP_KEY, text); return true; } catch (e) { console.warn('[save] backup write failed:', e); return false; }
+}
+export function clearBackup(): void { try { localStorage.removeItem(BACKUP_KEY); } catch { /* ignore */ } }
+/** The backup snapshot, or null (absent, unreadable, or not a save). */
+export function readBackup(): SaveState | null {
+  try {
+    const str = localStorage.getItem(BACKUP_KEY);
+    if (!str) return null;
+    const s: unknown = importString(str);
+    return isSave(s) ? s : null;
+  } catch (e) { console.warn('[save] backup read failed:', e); return null; }
 }
 
 /** Export string (versioned, base64 JSON with a CITADEL1: prefix). */

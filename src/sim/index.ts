@@ -66,7 +66,7 @@ export class Sim implements ISim {
     for (const s of world.systems) s.init(world);
     this.errorSystems = world.systems.filter((s) => 'lastError' in s) as unknown as { lastError: string | null }[];
     this.machine = new RunMachine(world);
-    this.machine.startAttempt(!save);
+    this.machine.startAttempt(!save, !!save);
   }
 
   static load(save: SaveState): Sim { return new Sim(save); }

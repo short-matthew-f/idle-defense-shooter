@@ -82,7 +82,7 @@ were cut because the Boon cap measured them over +10%.
 
 | Boon | Rarity | Effect |
 | --- | --- | --- |
-| Overcharge | common | +25% primary damage |
+| Hot Barrel (id `overcharge`) | common | +25% primary damage |
 | Hair Trigger | common | +20% primary attack speed |
 | Long Sight | common | +25% primary range |
 | Thick Plating | common | +20% max HP (brief +30%) |
@@ -230,7 +230,7 @@ Final measurement (after tuning), baseline depth 55.5 (53 and 58). **PASS: max +
 | Deep Reserves | 53 | 64 | 58.5 | +5.4% |
 | Focus Beam | 53 | 64 | 58.5 | +5.4% |
 | Frostbite | 53 | 64 | 58.5 | +5.4% |
-| Overcharge | 53 | 64 | 58.5 | +5.4% |
+| Hot Barrel | 53 | 64 | 58.5 | +5.4% |
 | Overclocked | 53 | 64 | 58.5 | +5.4% |
 | Quick Hands | 53 | 64 | 58.5 | +5.4% |
 | Reckless | 53 | 64 | 58.5 | +5.4% |

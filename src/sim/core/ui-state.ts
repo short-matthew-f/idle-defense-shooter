@@ -47,6 +47,7 @@ export function buildUiState(w: WorldImpl, m: RunMachine): UiState {
       // Boons (run/boons.ts); names and descriptions are looked up client-side from data/boons.ts
       boonOffer: run.boonOffer ? [...run.boonOffer] : null, boonOfferSeq: run.boonOfferSeq, boonOfferKind: run.boonOfferKind,
       boons: [...w.build.boons], boonQueueLength: run.boonQueue.length, boonCap: BOON_CAP, boonRerollCost: boonRerollCost(run),
+      holdTicksLeft: m.holdTicksLeft,
     },
     activeTrial: w.meta.activeTrial ?? null,
     extraSystems: extraSystems(w),
@@ -71,6 +72,7 @@ export function buildUiState(w: WorldImpl, m: RunMachine): UiState {
       formation: wave?.formation ?? null,
       progress: total > 0 ? Math.min(1, (spawned - alive) / total) : 0,
       weakPointOpen: bi >= 0 && (e.flags[bi] & EnemyFlag.WeakPointOpen) !== 0,
+      stalled: m.stall.stalled(),   // UX Phase 1: the death card names a boss nobody was damaging
     },
     shop,
     shopTreeTotals: shopTreeTotals(shop, run.scrap),   // approximate (economy/bulk.ts)

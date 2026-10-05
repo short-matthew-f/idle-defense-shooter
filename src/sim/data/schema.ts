@@ -84,10 +84,20 @@ export interface LinkageDef {
 
 export interface InfusionDef { id: NodeId; system: HardpointId; element: ElementId; name: string; desc: string; node: NodeDef }
 
+/**
+ * What an offer (boon, Anomaly) names that the unlock ladder reveals later: 'abilities' (tactical abilities, Command
+ * Energy, designators: best wave ≥ ABILITIES_REVEAL_WAVE or a Prestige) or an element / hardpoint (in the content pool
+ * at the current Prestige count, or owned). Offers give weight 0 to anything unrevealed. `needs` entries that are
+ * elements / hardpoints are pool-gated the same way.
+ */
+export type OfferReveal = 'abilities' | HardpointId | ElementId;
+
 export interface AnomalyDef {
   id: AnomalyId; name: string; rarity: AnomalyRarity; desc: string;
   /** Systems/elements this Anomaly needs to matter; drafts weight toward the current build. */
   needs?: (HardpointId | ElementId | 'primary')[];
+  /** Reveal gate (data/content-pool.ts): offered only once these were shown on the unlock ladder (see OfferReveal). */
+  reveal?: OfferReveal[];
   effects: StatEffect[];
   pool: 'base' | 'echo' | 'rot' | 'paradox_extra' | 'mythic';
 }
@@ -104,6 +114,8 @@ export interface BoonDef {
   category: BoonCategory; rarity: BoonRarity;
   /** Systems / elements this boon needs to matter ('fusion' = any Fusion active); offers weight toward the build. */
   needs?: (HardpointId | ElementId | 'fusion')[];
+  /** Reveal gate (data/content-pool.ts): offered only once these were shown on the unlock ladder (see OfferReveal). */
+  reveal?: OfferReveal[];
   effects: StatEffect[];
   /** Mechanic key read by systems/boons.ts (mechanical boons only). */
   flag?: BoonId;

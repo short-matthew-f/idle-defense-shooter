@@ -89,6 +89,7 @@ function dispatch(m: RunMachine, cmd: Command): string | null {
     case 'reroll_anomaly': return m.rerollDraft();
     case 'set_mode': m.setMode(cmd.mode); return null;
     case 'restart_checkpoint': m.startAttempt(true); return null;
+    case 'release_hold': m.releaseHold(); return null;   // UX Phase 1 boss-clear hold
     case 'set_speed': {
       // Manual ×2..×8 needs Speed Controls (Prestige III) and a solved wave; Accelerated Clearing's
       // automatic speed (applied at wave start by run/prestige.ts) may also be selected. ×1 is always allowed.

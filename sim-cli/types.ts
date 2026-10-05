@@ -149,7 +149,9 @@ export interface RunResult {
   tells: number;
   counters: number;
   /** Anti-stall Rushes (Ev.Rush, run/stall.ts) this climb: wave, tick and enemies rushing. Should stay empty in normal play. */
-  rushes?: { wave: number; tick: number; enemies: number }[];
+  rushes?: { wave: number; tick: number; enemies: number; boss?: boolean }[];
+  /** Sim seconds spent in boss-clear holds (run/machine.ts BOSS_HOLD_TICKS). */
+  holdSeconds?: number;
   designations: number;
   /** Commands the policy sent that returned an error or had no observable effect. */
   noops: Record<string, number>;

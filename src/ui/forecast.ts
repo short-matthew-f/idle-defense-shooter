@@ -18,6 +18,28 @@ function svg<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string,
   return el;
 }
 
+/** The deepest wave cleared is within 2 of the Frontier (or past it): the wall is near, a Prestige pays (death.ts). */
+export function frontierNear(ui: Pick<UiState, 'run' | 'forecast'>): boolean {
+  const f = ui.forecast?.frontier;
+  return f !== undefined && f <= 100 && ui.run.deepestCleared >= f - 2;
+}
+
+/**
+ * The current wave is past the Frontier (enemies there harden fast). A pure helper for the HUD's wave label (hud.ts is
+ * owned elsewhere; it may mark the wave with this).
+ */
+export function pastFrontier(ui: Pick<UiState, 'run' | 'forecast'>): boolean {
+  const f = ui.forecast?.frontier;
+  return f !== undefined && f <= 100 && ui.run.wave > f;
+}
+
+/** The Forecast's Frontier line, shown whether or not a Prestige is recommended (null: no Frontier reported). */
+export function frontierText(ui: Pick<UiState, 'forecast'>): string | null {
+  const f = ui.forecast;
+  if (f?.frontier === undefined || f.frontier > 100) return null;
+  return `The Frontier: past wave ${f.frontier} enemies harden fast.${f.nextFrontier !== undefined && f.nextFrontier !== f.frontier ? ` A Prestige moves it to wave ${f.nextFrontier}.` : ''}`;
+}
+
 interface Readout { el: HTMLElement; val: HTMLElement; sub: HTMLElement }
 function readout(label: string, hint: string): Readout {
   const val = h('div', { class: 'ro-val' }), sub = h('div', { class: 'ro-sub' });
@@ -30,6 +52,7 @@ export class ForecastPanel {
   private readonly bannerText = h('span', { text: 'Prestige recommended: your Echo rate has passed its peak.' });
   private readonly banner = h('div', { class: 'recommend', attrs: { role: 'status' } }, icon('prestige', 'ico'), this.bannerText);
   private readonly locked = h('p', { class: 'note' });
+  private readonly frontier = h('p', { class: 'note fc-frontier' });
   private readonly echoesNow = readout('Echoes now', 'Echoes if you Prestige this second');
   private readonly rate = readout('Echo rate', 'Echoes now ÷ hours since this Prestige began');
   private readonly next = readout('Next boss', 'Projected Echoes and rate after the next checkpoint');
@@ -52,7 +75,7 @@ export class ForecastPanel {
     this.chartWrap = h('div', { class: 'fc-chart-wrap' }, this.chart, this.axis);
     this.prestigeBtn = button([icon('prestige'), 'Prestige…'], () => ctx.open('prestige'), { class: 'btn primary wide' });
     this.el = h('div', { class: 'forecast' },
-      this.banner, this.locked,
+      this.banner, this.frontier, this.locked,
       h('div', { class: 'readouts' }, this.echoesNow.el, this.rate.el, this.next.el, this.reclimb.el, this.wall.el),
       this.chartWrap,
       h('p', { class: 'dim small', text: 'Lifetime Echoes are maximized by resetting when the rate curve peaks. Nothing decays if you stay.' }),
@@ -74,6 +97,9 @@ export class ForecastPanel {
     text(this.bannerText, f?.frontier !== undefined && f.nextFrontier !== undefined && ui.run.deepestCleared >= f.frontier - 2
       ? `Prestige recommended: past wave ${f.frontier} (the Frontier) enemies harden fast. Prestige for ${fmtNum(f.echoesNow)} Echoes and the Frontier moves to wave ${f.nextFrontier}.`
       : 'Prestige recommended: your Echo rate has passed its peak.');
+    const ft = frontierText(ui);
+    text(this.frontier, ft ?? '');
+    show(this.frontier, !!ft);
     const early = ui.run.deepestCleared < 20;
     show(this.locked, !f || early);
     show(this.chartWrap, !!f && f.curve.length > 1);

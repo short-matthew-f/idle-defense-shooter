@@ -32,18 +32,23 @@
 //                     height (top row + category tabs; at most two pinned rows beyond the tabs), the list gets ≥ 55%, nothing
 //                     overflows sideways, every tap target in view is ≥ 44 px, text ≥ 14 px except badges, the quieter
 //                     styles keep AA contrast; dots only for decisions; the empty-slot row opens the picker (hint targets)
+//   phone tells       (src/ui/tells.ts, HANDBOOK-EVAL Phase 1) at a Broodheart tell: before the abilities reveal (best wave 10) the
+//                     tell is information only and tapping it changes no slot; revealed with both slots full, tapping it asks
+//                     "Equip Bombardment in slot 1 (replaces ...)?" and changes nothing until Equip, then Undo restores; the pre-boss
+//                     card names the counter between waves; Back with a dialog open closes it and leaves the tab unchanged
 // Exit code 1 on any failed check.
 //
 // Environment: PLAYWRIGHT_DIR (a directory holding the `playwright` package; default: the global npm root),
 // CHROMIUM (browser executable; default: Playwright's own), E2E_URL (skip the preview server and test this URL),
 // E2E_OUT (screenshots; default tests/e2e/out), E2E_SKIP_DESKTOP=1 / E2E_SKIP_PHONE=1 / E2E_SKIP_REACH=1 / E2E_SKIP_TOUCH=1 /
-// E2E_SKIP_ONBOARD=1 / E2E_SKIP_OVERLAYS=1 / E2E_SKIP_WALLET=1 / E2E_SKIP_UX=1. The walkthroughs that need every tab run with ?showall=1 (Unlock everything for the session).
+// E2E_SKIP_ONBOARD=1 / E2E_SKIP_OVERLAYS=1 / E2E_SKIP_WALLET=1 / E2E_SKIP_UX=1 / E2E_SKIP_TELLS=1. The walkthroughs that need every tab run with ?showall=1 (Unlock everything for the session).
 import { createRequire } from 'node:module';
 import { spawn, execSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { auditOverlays } from './overlap.mjs';
+import { attention } from './attention.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const OUT = process.env.E2E_OUT ?? join(ROOT, 'tests', 'e2e', 'out');
@@ -141,6 +146,8 @@ try {
   if (!process.env.E2E_SKIP_OVERLAYS) await overlays();
   if (!process.env.E2E_SKIP_WALLET) await wallet();
   if (!process.env.E2E_SKIP_UX) await calm();
+  if (!process.env.E2E_SKIP_TELLS) await tells();
+  if (!process.env.E2E_SKIP_ATTN) await attention({ browser, BASE, OUT, check, attachLogs });
 } catch (e) {
   check('no exceptions', false, String(e && e.stack || e));
 } finally {
@@ -898,6 +905,128 @@ async function overlays() {
   }
 }
 
+
+// ================================================================ phone: boss tells respect the unlock ladder; no silent swaps (src/ui/tells.ts)
+async function tells() {
+  const LADDER = ['start', 'checkpoint', 'elements', 'build', 'abilities', 'boons', 'anomalies', 'bulk', 'prestige', 'machine', 'salvage', 'overcharge'];
+  const viewports = [
+    { id: '393', viewport: { width: 393, height: 852 }, safe: { top: 59, bottom: 34 } },
+    { id: '375', viewport: { width: 375, height: 667 }, safe: { top: 20, bottom: 0 } },
+  ];
+  for (const vp of viewports) {
+    const ctx = await browser.newContext({ viewport: vp.viewport, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+    await ctx.route('**/favicon.ico', (r) => r.fulfill({ status: 204, body: '' }));
+    await ctx.addInitScript((sf) => {
+      const put = () => { const st = document.createElement('style'); st.textContent = `:root{--safe-top:${sf.top}px!important;--safe-bottom:${sf.bottom}px!important}`; document.head.appendChild(st); };
+      if (document.head) put(); else document.addEventListener('DOMContentLoaded', put);
+    }, vp.safe);
+    const page = await ctx.newPage();
+    const errors = [];
+    attachLogs(page, errors);
+    const ready = () => page.waitForFunction(() => !!window.__citadel?.game?.ready, null, { timeout: 60000 });
+    await page.goto(`${BASE}?fast=1`);
+    await ready();
+    const fresh = await page.evaluate(() => window.__citadel.game.client.requestSave());
+    const load = async (mut, prefsExtra, pause = false) => {
+      const save = await page.evaluate(({ s, mut }) => { new Function('s', mut)(s); s.savedAtMs = Date.now(); return s; }, { s: fresh, mut });
+      await page.goto(`${BASE}icons/icon-192.png`);
+      await page.evaluate(async ({ save, prefs }) => {
+        localStorage.clear();
+        localStorage.setItem('citadel.prefs.v1', JSON.stringify(prefs));
+        await new Promise((res, rej) => {
+          const r = indexedDB.open('citadel', 1);
+          r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('saves')) r.result.createObjectStore('saves'); };
+          r.onsuccess = () => { const t = r.result.transaction('saves', 'readwrite'); t.objectStore('saves').put(save, 'main'); t.oncomplete = () => { r.result.close(); res(); }; t.onerror = () => rej(t.error); };
+          r.onerror = () => rej(r.error);
+        });
+      }, { save, prefs: { revealInit: true, hintsInit: true, coachSeen: LADDER, tabsVisited: ['battle', 'upgrades', 'build', 'more'], ...prefsExtra } });
+      await page.goto(`${BASE}?fast=1`);
+      await ready();
+      if (pause) await page.evaluate(() => window.__citadel.game.ui.host.setPaused?.(true));   // hold the 2 s `between` open
+      await page.waitForTimeout(600);
+    };
+    const slots = () => page.evaluate(() => window.__citadel.game.latestUi().build.abilities.slice());
+    const setSlot = async (slot, ability) => { await page.evaluate(({ slot, ability }) => window.__citadel.game.ui.ctx.host.send({ type: 'set_ability_slot', slot, ability }), { slot, ability }); await page.waitForTimeout(400); };
+    const bossTell = () => page.evaluate(() => {
+      const bb = window.__citadel.game.ui.hud.bossBar, orig = bb.update.bind(bb);
+      bb.update = (u) => orig({ ...u, wave: { ...u.wave, isBoss: true, bossId: 'broodheart', bossMaxHp: 1000, bossHp: 900, bossPhase: 0, bossPhaseMarks: [0.5], weakPointOpen: false, tellActive: 'bombardment', tellTicksLeft: 80 } });
+    });
+    const tellInfo = () => page.evaluate(() => { const t = document.querySelector('.boss-bar .tell'); return t ? { action: t.dataset.action, text: t.textContent, hidden: t.hidden } : null; });
+
+    // 1. before the abilities reveal (best wave 10): information only
+    await load('s.run.deepestCleared = 10; s.meta.deepestEver = 10; s.run.checkpoint = 10; s.run.wave = 11; s.run.scrap = 300;');
+    await bossTell();
+    await page.waitForTimeout(500);
+    const s0 = await slots();
+    const info = await tellInfo();
+    await page.screenshot({ path: `${OUT}/phone-tells-${vp.id}-info.png` });
+    await page.locator('.boss-bar .tell').tap({ force: true });   // aria-disabled: Playwright would wait for it
+    await page.waitForTimeout(400);
+    const s1 = await slots();
+    check(`tells ${vp.id}: before the reveal the tell is information only ("abilities unlock at wave 12") and a tap changes no slot`,
+      info && info.action === 'info' && /unlock at wave 12/.test(info.text) && JSON.stringify(s0) === JSON.stringify(s1) && (await page.locator('.tell-confirm:visible').count()) === 0, { info, s0, s1 });
+
+    // 2. revealed, both slots full: ask first; Equip replaces, Undo restores
+    await load('s.run.deepestCleared = 14; s.meta.deepestEver = 14; s.run.checkpoint = 10; s.run.wave = 11; s.run.scrap = 300;');
+    await setSlot(0, 'repulsor_pulse'); await setSlot(1, 'emp');
+    await bossTell();
+    await page.waitForTimeout(500);
+    const before = await slots();
+    await page.locator('.boss-bar .tell').tap();
+    await page.waitForTimeout(400);
+    const askText = ((await page.locator('.tell-confirm').textContent()) ?? '').trim();
+    const mid = await slots();
+    await page.screenshot({ path: `${OUT}/phone-tells-${vp.id}-confirm.png` });
+    check(`tells ${vp.id}: both slots full, a tap asks "Equip Bombardment in slot 1 (replaces Repulsor Pulse)?" and changes nothing`,
+      /Equip Bombardment in slot 1 \(replaces Repulsor Pulse\)\?/.test(askText) && JSON.stringify(before) === JSON.stringify(mid), { askText, before, mid });
+    await page.locator('.tell-confirm [data-act="cancel"]').tap();
+    await page.waitForTimeout(300);
+    check(`tells ${vp.id}: Cancel closes the question and leaves the slots`, (await page.locator('.tell-confirm:visible').count()) === 0 && JSON.stringify(await slots()) === JSON.stringify(before));
+    await page.locator('.boss-bar .tell').tap();
+    await page.waitForTimeout(300);
+    await page.locator('.tell-confirm [data-act="equip"]').tap();
+    await page.waitForTimeout(500);
+    const eq = await slots();
+    const undoBtn = page.locator('.tell-confirm button', { hasText: 'Undo' });
+    const hadUndo = (await undoBtn.count()) === 1;
+    if (hadUndo) await undoBtn.tap();
+    for (let k = 0; k < 30 && (await slots())[0] !== 'repulsor_pulse'; k++) await page.waitForTimeout(100);
+    const back = await slots();
+    check(`tells ${vp.id}: Equip replaces slot 1, Undo restores Repulsor Pulse`, eq[0] === 'bombardment' && hadUndo && back[0] === 'repulsor_pulse' && back[1] === 'emp', { eq, back });
+
+    // 3. the pre-boss card (between waves, wave 10 next, counter not slotted)
+    await load("s.run.deepestCleared = 14; s.meta.deepestEver = 14; s.run.checkpoint = 9; s.run.wave = 10; s.run.scrap = 300; s.run.build.abilities = ['repulsor_pulse', 'emp'];", undefined, true);
+    let card = null;
+    for (let k = 0; k < 40 && !card; k++) { card = await page.evaluate(() => { const c = document.querySelector('.preboss-card'); return c && !c.hidden ? c.textContent : null; }); if (!card) await page.waitForTimeout(100); }
+    await page.screenshot({ path: `${OUT}/phone-tells-${vp.id}-preboss.png` });
+    const sBefore = await slots();
+    check(`tells ${vp.id}: the pre-boss card names the boss, the tell and the counter, and equips nothing by itself`,
+      !!card && /Next: Broodheart/.test(card) && /Bombardment/.test(card) && /Not now/.test(card) && sBefore[0] === 'repulsor_pulse', { card, sBefore });
+    if (card) {
+      await page.locator('.preboss-card [data-act="dismiss"]').tap();
+      await page.waitForTimeout(300);
+      check(`tells ${vp.id}: Not now dismisses the card`, (await page.locator('.preboss-card:visible').count()) === 0);
+    }
+
+    // 4. Back with a dialog open closes the dialog and leaves the tab alone
+    await page.evaluate(() => window.__citadel.game.ui.shell.go('build'));
+    await page.waitForTimeout(400);
+    await page.evaluate(() => window.__citadel.game.ui.abilities.openPicker(0));
+    await page.waitForTimeout(300);
+    const dlgBefore = await page.locator('[role="dialog"]').count();
+    await page.goBack();
+    await page.waitForTimeout(500);
+    const dlgAfter = await page.locator('[role="dialog"]').count();
+    const tabNow = await page.evaluate(() => window.__citadel.game.ui.shell.tab);
+    await page.screenshot({ path: `${OUT}/phone-tells-${vp.id}-back.png` });
+    check(`tells ${vp.id}: Back with a dialog open closes it and the Build tab stays`, dlgBefore === 1 && dlgAfter === 0 && tabNow === 'build', { dlgBefore, dlgAfter, tabNow });
+    await page.goBack();
+    await page.waitForTimeout(500);
+    check(`tells ${vp.id}: the next Back leaves the tab for Battle`, (await page.evaluate(() => window.__citadel.game.ui.shell.tab)) === 'battle');
+    check(`tells ${vp.id}: zero console errors`, errors.length === 0, errors);
+    await ctx.close();
+  }
+}
 
 // ================================================================ phone: the wallet stays in view while spending (src/ui/wallet.ts)
 /** src/ui/format.ts fmtNum (the wallet's figure format). */

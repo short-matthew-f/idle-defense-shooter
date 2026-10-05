@@ -16,7 +16,8 @@ import { setPref } from './prefs';
 import { cycleBar } from './shell-logic';
 import { muteChip } from '../audio/ui';
 import type { UiCtx } from './ctx';
-import type { Features } from './progression';
+import { UNLOCKS, type Features } from './progression';
+import { tellDecision } from './tells';
 
 const SPEEDS = [1, 2, 4, 8] as const;
 
@@ -162,6 +163,7 @@ export class Hud {
    */
   setFeatures(f: Features): void {
     this.feats = f;
+    this.bossBar.revealed = f.abilities;
     show(this.restartBtn, f.runControls);
     show(this.ce.el, f.abilities);
     show(this.pauseBtn, f.inspector);
@@ -304,11 +306,13 @@ export class BossBar {
   private tellMax = 1;
 
   private tellId: AbilityId | 'designate' | null = null;
+  /** The `abilities` feature is revealed (progression.ts): before it a tell is information only. */
+  revealed = true;
 
   constructor(onTell: (tell: AbilityId | 'designate') => void = () => {}) {
     this.bar.el.appendChild(this.marks);
     this.tell.append(this.tellIcon, this.tellText, this.tellWin);
-    this.tell.addEventListener('click', () => { if (this.tellId) onTell(this.tellId); });
+    this.tell.addEventListener('click', () => { if (this.tellId && this.tell.dataset.action !== 'info') onTell(this.tellId); });
     this.el = h('div', { class: 'boss-bar', attrs: { role: 'group', 'aria-label': 'Boss' } },
       // one slim row (name, health with the phase, weak-point flag) and the tell under it: the bar floats over the top of
       // the arena, so it stays low (the overlay lanes keep its column above the tower: lanes.ts)
@@ -339,7 +343,7 @@ export class BossBar {
     this.tellId = tell;
     show(this.tell, tell !== null);
     if (tell !== null) {
-      const prompt = tellPrompt(tell, ui);
+      const prompt = tellPrompt(tell, ui, this.revealed);
       const key = `${tell}|${prompt.action}`;
       if (key !== this.tellKey || w.tellTicksLeft > this.tellMax) {
         if (!this.tellKey.startsWith(`${tell}|`) || w.tellTicksLeft > this.tellMax) this.tellMax = Math.max(1, def ? Math.round(def.tell.windowSeconds * 60) : w.tellTicksLeft, w.tellTicksLeft);
@@ -348,6 +352,8 @@ export class BossBar {
         text(this.tellText, `${def?.tell.name ?? 'Tell'}: ${prompt.text}`);
         attr(this.tell, 'aria-label', `${def?.tell.name ?? 'Boss tell'}: ${prompt.text}`);
         this.tell.dataset.action = prompt.action;
+        this.tell.classList.toggle('info', prompt.action === 'info');
+        attr(this.tell, 'aria-disabled', prompt.action === 'info' ? 'true' : 'false');
       }
       styleVar(this.tell, '--win', String(Math.max(0, Math.min(1, w.tellTicksLeft / this.tellMax))));
     } else this.tellKey = '';
@@ -358,10 +364,13 @@ export class BossBar {
  * What the boss-tell banner asks for (pure). The Counter ability may not be slotted (a new player's
  * slots start empty), may lack CE, or may be ready: the banner says which, and tapping it acts.
  */
-export function tellPrompt(tell: AbilityId | 'designate', ui: Pick<UiState, 'build' | 'abilities' | 'tower'>): { text: string; action: 'designate' | 'cast' | 'equip' | 'wait' } {
+export function tellPrompt(tell: AbilityId | 'designate', ui: Pick<UiState, 'build' | 'abilities' | 'tower' | 'abilitySlots'>, revealed = true): { text: string; action: 'designate' | 'cast' | 'equip' | 'wait' | 'info' } {
   if (tell === 'designate') return { text: 'tap the weak point to designate it', action: 'designate' };
   const name = ABILITY_BY_ID.get(tell)?.name ?? tell;
-  if (!ui.build.abilities.includes(tell)) return { text: `${name} counters it. Tap to equip it`, action: 'equip' };
+  const d = tellDecision({ revealed, counter: tell, slots: ui.build.abilities, usable: ui.abilitySlots });
+  if (d === 'info') return { text: `abilities unlock at wave ${UNLOCKS.abilities.wave ?? 12}`, action: 'info' };
+  if (d === 'equip-empty') return { text: `${name} counters it. Tap to equip it`, action: 'equip' };
+  if (d === 'confirm-replace') return { text: `${name} counters it. Tap to swap it in`, action: 'equip' };
   const a = ui.abilities.find((x) => x.id === tell);
   if (a && a.ready) return { text: `tap to counter with ${name}`, action: 'cast' };
   const cost = Math.round(a?.cost ?? ABILITY_BY_ID.get(tell)?.cost ?? 0);

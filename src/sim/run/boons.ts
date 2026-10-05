@@ -7,10 +7,12 @@
  *            No offers in Patrol (active boons still apply there).
  *  Offer     three cards, a pure function of (prestige seed, wave, attempt index, reroll count, build): weighted
  *            toward boons whose `needs` the build has, at most one card needing something the build lacks, never
- *            an active boon, never three of one category when another is available. The first offer of a Prestige
+ *            an active boon, never three of one category when another is available, never a boon the unlock ladder
+ *            has not revealed (run/reveal.ts: abilities / CE before wave 12, systems outside the content pool). The first offer of a Prestige
  *            draws only stat surges.
  *  Waiting   an offer waits until the player picks, rerolls or declines (no timeout). A boss clear while an
- *            offer is pending queues behind it (BOON_QUEUE_CAP, the oldest drops).
+ *            offer is pending merges into it (no second offer in a row; Ev.BoonOffer 'merged'). The run holds in
+ *            `between` after a boss clear while a decision is pending, at most BOSS_HOLD_TICKS (run/machine.ts).
  *  Actions   pick (at BOON_CAP the named `replace`, else the oldest, is dropped), reroll (boonRerolls + 1 Cores:
  *            1, then 2, ...), decline (free, gives nothing). Directives / Autocast / the Upgrade Queue cannot
  *            issue them (World.enqueueCommand and Sim.step drop them; validate.ts rejects `viaDirective`).
@@ -32,6 +34,7 @@ import { allBoons, boonDef } from '../core/content';
 import { BOON_CAP, BOON_QUEUE_CAP } from '../data/boons';
 import { FUSIONS } from '../data/index';
 import { registerEntry } from '../economy/codex';
+import { offerRevealed } from './reveal';   // ladder-aware offers
 
 export { BOON_CAP, BOON_QUEUE_CAP };
 
@@ -67,7 +70,7 @@ export function boonNeedsMet(w: WorldImpl, b: BoonDef): boolean {
 export function rollBoons(w: WorldImpl, wave: number, attempt: number, rerolls: number, kind: 'start' | 'boss', firstOnly: boolean): BoonId[] {
   const rng = new Prng(combineSeed(w.run.prestigeSeed, BOON_SALT, wave, attempt, rerolls, kind === 'boss' ? 1 : 0));
   const active = w.build.boons;
-  const cands = allBoons().filter((b) => !active.includes(b.id) && !boonUsedUp(w.run, b.id) && (!firstOnly || b.category === 'surge'));
+  const cands = allBoons().filter((b) => !active.includes(b.id) && !boonUsedUp(w.run, b.id) && offerRevealed(w, b) && (!firstOnly || b.category === 'surge'));
   const out: BoonDef[] = [];
   let lacking = 0;
   for (let pick = 0; pick < 3; pick++) {
@@ -113,13 +116,16 @@ export function nextBoonOffer(w: WorldImpl): void {
   if (next !== undefined) openBoonOffer(w, 'boss', next);
 }
 
-/** A boss was cleared (Push only): offer now, or queue behind the pending offer. */
+/**
+ * A boss was cleared (Push only): offer now. With an offer still pending the boss offer MERGES into it (UX Phase 1:
+ * never two offers in a row): the pending cards stand for this boss too and nothing is queued. The player still
+ * picks, rerolls or declines it; nothing is picked for them. (Queues carried by older saves still drain.)
+ */
 export function offerForBossClear(w: WorldImpl, wave: number): void {
   const run = w.run;
   if (run.mode !== 'push') return;
   if (run.boonOffer && run.boonOffer.length > 0) {
-    run.boonQueue.push(wave);
-    while (run.boonQueue.length > BOON_QUEUE_CAP) run.boonQueue.shift();
+    w.emit(Ev.BoonOffer, 'merged', run.boonOfferSeq, run.boonRerolls, wave, 0, -1);
     return;
   }
   openBoonOffer(w, 'boss', wave);

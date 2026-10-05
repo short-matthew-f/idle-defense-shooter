@@ -134,3 +134,17 @@ button.tell[data-action='cast'] { background: color-mix(in srgb, var(--warn) 18%
   .res { gap: 8px; }
   .wave-num { font-size: 17px; }
 }
+
+/* a tell before abilities exist: information only (no pulse, no tap) */
+button.tell.info { animation: none; cursor: default; border-style: solid; background: transparent; }
+/* "Equip X in slot N (replaces Y)?" / Undo, under the tell in the boss bar */
+.tell-confirm, .preboss-card {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 8px; border-radius: var(--radius-s);
+  background: var(--bg-2); border: 1px solid var(--warn); font-size: 14px; line-height: 18px;
+}
+.tell-confirm[hidden], .preboss-card[hidden] { display: none; }
+.tc-text, .pb-text { flex: 1 1 150px; min-width: 0; }
+.pb-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.tell-confirm .btn, .preboss-card .btn { min-height: 44px; font-size: 14px; }
+.arena-top > .preboss-card { align-self: stretch; max-width: 560px; margin: 0 auto; width: 100%; pointer-events: none; }
+.arena-top > .preboss-card :is(button) { pointer-events: auto; }

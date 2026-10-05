@@ -12,6 +12,7 @@ import { titleCase } from './format';
 import { boonName } from './boons';
 import type { ToastKind } from './ctx';
 import type { Features } from './progression';
+import { prefs, setPref } from './prefs';
 
 const ICON: Record<ToastKind, string> = { info: 'info', good: 'check', warn: 'info', core: 'cores', codex: 'codex' };
 
@@ -23,6 +24,19 @@ export const FEED_MAX_QUEUED = 6;
 export const FEED_MAX_WAIT_MS = 20000;
 /** "Stragglers rush the tower" (Ev.Rush, run/stall.ts) shows at most once per this long (ms). */
 export const RUSH_TOAST_GAP_MS = 60000;
+
+/** Boss-clear news (boss down, checkpoint, Cores, a slot opening) arriving within this long merges into ONE summary toast (ms). */
+export const SUMMARY_MS = 3000;
+/** The summary's time on screen (ms). */
+export const SUMMARY_SHOW_MS = 5000;
+/** The first Core's explainer waits this long after the boss-clear beat (ms), so the beat stays one item. */
+export const CORE_EXPLAIN_DELAY_MS = 2200;
+export const CORE_EXPLAINER = 'Cores: rare. Spend them on rerolls and refits later.';
+
+/** The summary line from its parts in arrival order (duplicates dropped). */
+export function summaryText(parts: readonly string[]): string {
+  return [...new Set(parts)].join(' · ');
+}
 
 interface Item { el: HTMLElement; left: number; queuedAt: number; shownAt: number; timer: number; leaving: boolean }
 
@@ -37,18 +51,47 @@ export class Feed {
   private lastGate = false;
   private lastSlots: { hp: number; at: number } | null = null;
   private lastRush = -Infinity;
+  /** The boss-clear summary toast (and until when news merges into it). */
+  private summary: { item: Item; parts: string[]; until: number } | null = null;
+  /** performance.now() of the last boss kill (the attention plan's celebration beat, attention.ts); -Infinity: none. */
+  bossClearAt = -Infinity;
 
-  toast(msg: string, kind: ToastKind = 'info', ms = 3600): void {
+  toast(msg: string, kind: ToastKind = 'info', ms = 3600): void { this.push(msg, kind, ms); }
+
+  private push(msg: string, kind: ToastKind, ms: number): Item {
     const t = h('div', { class: `toast t-${kind}` }, icon(ICON[kind], 'ico tiny'), h('span', { text: msg }));
     t.hidden = true;
     this.el.appendChild(t);
-    this.items.push({ el: t, left: ms, queuedAt: performance.now(), shownAt: 0, timer: 0, leaving: false });
+    const item: Item = { el: t, left: ms, queuedAt: performance.now(), shownAt: 0, timer: 0, leaving: false };
+    this.items.push(item);
     while (this.items.length > FEED_MAX_QUEUED) {
       const i = this.items.findIndex((x) => !x.shownAt);
       this.drop(i >= 0 && i < this.items.length - 1 ? i : 0);
     }
     this.flush();
     this.onChange?.();
+    return item;
+  }
+
+  /** Is the boss-clear summary still taking news? */
+  private summaryOpen(now = performance.now()): boolean {
+    return !!this.summary && now < this.summary.until && this.items.includes(this.summary.item) && !this.summary.item.leaving;
+  }
+
+  /** Merge `parts` into the boss-clear summary toast (a new one when none is open). */
+  private summarize(parts: readonly string[]): void {
+    if (!parts.length) return;
+    const now = performance.now();
+    if (this.summaryOpen(now)) {
+      const s = this.summary!;
+      s.parts.push(...parts);
+      const span = s.item.el.querySelector('span:last-child');
+      if (span) span.textContent = summaryText(s.parts);
+      this.onChange?.();
+      return;
+    }
+    const item = this.push(summaryText(parts), 'good', SUMMARY_SHOW_MS);
+    this.summary = { item, parts: [...parts], until: now + SUMMARY_MS };
   }
 
   /** Show at most `n` toasts (the overlay lanes' room; FEED_MAX_SHOWN when unmanaged). */
@@ -114,17 +157,24 @@ export class Feed {
   /** Worker event batches (non-Hit/Spawn events since the last batch). */
   onEvents(events: readonly SimEvent[]): void {
     let cores = 0;
+    const beat: string[] = [];
     for (const e of events) {
-      if (e.type === Ev.Checkpoint) this.toast(`Checkpoint: wave ${e.a} cleared`, 'good');
+      if (e.type === Ev.Checkpoint) beat.push(`Checkpoint: wave ${e.a}`);
       else if (e.type === Ev.CoreDrop) cores += e.a || 1;
       else if (e.type === Ev.CounterScored) this.toast('Counter! Weak point open', 'good');
       else if (e.type === Ev.Codex) this.toast(`Codex: ${e.src.startsWith('boon.') ? `${boonName(e.src)} (boon)` : titleCase(e.src)}`, 'codex');
-      else if (e.type === Ev.BossKilled) this.toast('Boss destroyed', 'good');
+      else if (e.type === Ev.BossKilled) { beat.unshift('Boss destroyed'); this.bossClearAt = performance.now(); }
       else if (e.type === Ev.Prestige) this.toast('Prestige complete: a new machine begins', 'good');
       else if (e.type === Ev.Ascend) this.toast('Ascension complete', 'good');
       else if (e.type === Ev.Rush) this.rush();
     }
-    if (cores > 0) this.toast(`+${cores} Core${cores > 1 ? 's' : ''}`, 'core');
+    // one beat at a boss clear: boss down, checkpoint, Cores (and a slot opening, update()) in ONE line
+    if (cores > 0) beat.push(`+${cores} Core${cores > 1 ? 's' : ''}`);
+    this.summarize(beat);
+    if (cores > 0 && !prefs().coreExplained) {
+      setPref('coreExplained', true);
+      window.setTimeout(() => this.toast(CORE_EXPLAINER, 'core', 6000), CORE_EXPLAIN_DELAY_MS);
+    }
   }
 
   /** Anti-stall Rush (a stalled wave's enemies charge the tower): a subtle, rate-limited note. */
@@ -135,17 +185,24 @@ export class Feed {
     this.toast('Stragglers rush the tower', 'info', 2800);
   }
 
+  /** A slot opened: part of the boss-clear summary while it is open, else its own toast. */
+  private slot(short: string, long: string): void {
+    if (this.summaryOpen()) this.summarize([short]);
+    else this.toast(long, 'good', 6000);
+  }
+
   /** State edges: draft ready, Prestige recommended. Slot toasts wait for their category to be revealed (progression.ts). */
   update(ui: UiState, f?: Pick<Features, 'elements' | 'hardpoints'>): void {
     const d = ui.run.pendingDraft ? ui.run.pendingDraft.join(',') : '';
-    if (d && d !== this.lastDraft) this.toast('Anomaly draft ready', 'info');
+    // at a boss clear the draft presents itself after the beat (attention.ts): no separate toast then
+    if (d && d !== this.lastDraft && !this.summaryOpen()) this.toast('Anomaly draft ready', 'info');
     this.lastDraft = d;
     // A new slot is the biggest power step in the early game and nothing else announces it.
     // Before its category is revealed the coach banner announces it instead (progression.ts, coach.ts).
     const hp = ui.run.hardpointSlotsOpen, at = ui.run.attunementSlotsOpen;
     if (this.lastSlots) {
-      if (at > this.lastSlots.at && (!f || f.elements) && ui.build.attunements.filter(Boolean).length < at) this.toast('Attunement slot open: attune an element (Build or Upgrades)', 'good', 6000);
-      if (hp > this.lastSlots.hp && (!f || f.hardpoints) && ui.build.hardpoints.filter(Boolean).length < hp) this.toast('Hardpoint slot open: mount a weapon system (Build or Upgrades)', 'good', 6000);
+      if (at > this.lastSlots.at && (!f || f.elements) && ui.build.attunements.filter(Boolean).length < at) this.slot('Attunement slot open', 'Attunement slot open: attune an element (Build or Upgrades)');
+      if (hp > this.lastSlots.hp && (!f || f.hardpoints) && ui.build.hardpoints.filter(Boolean).length < hp) this.slot('Hardpoint slot open', 'Hardpoint slot open: mount a weapon system (Build or Upgrades)');
     }
     this.lastSlots = { hp, at };
     const rec = !!ui.forecast?.recommended;

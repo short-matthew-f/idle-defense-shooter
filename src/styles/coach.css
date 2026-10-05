@@ -19,6 +19,7 @@ body.shell-phone:not(.tab-battle) .coach-banner, body.shell-rail:not(.tab-battle
 .coach-banner.compact { padding: 4px 4px 4px 8px; gap: 8px; }
 .coach-banner.compact .coach-ico { width: 28px; height: 28px; }
 .coach-banner.compact .coach-ico .ico { width: 18px; height: 18px; }
-.coach-banner.compact .coach-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; pointer-events: auto; }
+.coach-banner.compact .coach-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; cursor: pointer; pointer-events: auto; }
+/* phones wrap a compact line to two lines before it ellipsizes (the coach queue, attention.ts) */
 .coach-banner.compact .btn { position: relative; min-height: 36px; height: 36px; }
 .coach-banner.compact .btn::after { content: ''; position: absolute; inset: -4px 0; }

@@ -39,7 +39,7 @@ export function validateCommand(cmd: unknown): string | null {
     case 'mount_hardpoint': case 'refit_hardpoint': return !int(c.slot) ? bad('slot') : oneOf(HARDPOINTS, c.system) ? null : bad('system');
     case 'attune': return !int(c.slot) ? bad('slot') : oneOf(ELEMENTS, c.element) ? null : bad('element');
     case 'pick_anomaly': return !(c.anomaly === null || str(c.anomaly)) ? bad('anomaly') : optInt(c.replace) ? null : bad('replace');
-    case 'reroll_anomaly': case 'restart_checkpoint': case 'ascend': case 'end_trial': return null;
+    case 'reroll_anomaly': case 'release_hold': case 'restart_checkpoint': case 'ascend': case 'end_trial': return null;
     case 'set_mode': return oneOf(MODES, c.mode) ? null : bad('mode');
     case 'set_speed': return c.speed === 1 || c.speed === 2 || c.speed === 4 || c.speed === 8 ? null : bad('speed');
     case 'designate': return !(c.enemy === null || int(c.enemy)) ? bad('enemy') : !optSlot01(c.slot) ? bad('slot') : optBool(c.viaDirective) ? null : bad('viaDirective');

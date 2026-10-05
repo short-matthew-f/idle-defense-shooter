@@ -30,6 +30,7 @@ import { CoachBanner, activeCoachLive, initialSeen, markCoachSeen } from './coac
 import { StarterPanel } from './starter';
 import { HintDriver, setArenaSource } from './pointer';
 import { OverlayLanes } from './lanes';
+import { Attention } from './attention';
 import { contentPool, features, newInPool, stageOf, type Features } from './progression';
 import { QM_COACH_ID, QM_COACH_TEXT, echoGuideOn, newContentCoach } from './ceremony';
 import type { CoachExtra } from './coach';
@@ -84,6 +85,8 @@ export class GameUi {
   private readonly hints: HintDriver;
   /** Where the transient overlays go on Battle (lanes.ts): clear of the tower, the dock, the HUD and each other. */
   readonly lanes: OverlayLanes;
+  /** Which overlay may ask for attention now (attention.ts): death first, the boss-clear beat, one decision, boss mode. */
+  readonly attn: Attention;
 
   constructor(root: HTMLElement, readonly host: UiHost) {
     this.ctx = {
@@ -131,12 +134,12 @@ export class GameUi {
     this.shop.onReveal = () => this.shell.go('upgrades');
     this.hud.onTell = (t) => {
       if (t === 'designate') { this.feed.toast('Tap the boss where its weak point opens to designate it', 'info'); return; }
-      const i = this.abilities.slotOf(t);
-      if (i >= 0) this.abilities.press(i); else this.abilities.equip(t);
+      this.abilities.tellTap(t);   // tells.ts: info before the reveal; cast / equip / ask before replacing after
     };
 
+    this.hud.bossBar.el.appendChild(this.abilities.tellPanel);
     const battle = h('div', { class: 'battle-layer' },
-      h('div', { class: 'arena-top' }, this.hud.bossBar.el, h('div', { class: 'arena-strip' }, this.boonRow.el, this.boonOffer.chip, this.hud.controls)),
+      h('div', { class: 'arena-top' }, this.hud.bossBar.el, this.abilities.preBoss, h('div', { class: 'arena-strip' }, this.boonRow.el, this.boonOffer.chip, this.hud.controls)),
       this.death.el,
       this.boonOffer.el,
       this.starter.el,
@@ -159,7 +162,7 @@ export class GameUi {
       nav: () => ({ screen: (['upgrades', 'build', 'prestige', 'more'] as const).find((s) => this.shell.isShown(s)) ?? null, battle: this.shell.battleVisible }),
       shop: () => this.shop.view(),
       coach: () => (this.coach.el.hidden ? null : this.coach.el.dataset.coach ?? null),   // ladder lines and extras alike
-      blocked: () => anyModalOpen() || this.death.visible,
+      blocked: () => anyModalOpen() || this.death.visible || this.attn.hintsHeld,
       armed: () => this.abilities.arming.armed,
       boonChip: () => !this.boonOffer.chip.hidden,
       draftWaiting: () => this.draft.pending,
@@ -168,6 +171,8 @@ export class GameUi {
       battle, arenaTop: battle.querySelector<HTMLElement>('.arena-top')!, death: this.death, offer: this.boonOffer.el,
       coach: this.coach, feed: this.feed, starter: this.starter.el, row: this.abilities.row, armHint: this.abilities.hint, oc: this.active.el,
     }, { arena: () => host.arena?.() ?? null, layout: () => this.shell.layout, battleVisible: () => this.shell.battleVisible });
+    this.attn = new Attention({ death: this.death, feed: this.feed, offer: this.boonOffer, draft: this.draft, coach: this.coach,
+      battleVisible: () => this.shell.battleVisible, changed: () => { this.lanes.schedule(); this.hints.refresh(); } });
     setArenaSource(() => host.arena?.() ?? null);
     const layout = this.shell.onLayout;
     this.shell.onLayout = () => { layout?.(); this.lanes.schedule(); this.hints.pointer.schedule(); };
@@ -246,6 +251,7 @@ export class GameUi {
 
   update(ui: UiState): void {
     this.latest = ui;
+    this.attn.update(ui);
     this.reveal(ui);
     const si = sectorIndexForWave(ui.run.wave);
     if (si !== this.sector) {

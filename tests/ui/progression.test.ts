@@ -4,7 +4,7 @@ import {
   BULK_ROWS, BULK_ROWS_MIN_WAVE, CONTENT_POOL, FEATURE_IDS, STAGE_WAVES, STAGE7_WAVE, STARTER_NODES, UNLOCKS, affordableRows, allFeatures, bestWave, contentPool, features,
   stageOf, stageOfFeature, starterPick, type FeatureId, type Features, type ProgressState, type StarterState,
 } from '../../src/ui/progression';
-import { COACH, activeCoachLive, initialSeen, pendingCoach, staleWith, unlockedCoach } from '../../src/ui/coach';
+import { COACH, COACH_SHRINK_MS, VERB_COACH, activeCoachLive, initialSeen, mayIntroduce, pendingCoach, staleWith, unlockedCoach } from '../../src/ui/coach';
 import { tabBadges, tabReachable, tabsShown, type BadgeState } from '../../src/ui/shell-logic';
 import { ELEMENTS, HARDPOINTS } from '../../src/ui/content';
 
@@ -196,17 +196,31 @@ describe('the stage-0 Upgrade button', () => {
 });
 
 describe('coach banners', () => {
-  it('one message per reveal, the newest stage first; a live boon offer or draft jumps the queue', () => {
+  it('the coach queue: oldest unread stage line first; a live boon offer or draft jumps the queue', () => {
     expect(pendingCoach(features(state(0)), new Set())?.id).toBe('start');
     expect(pendingCoach(features(state(5)), new Set(['start']))?.id).toBe('checkpoint');
-    expect(pendingCoach(features(state(6)), new Set())?.id).toBe('elements');   // 'start' / 'checkpoint' unread: stale
-    expect(staleWith('elements')).toEqual(['start', 'checkpoint', 'elements']);
+    expect(pendingCoach(features(state(6)), new Set())?.id).toBe('start');   // oldest unread first
+    expect(pendingCoach(features(state(6)), new Set(['start']))?.id).toBe('checkpoint');
+    expect(pendingCoach(features(state(12)), new Set(['start', 'checkpoint', 'elements', 'build']))?.id).toBe('abilities');
+    // reading a line never retires an unseen verb line (checkpoint, elements, build, abilities); plain older lines go
+    expect(staleWith('elements')).toEqual(['start', 'elements']);
+    expect(staleWith('abilities')).toEqual(['start', 'abilities']);
+    expect(staleWith('bulk')).toEqual(['start', 'bulk']);
+    for (const v of VERB_COACH) for (const m of COACH) if (m.id !== v) expect(staleWith(m.id)).not.toContain(v);
     expect(staleWith('boons')).toEqual(['boons']);
-    expect(pendingCoach(features(state(15)), new Set(staleWith('bulk')))?.id).toBe('boons');   // event explainers after the stage ones
+    const stage15 = ['start', 'checkpoint', 'elements', 'build', 'abilities', 'bulk'];
+    expect(pendingCoach(features(state(15)), new Set(stage15))?.id).toBe('boons');   // event explainers after the stage ones
     const offer = features(state(0, { run: { deepestCleared: 0, boonOffer: ['x'] as never } }));
     expect(pendingCoach(offer, new Set(), { boonOffer: true, draft: false })?.id).toBe('boons');
     expect(pendingCoach(features(state(5)), new Set(['start', 'checkpoint']))).toBeNull();
     expect(pendingCoach(allFeatures(), new Set())).toBeNull();   // Unlock everything: no tutorial
+  });
+  it('the coach queue: at most one new line per wave clear (explainers of a live subject are exempt)', () => {
+    expect(mayIntroduce(null, 7, 'checkpoint')).toBe(true);    // nothing introduced yet
+    expect(mayIntroduce(7, 7, 'checkpoint')).toBe(false);      // one already came up this wave
+    expect(mayIntroduce(7, 8, 'checkpoint')).toBe(true);       // the next wave clear
+    expect(mayIntroduce(7, 7, 'boons')).toBe(true);            // an event explainer jumps in
+    expect(COACH_SHRINK_MS).toBe(15000);
   });
   it('an existing save marks what it already has as read; a new game shows the first message', () => {
     expect(initialSeen(features(state(0)), 0)).toEqual([]);
@@ -219,8 +233,9 @@ describe('coach banners', () => {
     expect(pendingCoach(features(state(4)), new Set(['start']), { boonOffer: false, draft: false, crate: true })).toBeNull();   // not revealed yet
     expect(pendingCoach(features(state(5)), read5, { boonOffer: false, draft: false, crate: true })?.id).toBe('salvage');
     expect(pendingCoach(features(state(5)), new Set(['start']), { boonOffer: false, draft: false, crate: true })?.id).toBe('checkpoint');   // stage first
-    expect(pendingCoach(features(state(12)), new Set([...staleWith('abilities'), 'salvage']), { boonOffer: false, draft: false, overchargeReady: true })?.id).toBe('overcharge');
-    expect(pendingCoach(features(state(12)), new Set([...staleWith('abilities'), 'salvage']))).toBeNull();
+    const read12 = ['start', 'checkpoint', 'elements', 'build', 'abilities', 'salvage'];
+    expect(pendingCoach(features(state(12)), new Set(read12), { boonOffer: false, draft: false, overchargeReady: true })?.id).toBe('overcharge');
+    expect(pendingCoach(features(state(12)), new Set(read12))).toBeNull();
     expect(staleWith('salvage')).toEqual(['salvage']);
     expect(activeCoachLive({ crates: 2, overcharge: { ready: false } })).toEqual({ crate: true, overchargeReady: false });
     expect(activeCoachLive(undefined)).toEqual({ crate: false, overchargeReady: false });

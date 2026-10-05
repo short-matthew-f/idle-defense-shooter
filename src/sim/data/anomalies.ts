@@ -18,7 +18,7 @@ export const ANOMALIES: AnomalyDef[] = [
     effects: [],
   },
   {
-    id: 'borrowed_blade', name: 'Borrowed Blade', rarity: 'paradox', pool: 'base',
+    id: 'borrowed_blade', name: 'Borrowed Blade', rarity: 'paradox', pool: 'base', reveal: ['blade'],
     desc: 'A tier-1 Orbital Blade spins without a hardpoint slot. Its base nodes can be bought; its Doctrines cannot.',
     effects: [],
   },
@@ -80,12 +80,12 @@ export const ANOMALIES: AnomalyDef[] = [
     effects: [fx('poison.tick_interval', 'mul', 0.25), fx('poison.damage@final', 'mul', 0.2)],
   },
   {
-    id: 'overcharged_capacitor', name: 'Overcharged Capacitor', rarity: 'common', pool: 'base',
+    id: 'overcharged_capacitor', name: 'Overcharged Capacitor', rarity: 'common', pool: 'base', reveal: ['abilities'],
     desc: 'Command Energy cap +50%.',
     effects: [fx('economy.ce_cap@final', 'mul', 0.5)],
   },
   {
-    id: 'second_opinion', name: 'Second Opinion', rarity: 'common', pool: 'base',
+    id: 'second_opinion', name: 'Second Opinion', rarity: 'common', pool: 'base', reveal: ['abilities'],
     desc: 'You get two Target Designators; both targets are preferred by every weapon.',
     effects: [],
   },
@@ -126,7 +126,7 @@ export const ANOMALIES: AnomalyDef[] = [
     effects: [],
   },
   {
-    id: 'feedback_loop', name: 'Feedback Loop', rarity: 'cursed', pool: 'echo',
+    id: 'feedback_loop', name: 'Feedback Loop', rarity: 'cursed', pool: 'echo', reveal: ['abilities'],
     desc: 'NEW. Every tactical ability recasts itself 1 s later at 50% power, but Command Energy cap is 40% lower.',
     effects: [fx('economy.ce_cap@final', 'mul', -0.4)],
   },

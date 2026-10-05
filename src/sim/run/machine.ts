@@ -1,7 +1,7 @@
 /**
  * Run state machine (design §2): attempts, waves, checkpoints, Push/Patrol, drafts.
  *
- *  between    2 s: +25% max HP heal (none on the first wave of an attempt: HP is already full), shopping
+ *  between    2 s (after a boss clear with a decision pending: up to BOSS_HOLD_TICKS): +25% max HP heal (none on the first wave of an attempt: HP is already full), shopping
  *  combat     spawns scheduled by tick from generateWave(seed, wave, dial, ascension); ends when all
  *             spawns are out and no enemy is alive (→ wave_clear) or the tower dies (→ dead)
  *  wave_clear 1.5 s: first-clear bookkeeping (kills during a not-yet-cleared wave already paid ×3),
@@ -44,6 +44,12 @@ import { ARENA_RADIUS } from '../core/types';
 import { StallWatch } from './stall';                // anti-stall invariant
 
 export const PHASE_TICKS = { between: 2 * TICK_RATE, wave_clear: 1.5 * TICK_RATE, dead: 1.5 * TICK_RATE } as const;
+/**
+ * Boss-clear hold (UX Phase 1): after a boss clear opens a decision (Anomaly draft and/or boon offer) the next wave
+ * does not start while one is pending, for at most this many ticks (15 s of sim time, counted from the clear).
+ * `release_hold` ends it early (the UI's "Later"); resolving every pending decision ends it too.
+ */
+export const BOSS_HOLD_TICKS = 15 * TICK_RATE;
 /** Non-boss Push clears the offline Patrol estimate averages over (one checkpoint cycle: checkpoint+1..+4). */
 export const PATROL_ESTIMATE_CLEARS = 4;
 const CLUMP_MARGIN = 20;
@@ -65,6 +71,8 @@ export class RunMachine {
   lastError: string | null = null;
   /** Anti-stall watcher (run/stall.ts): reset at every wave and attempt start. */
   readonly stall = new StallWatch();
+  /** Boss-clear hold ticks left (BOSS_HOLD_TICKS); 0 = none. Not saved: a reload resumes in `between` without it. */
+  holdTicksLeft = 0;
 
   constructor(w: WorldImpl) { this.w = w; }
 
@@ -75,18 +83,23 @@ export class RunMachine {
    * Begin an attempt at checkpoint+1 with full HP and empty CE. `countAttempt` is false when a save loads or a
    * Trial ends (the run resumes at its checkpoint as a fresh attempt without counting one).
    */
-  startAttempt(countAttempt: boolean): void {
+  startAttempt(countAttempt: boolean, fromSave = false): void {
     const w = this.w, run = w.run, t = w.tower;
+    // A save load is not a death (UX Phase 1): it keeps the attempt's active boons and any undecided offer and
+    // opens no new offer. A save taken while the tower was dead (serialize.ts attemptEnded) loads as that death.
+    if (fromSave && run.phase === 'dead') { fromSave = false; countAttempt = true; }
     // Boons: every attempt starts with no active boons. The pristine first attempt of a Prestige (new game,
     // Prestige, Ascension, Trial start) gets no offer; a save load keeps an offer the save carried (it was never
     // decided, and reloading must not reroll it); anything else (death, restart, Trial end) opens the start offer.
     const pristine = countAttempt && run.attempts === 0;
     const keepOffer = !countAttempt && !!run.boonOffer && run.boonOffer.length > 0;
-    if (keepOffer) { w.build.boons = []; run.boonSpent = []; } else clearBoons(w);
+    if (fromSave) { /* keep build.boons, boonSpent and any offer */ }
+    else if (keepOffer) { w.build.boons = []; run.boonSpent = []; } else clearBoons(w);
     w.clearCombat();
     w.wave = null;
     this.cursor = 0; this.bossIndex = NO_ENTITY; this.clumpIndex = NO_ENTITY;
     this.stall.reset(w, -1);
+    this.holdTicksLeft = 0;
     run.wave = this.firstWave();
     run.attemptTick = 0; run.waveTick = 0;
     run.attemptDamageTaken = {};
@@ -105,7 +118,7 @@ export class RunMachine {
     this.setPhase('between');
     w.emit(Ev.AttemptStart, 'run', run.wave, run.attempts, 0, 0, -1);
     for (const s of w.systems) s.onAttemptStart?.(w);
-    if (!pristine && !keepOffer && run.mode === 'push') openBoonOffer(w, 'start', run.wave);   // Boons: a retry never starts weaker
+    if (!pristine && !keepOffer && !fromSave && run.mode === 'push') openBoonOffer(w, 'start', run.wave);   // Boons: a retry never starts weaker
   }
 
   setPhase(p: WorldImpl['run']['phase']): void { this.w.run.phase = p; this.w.run.phaseTicks = 0; }
@@ -145,10 +158,23 @@ export class RunMachine {
   // -------------------------------------------------------------------------
   // Tick hooks (see Sim.step)
   // -------------------------------------------------------------------------
+  /** A player decision is pending (Anomaly draft or boon offer). */
+  decisionPending(): boolean {
+    const run = this.w.run;
+    return (!!run.pendingDraft && run.pendingDraft.length > 0) || (!!run.boonOffer && run.boonOffer.length > 0);
+  }
+
+  /** `release_hold`: end a boss-clear hold now (the decision stays pending). */
+  releaseHold(): void { this.holdTicksLeft = 0; }
+
   preTick(): void {
     const w = this.w, run = w.run;
+    if (this.holdTicksLeft > 0) {
+      if (!this.decisionPending() || run.mode !== 'push' || (run.phase !== 'wave_clear' && run.phase !== 'between')) this.holdTicksLeft = 0;
+      else this.holdTicksLeft--;
+    }
     switch (run.phase) {
-      case 'between': if (run.phaseTicks >= PHASE_TICKS.between && !this.heldAtGate()) this.startWave(); break;
+      case 'between': if (run.phaseTicks >= PHASE_TICKS.between && this.holdTicksLeft === 0 && !this.heldAtGate()) this.startWave(); break;
       case 'wave_clear':
         if (run.phaseTicks >= PHASE_TICKS.wave_clear) this.advanceWave();
         break;
@@ -275,6 +301,7 @@ export class RunMachine {
       }
     }
     if (wv % 5 === 0) offerForBossClear(w, wv);   // Boons: every boss the tower clears (Push only; see run/boons.ts)
+    if (wv % 5 === 0 && run.mode === 'push' && this.decisionPending()) this.holdTicksLeft = BOSS_HOLD_TICKS;   // boss-clear hold
     for (const s of w.systems) s.onWaveEnd?.(w);
     this.setPhase('wave_clear');
   }
@@ -311,6 +338,7 @@ export class RunMachine {
     const w = this.w, run = w.run;
     if (run.mode === mode) return;
     run.mode = mode;
+    this.holdTicksLeft = 0;
     this.patrolScrap = 0; this.patrolTicks = 0; this.scrapMark = w.scrapEarned;
     const base = this.patrolBase();
     if (mode === 'patrol' && (run.wave % 5 === 0 || run.wave > base + 4) && run.phase !== 'dead') {

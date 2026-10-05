@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { BoonId } from '../../src/sim/core/ids';
 import { BOONS } from '../../src/sim/data/boons';
 import {
-  activeSummary, boonName, boonNeeds, boonView, offerHeading, pickCommand, replacedBy, rerollState, CATEGORY_LABEL,
+  activeSummary, boonName, needRevealed, boonNeeds, boonView, offerHeading, pickCommand, replacedBy, rerollState, CATEGORY_LABEL,
 } from '../../src/ui/boons';
 import { tabBadges, type BadgeState } from '../../src/ui/shell-logic';
 
@@ -24,12 +24,21 @@ describe('boon UI helpers', () => {
 
   it('needs: met by a mounted hardpoint or attuned element; a Fusion needs a ranked fusion with both elements', () => {
     expect(boonNeeds('overcharge', build())).toEqual([]);
-    expect(boonNeeds('rally_drones', build())).toEqual([{ label: 'Drones', have: false }]);
+    expect(boonNeeds('rally_drones', build())).toEqual([{ label: 'Drones', have: false, id: 'drones' }]);
     expect(boonNeeds('rally_drones', build({ hardpoints: ['drones'] }))[0].have).toBe(true);
     expect(boonNeeds('static_field', build({ attunements: ['lightning'] }))[0].have).toBe(true);
-    expect(boonNeeds('encore', build({ attunements: ['fire', 'lightning'] }))[0]).toEqual({ label: 'a Fusion', have: false });
+    expect(boonNeeds('encore', build({ attunements: ['fire', 'lightning'] }))[0]).toEqual({ label: 'a Fusion', have: false, id: 'fusion' });
     expect(boonNeeds('encore', build({ attunements: ['fire', 'lightning'], ranks: { 'fusion.plasma': 1 } }))[0].have).toBe(true);
     expect(boonNeeds('encore', null)[0].have).toBe(true);   // no build known: no warning
+  });
+
+  it('needRevealed: a needs tag names a system only once its category is revealed (progressive reveal)', () => {
+    const f = { elements: true, hardpoints: false, cross: false };
+    expect(needRevealed('fire', f)).toBe(true);
+    expect(needRevealed('drones', f)).toBe(false);
+    expect(needRevealed('fusion', f)).toBe(false);
+    expect(needRevealed('primary', f)).toBe(true);
+    expect(needRevealed('drones', null)).toBe(true);
   });
 
   it('replacedBy: nothing below the cap, else the chosen active boon or the oldest', () => {
@@ -57,7 +66,7 @@ describe('boon UI helpers', () => {
     expect(activeSummary([], 4).count).toBe('0/4');
     const s = activeSummary(['overcharge', 'hunters_gambit'], 4);
     expect(s.count).toBe('2/4');
-    expect(s.label).toContain("Overcharge, Hunter's Gambit");
+    expect(s.label).toContain("Hot Barrel, Hunter's Gambit");
     expect(boonName('boon.volatile_kills')).toBe('Volatile Kills');
   });
 

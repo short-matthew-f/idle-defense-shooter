@@ -56,6 +56,10 @@ export interface UiHost {
   install(): Promise<boolean>;
   /** Save to IndexedDB now (after major actions such as Prestige). */
   saveNow(): void;
+  /** UX Phase 1: a new version is waiting ("Update ready · Restart" chip; window event 'citadel:update-ready' fires once). Optional. */
+  updateReady?(): boolean;
+  /** UX Phase 1: the Restart tap: save, activate the waiting version, reload. Optional. */
+  applyUpdate?(): void;
   /** Touch test and tap calibration. */
   touch: TouchHost;
   /** The arena on screen (null before the first frame). Optional: hosts without an arena (tests) leave it out. */

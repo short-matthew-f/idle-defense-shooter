@@ -35,7 +35,7 @@ export function steerEnemy(world: World, i: number): void {
 
   if (f & (EnemyFlag.Boss | EnemyFlag.Ranged)) {
     const boss = (f & EnemyFlag.Boss) !== 0;
-    const hold = boss ? BOSS_HOLD : e.rushT[i] > 0 ? contactR : RANGED_HOLD;   // anti-stall Rush: no standing off
+    const hold = e.rushT[i] > 0 ? contactR : boss ? BOSS_HOLD : RANGED_HOLD;   // anti-stall Rush / boss step-in: no standing off
     if (d > hold && m > 0) moveToward(world, i, 0, 0, e.speed[i] * m, hold);
     else { e.vx[i] = 0; e.vy[i] = 0; }
     if (e.staggerT[i] === 0 && e.frozenT[i] === 0 && d <= (boss ? BOSS_FIRE_RANGE : RANGED_HOLD + 20) && e.attackT[i] === 0) {

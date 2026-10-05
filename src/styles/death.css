@@ -12,7 +12,8 @@
 /* or folded by the overlay lanes (lane-folded: no room for more right now) */
 .death-card:is(.folded, .lane-folded) { padding-bottom: 6px; }
 .death-card:is(.folded, .lane-folded) > :not(.dc-head) { display: none; }
-.death-card:is(.folded, .lane-folded) .dc-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+/* the headline wraps to two lines before it ellipsizes */
+.death-card:is(.folded, .lane-folded) .dc-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; cursor: pointer; }
 .death-card:is(.folded, .lane-folded) .btn.dc-fold .ico { transform: none; }
 .dc-sub, .dc-lead { margin: 2px 0 6px; font-size: 14px; color: var(--text-dim); }
 .dc-lead { color: var(--text); }
@@ -23,3 +24,8 @@
 .btn.dc-item.affordable, .btn.dc-item.slot { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--bg-3)); }
 .btn.dc-item.slot .ico { color: var(--accent); }
 .dc-more { align-self: flex-end; }
+/* near the Frontier (death.ts frontierLine): the first line under the headline, with a Forecast button */
+.dc-frontier { display: flex; align-items: center; gap: 8px; margin: 4px 0 6px; font-size: 14px; font-weight: 600; color: var(--warn, var(--text)); }
+.dc-frontier > span { flex: 1; min-width: 0; }
+.dc-frontier .btn { flex: none; }
+.dc-stall { color: var(--text); }

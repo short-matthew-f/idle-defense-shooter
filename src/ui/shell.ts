@@ -26,7 +26,7 @@ import { button, h, text, attr, show } from './dom';
 import { icon } from './icons';
 import { BATTLE, NavModel, PANEL_WIDTH, DOCK_GAP, PHONE_ARENA_BIAS, STARTER_CONTENT, RAIL_WIDTH, TABS, battleInsets, readNavState, shellLayout, tabBadges, tabReachable, tabsShown, writeNavState, type NavOp, type NavState, type ShellLayout, type TabId } from './shell-logic';
 import { features as featuresOf, type Features } from './progression';
-import { anyModalOpen } from './modal';
+import { anyModalOpen, handleBackWithModal } from './modal';
 import { prefs, setPref } from './prefs';
 import type { UiHost } from './host';
 import type { StatusStrip } from './hud';
@@ -173,6 +173,12 @@ export class Shell {
 
   private onPop(state: unknown): void {
     if (this.layout === 'desktop') return;
+    // Back with a dialog open closes it (or is ignored when it cannot be dismissed) and leaves the screen underneath alone:
+    // the entry Back just left is pushed again so history and the nav stack stay in step
+    if (handleBackWithModal() !== 'navigate') {
+      try { history.pushState(writeNavState(this.nav.current), ''); } catch { /* history unavailable */ }
+      return;
+    }
     const r = this.nav.pop(readNavState(state));
     this.run(r.ops);
     this.view = r.show;

@@ -7,10 +7,10 @@
  * defaults and sanitizes fields a corrupted or hand-edited save could break the sim with (unknown
  * Trial / frame / anomalies / boons, non-finite numbers, a degenerate PRNG state). Valid saves pass unchanged.
  *
- * Boons: the active list (build.boons) and a pending offer with its queue are saved and restored, but a
- * load resumes at the checkpoint as a new attempt (Sim → RunMachine.startAttempt): a reload is a fresh
- * attempt, so the active boons are cleared. An undecided offer (and its queue) stays pending; with none,
- * the fresh attempt's start offer opens.
+ * Boons: the active list (build.boons, with run.boonSpent) and a pending offer with its queue are saved and
+ * restored. A reload is not a death (UX Phase 1): the load resumes at the checkpoint keeping the attempt's active
+ * boons and any undecided offer, and opens no new offer (RunMachine.startAttempt fromSave). A save taken while
+ * the tower was dead (`attemptEnded`) loads as the death it was: boons cleared, the start offer opens.
  */
 import type { SaveState, RunSave, RunState, BuildState, MetaState } from '../core/types';
 import type { AnomalyId, BoonId } from '../core/ids';
@@ -65,6 +65,8 @@ export function toRunSave(run: RunState, build: BuildState, prngState: [number, 
 /** Boons: the offer bookkeeping a save carries (optional fields; see the header). */
 function boonExtras(run: RunState): Partial<RunSave> {
   const out: Partial<RunSave> = { boonOfferSeq: run.boonOfferSeq, boonsSeenFirst: run.boonsSeenFirst };
+  if (run.boonSpent.length) out.boonSpent = [...run.boonSpent];
+  if (run.phase === 'dead') out.attemptEnded = true;
   if (run.boonOffer && run.boonOffer.length) Object.assign(out, { boonOffer: [...run.boonOffer], boonOfferWave: run.boonOfferWave, boonOfferKind: run.boonOfferKind, boonRerolls: run.boonRerolls });
   if (run.boonQueue.length) out.boonQueue = [...run.boonQueue];
   return out;
@@ -91,7 +93,7 @@ export function fromRunSave(s: RunSave): { run: RunState; build: BuildState; prn
   Object.assign(run, runExtras(s));   // WP8: progression extras
   if (Array.isArray(s.pendingDraft) && s.pendingDraft.length) { run.pendingDraft = [...s.pendingDraft]; run.draftWave = typeof s.draftWave === 'number' ? s.draftWave : run.checkpoint; }
   if (Array.isArray(s.draftQueue)) run.draftQueue = s.draftQueue.filter((v): v is number => typeof v === 'number' && v > 0 && v % 10 === 0);
-  // Boons (restored as saved; the load's startAttempt then clears them for the fresh attempt)
+  // Boons (restored as saved; a reload keeps them, see the header)
   if (Array.isArray(s.boonOffer) && s.boonOffer.length) {
     run.boonOffer = [...s.boonOffer]; run.boonOfferWave = typeof s.boonOfferWave === 'number' ? s.boonOfferWave : run.checkpoint + 1;
     run.boonOfferKind = s.boonOfferKind === 'boss' ? 'boss' : 'start'; run.boonRerolls = typeof s.boonRerolls === 'number' ? s.boonRerolls : 0;
@@ -99,6 +101,8 @@ export function fromRunSave(s: RunSave): { run: RunState; build: BuildState; prn
   if (Array.isArray(s.boonQueue)) run.boonQueue = [...s.boonQueue];
   run.boonOfferSeq = typeof s.boonOfferSeq === 'number' ? s.boonOfferSeq : 0;
   run.boonsSeenFirst = s.boonsSeenFirst === true;
+  if (Array.isArray(s.boonSpent)) run.boonSpent = [...s.boonSpent];
+  if (s.attemptEnded === true) run.phase = 'dead';   // startAttempt(fromSave) reads it: the save was taken during a death
   const qm = sanitizeQuartermasterRun(s.quartermaster);   // Quartermaster bank: a reload never loses it
   if (qm) run.quartermaster = qm;
   const build = clone(s.build);
@@ -217,6 +221,8 @@ function sanitizeRun(r: RunSave): void {
   for (const k of ['boonOfferWave', 'boonOfferSeq', 'boonRerolls'] as const) if (r[k] !== undefined) r[k] = Math.max(0, Math.floor(finiteOr(r[k], 0)));
   if (r.boonOfferKind !== undefined && r.boonOfferKind !== 'start' && r.boonOfferKind !== 'boss') r.boonOfferKind = 'start';
   if (r.boonsSeenFirst !== undefined && typeof r.boonsSeenFirst !== 'boolean') r.boonsSeenFirst = !!r.boonsSeenFirst;
+  if (r.boonSpent !== undefined) r.boonSpent = Array.isArray(r.boonSpent) ? r.boonSpent.filter((v, i, a) => knownBoon(v) && a.indexOf(v) === i) : [];
+  if (r.attemptEnded !== undefined && r.attemptEnded !== true) delete r.attemptEnded;
   b.anomalySockets = Math.max(0, Math.floor(finiteOr(b.anomalySockets, 3)));
   if (r.quartermaster !== undefined) { const q = sanitizeQuartermasterRun(r.quartermaster); if (q) r.quartermaster = q; else delete r.quartermaster; }
 }

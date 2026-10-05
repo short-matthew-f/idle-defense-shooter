@@ -50,13 +50,15 @@ export interface Prefs {
   hintsDone: string[];
   /** The hint bookkeeping was initialised on this device (an existing save starts with its passed stages retired). */
   hintsInit: boolean;
+  /** The first Core earned on this device got its one-line explainer toast (feed.ts). */
+  coreExplained: boolean;
 }
 
 const KEY = 'citadel.prefs.v1';
 const DEFAULTS: Prefs = { onboarded: false, bloom: true, affordableFirst: false, panelOpen: true, shopCategory: 'chassis', shopTree: 'ballistics', activeTrial: null, buyCoach: 0, buyQty: 1, suggestExpanded: false,
   soundMaster: 0.71, soundSfx: 0.8, soundMusic: 0.55, soundMuted: false, musicOn: true, touchCal: null,
   unlockAll: false, coachSeen: [], tabsVisited: [], revealInit: false, contentSeen: [], contentInit: false, echoGuide: false,
-  pointerHints: true, hintsDone: [], hintsInit: false };
+  pointerHints: true, hintsDone: [], hintsInit: false, coreExplained: false };
 
 let cache: Prefs | null = null;
 

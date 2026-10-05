@@ -12,14 +12,21 @@ import { ANOMALY_BY_ID, TREE_LABEL } from './content';
 import { openModal, type ModalHandle } from './modal';
 import { titleCase } from './format';
 import type { UiCtx } from './ctx';
+import type { Features } from './progression';
 import { walletChip } from './wallet';
+import { needRevealed } from './boons';
 
 export const RARITY_LABEL: Record<AnomalyRarity, string> = { common: 'Common', rare: 'Rare', paradox: 'Paradox', cursed: 'Cursed' };
+
+/** The features the cards render against (DraftModal sets it; null: everything, e.g. the Build tab with Unlock everything). */
+let ctxFeatures: Pick<Features, 'elements' | 'hardpoints' | 'cross'> | null = null;
+export function setDraftFeatures(f: Pick<Features, 'elements' | 'hardpoints' | 'cross'> | null): void { ctxFeatures = f; }
 
 export function anomalyCard(id: AnomalyId, ui: UiState | null, extra?: HTMLElement): HTMLElement {
   const a = ANOMALY_BY_ID.get(id);
   const rarity = a?.rarity ?? 'common';
-  const needs = (a?.needs ?? []).map((n) => {
+  const f = ctxFeatures;
+  const needs = (a?.needs ?? []).filter((n) => needRevealed(n, f)).map((n) => {
     // Reachability: a Frame's free mount or a Borrowed Blade counts too (ui.extraSystems)
     const have = !ui || n === 'primary' || ui.build.hardpoints.includes(n as never) || ui.build.attunements.includes(n as never) || (ui.extraSystems ?? []).some((x) => x.system === n);
     return h('span', { class: `tag${have ? '' : ' missing'}`, text: `${have ? '' : 'Needs '}${n === 'primary' ? 'Primary' : TREE_LABEL[n as keyof typeof TREE_LABEL] ?? titleCase(n)}`, title: have ? 'Your build has this' : 'Your build lacks this system' });
@@ -39,21 +46,44 @@ export class DraftModal {
   private laterKey = '';
   private offers = '';
   private readonly note = h('p', { class: 'draft-timer', text: 'The run keeps going while you decide. Nothing is picked for you: set it aside with Later and find it on the Build tab.' });
+  /** Held by the attention plan (attention.ts): the dialog waits (a death card, the boss-clear beat, a boss fight). */
+  private held = false;
+  private holdEl: HTMLElement | null = null;
   constructor(private readonly ctx: UiCtx) {}
 
   update(ui: UiState): void {
     const d = ui.run.pendingDraft;
-    const key = d ? d.join(',') + `|${ui.run.cores}|${ui.build.anomalies.join(',')}` : '';
+    const f = this.ctx.features();
+    setDraftFeatures(f);
+    const hold = (ui.run.holdTicksLeft ?? 0) > 0;
+    const key = d ? d.join(',') + `|${ui.run.cores}|${ui.build.anomalies.join(',')}|${f.cores}` : '';
     const offers = d ? d.join(',') : '';
     if (offers !== this.offers) { this.offers = offers; this.laterKey = ''; }   // a new draft always shows itself
     const later = !!offers && this.laterKey === offers;
-    if (key === this.key && (!!this.modal?.open === (!!d && !later))) return;
+    const want = !!d && !later && !this.held;
+    if (this.holdEl) this.holdEl.hidden = !hold;
+    if (key === this.key && (!!this.modal?.open === want)) return;
     this.key = key;
     this.close();
-    if (d && d.length && !later) this.show(ui, d);
+    if (d && d.length && want) this.show(ui, d);
   }
 
   get pending(): boolean { return !!this.offers; }
+  /** Pending and not set aside with "Later": the attention plan presents it next. */
+  get waiting(): boolean { return !!this.offers && this.laterKey !== this.offers; }
+
+  /** The attention plan holds the dialog (it stays pending; it opens when released). */
+  setHeld(on: boolean): void {
+    if (on === this.held) return;
+    this.held = on;
+    const ui = this.ctx.state();
+    if (ui) this.update(ui);
+  }
+
+  /** "Later" or Continue: the sim's boss-clear hold ends (the draft stays pending). */
+  private releaseHold(): void {
+    if ((this.ctx.state()?.run.holdTicksLeft ?? 0) > 0) this.ctx.host.send({ type: 'release_hold' });
+  }
 
   /** Bring a set-aside draft back (Build screen, tab badge). */
   open(): void {
@@ -75,15 +105,22 @@ export class DraftModal {
     for (const id of offers) {
       cards.appendChild(anomalyCard(id, ui, button('Pick', () => (full ? this.replace(id) : this.pick(id)), { class: 'btn primary' })));
     }
-    const skip = button(['Skip', h('span', { class: 'price cores' }, '+1', icon('cores', 'ico tiny'))], () => this.ctx.host.send({ type: 'pick_anomaly', anomaly: null }), { class: 'btn', label: 'Skip: gain 1 Core' });
-    const later = button('Later', () => { this.laterKey = this.offers; this.close(); }, { class: 'btn ghost', title: 'Decide later from the Build screen; the offer waits for you' });
+    // progressive reveal: no Cores (the Skip bonus, Reroll, the wallet) before the player has been shown them
+    const cores = this.ctx.features().cores;
+    const skip = button(['Skip', cores ? h('span', { class: 'price cores' }, '+1', icon('cores', 'ico tiny')) : null], () => this.ctx.host.send({ type: 'pick_anomaly', anomaly: null }), { class: 'btn', label: cores ? 'Skip: gain 1 Core' : 'Skip: no Anomaly this time' });
+    const later = button('Later', () => { this.laterKey = this.offers; this.close(); this.releaseHold(); }, { class: 'btn ghost', title: 'Decide later from the Build screen; the offer waits for you' });
     const reroll = button(['Reroll', h('span', { class: 'price cores' }, '1', icon('cores', 'ico tiny'))], () => this.ctx.host.send({ type: 'reroll_anomaly' }), { class: 'btn', disabled: ui.run.cores < 1, label: 'Reroll for 1 Core' });
     if (ui.run.cores < 1) reroll.title = 'Needs 1 Core';
-    const body = h('div', { class: 'draft' },
+    reroll.hidden = !cores;
+    const hold = h('p', { class: 'attn-hold' }, h('span', { text: 'Next wave holds while you choose' }),
+      button('Continue', () => { this.laterKey = this.offers; this.close(); this.releaseHold(); }, { class: 'btn small ghost', label: 'Continue: start the next wave now (the draft waits on the Build tab)' }));
+    hold.hidden = (ui.run.holdTicksLeft ?? 0) <= 0;
+    this.holdEl = hold;
+    const body = h('div', { class: 'draft' }, hold,
       h('p', { class: 'dim', text: `Anomalies bend the rules for this Prestige. Sockets: ${ui.build.anomalies.length}/${ui.build.anomalySockets}${full ? ' (full: picking replaces one)' : ''}.` }),
       cards, this.note);
-    this.modal = openModal({ title: 'Anomaly draft', body, footer: h('div', { class: 'draft-foot' }, later, reroll, skip), variant: 'wide', className: 'draft-modal', wallet: walletChip(['cores'], ui),
-      onClose: () => { if (this.modal) { this.modal = null; this.laterKey = this.offers; } } });
+    this.modal = openModal({ title: 'Anomaly draft', body, footer: h('div', { class: 'draft-foot' }, later, reroll, skip), variant: 'wide', className: 'draft-modal', wallet: cores ? walletChip(['cores'], ui) : undefined,
+      onClose: () => { if (this.modal) { this.modal = null; this.laterKey = this.offers; this.releaseHold(); } } });
   }
 
   private pick(id: AnomalyId, replace?: number): void {

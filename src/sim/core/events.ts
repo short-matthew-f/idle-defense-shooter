@@ -285,6 +285,7 @@ export function chainSentence(chain: readonly SimEvent[]): string {
     if (launch) part = i === 0 ? `The ${noun} launched` : `which launched the ${noun}`;
     else if (isTrigger(e.type)) part = i === 0 ? `The ${noun} triggered` : `which triggered the ${noun}`;
     else if (e.type === Ev.SalvageDrop) part = i === 0 ? 'A salvage crate dropped' : 'which dropped a salvage crate';   // Active edge
+    else if (e.type === Ev.Rush && e.src === 'boss.step_in') part = `${i === 0 ? 'The' : 'which meant the'} boss took no damage for ${Math.round(e.b)} s, so it stepped in toward the tower`;   // boss-wave stall
     else if (e.type === Ev.Rush) part = `${i === 0 ? 'The' : 'which meant the'} wave made no progress for ${Math.round(e.b)} s, so the stragglers rushed the tower`;   // anti-stall
     else if (i === 0) part = `The ${noun} ${verb[0]}${tail}`;
     else if (noun === prevNoun) part = `which ${verb[0]}${tail}`;

@@ -1,7 +1,10 @@
 /**
  * Game glue (WP7): loads the save, starts the SimClient worker, paces it from the rAF loop,
  * routes snapshots to the renderer and UiState to the DOM UI (≤ 10 Hz), wires taps / hold-aim,
- * autosaves (every 30 s, at checkpoints, when hidden) and credits offline time.
+ * autosaves (every 30 s, at checkpoints, when hidden, and ~2 s after any purchase or choice; a synchronous backup
+ * snapshot on pagehide / hidden: app/autosave.ts, app/storage.ts) and credits offline time. A new version never
+ * reloads the page under the player: it waits for a Restart tap (Game.applyUpdate / UiHost.applyUpdate) or the next
+ * cold start, and installs on its own only while the page is hidden and nothing is open or pending.
  *
  * Testing aid: `?fast` (or `?fast=N`, 1–32, default 8) multiplies the tick budget per frame by N so
  * browser playtests under a slow software GPU (SwiftShader) reach later waves quickly. The sim
@@ -17,7 +20,8 @@ import { TOWER_RADIUS } from '@sim/core/types';
 import { FieldOverlay } from './overlay';
 import { parseCal } from './touch-cal';
 import type { Command } from '@sim/core/types';
-import { clearSave, exportToString, importFromString, loadSave, parkSave, storeSave } from './storage';
+import { clearBackup, clearSave, exportToString, importFromString, loadSave, parkSave, storeSave, writeBackup } from './storage';
+import { Debouncer, SAVE_DEBOUNCE_MS, savesAfter, updateBlocker } from './autosave';
 import { canInstall, initInstallPrompt, promptInstall, onUpdateReady } from './pwa';
 import { GameUi } from '@ui/index';
 import { createGameAudio, type GameAudio } from '../audio/index';
@@ -29,7 +33,6 @@ import type { RenderApp } from './main';
 const AUTOSAVE_MS = 30_000;
 const UI_MIN_INTERVAL_MS = 100;
 const AIM_INTERVAL_MS = 50;
-const UPDATE_APPLY_MAX_WAIT_MS = 30_000;
 
 export interface Game {
   client: SimClient; ui: GameUi; readonly paused: boolean; readonly ready: boolean; latestUi(): UiState | null;
@@ -41,7 +44,12 @@ export interface Game {
   setFast(n: number): void;
   /** Audio pass: the sound runtime (levels, mute, diagnostics). */
   readonly audio: GameAudio;
+  /** UX Phase 1: a new version is installed and waiting (show "Update ready · Restart"). */
+  readonly updateReady: boolean;
+  /** Save, then activate the waiting version and reload (the Restart tap). No-op without one. */
+  applyUpdate(): Promise<void>;
 }
+
 
 /** `?fast` / `?fast=N` query param → tick-budget multiplier (1 when absent). */
 export function fastFactor(search: string): number {
@@ -62,6 +70,10 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
   let resetting = false;
   let latestUi: UiState | null = null;
   let lastSave: SaveState | null = save;
+  /** The latest save stored, as an export string: written synchronously to the backup on pagehide / hidden. */
+  let lastSaveText: string | null = null;
+  let updateApply: (() => Promise<void>) | null = null;
+  let applying = false;
   let sector = -1;
   let hiddenAt = 0;
   const pacer = new TickPacer();
@@ -107,8 +119,10 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
     setCalibration: (c) => { app.input.calibration = c; },
   };
 
+  // Never lose a purchase: a save ~2 s after the last purchase / choice (a burst saves once)
+  const saveSoon = new Debouncer(() => { if (ready && !resetting) client.requestSave(); }, SAVE_DEBOUNCE_MS);
   const host: UiHost = {
-    send: (cmd) => client.send(cmd),
+    send: (cmd) => { client.send(cmd); if (ready && savesAfter(cmd)) saveSoon.poke(); },
     inspect: (i, g) => client.inspect(i, g),
     setPaused: (p) => { paused = p; app.frozen = p; pacer.reset(); if (p && aiming) endAim(); audio.director.setPaused(p); },
     isPaused: () => paused,
@@ -119,11 +133,14 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
     importSave: async (text) => {
       const s = importFromString(text);
       resetting = true;
+      saveSoon.cancel();
+      clearBackup();
       await storeSave(s);
       location.reload();
     },
     hardReset: async () => {
       resetting = true;
+      saveSoon.cancel();
       await clearSave();
       resetPrefs();
       location.reload();
@@ -133,6 +150,8 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
     canInstall,
     install: promptInstall,
     saveNow: () => { if (ready) client.requestSave(); },
+    updateReady: () => updateApply !== null,
+    applyUpdate: () => { void applyUpdate(); },
     touch,
     arena: () => {
       const c = app.camera, r = app.canvas.getBoundingClientRect();
@@ -179,6 +198,7 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
       if (resetting) return;
       s.savedAtMs = Date.now();
       lastSave = s;
+      try { lastSaveText = exportToString(s); } catch { /* keep the previous backup text */ }
       storeSave(s).catch((e) => console.warn('[save] store failed:', e));
     };
     let lastErr = '';
@@ -252,11 +272,19 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
     client.send({ type: 'offline_return', elapsedSeconds: secs });
     ui.expectOffline(secs, est);
   }
+  /** Hidden / pagehide: the synchronous backup of the latest stored save, then an async fresh save. */
+  function onLeave(): void {
+    if (resetting) return;
+    if (lastSaveText) writeBackup(lastSaveText);
+    saveSoon.cancel();
+    if (ready) client.requestSave();
+  }
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       hiddenAt = Date.now();
-      if (ready) client.requestSave();
+      onLeave();
       if (aiming) endAim();
+      maybeApplyWhileHidden();
     } else {
       pacer.reset();
       const secs = hiddenAt ? offlineSecondsOnReturn(hiddenAt, Date.now()) : 0;
@@ -264,23 +292,42 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
       if (secs > 0 && ready) creditOffline(secs);
     }
   });
-  window.addEventListener('pagehide', () => { if (ready) client.requestSave(); });
-  // New version installed: reload at a quiet moment (between waves, or after 30 s at most), after saving.
+  window.addEventListener('pagehide', onLeave);
+  // New version installed (UX Phase 1, A-10): never reload under the player. It waits for the Restart tap
+  // (applyUpdate; the UI shows "Update ready · Restart" from UiHost.updateReady / the 'citadel:update-ready' event)
+  // or the next cold start; it installs by itself only while the page is hidden and nothing is open or pending.
+  async function applyUpdate(): Promise<void> {
+    const apply = updateApply;
+    if (!apply || applying) return;
+    applying = true;
+    saveSoon.cancel();
+    try {
+      if (ready) { const s = await client.requestSave(); s.savedAtMs = Date.now(); try { writeBackup(exportToString(s)); } catch { /* best effort */ } await storeSave(s); }
+    } catch (e) { console.warn('[update] save before reload failed:', e); }
+    await apply();
+  }
+  function currentBlocker(): string | null {
+    const u = latestUi;
+    const active = document.activeElement;
+    const input = !!active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || (active as HTMLElement).isContentEditable);
+    let sub = false;
+    try { sub = !!ui.walletView().sub; } catch { /* UI not ready */ }
+    return updateBlocker({
+      phase: u?.run.phase, isBoss: u?.wave.isBoss, input, sub, wave: u?.run.wave, checkpoint: u?.run.checkpoint,
+      decision: !!(u?.run.boonOffer?.length || u?.run.pendingDraft?.length),
+      dialog: !!document.querySelector('[role="dialog"][aria-modal="true"]'),
+    });
+  }
+  function maybeApplyWhileHidden(): void {
+    if (updateApply && document.hidden && ready && currentBlocker() === null) void applyUpdate();
+  }
   onUpdateReady((apply) => {
-    ui.toast('A new version is ready; it installs between waves.', 'info');
-    const started = Date.now();
-    let applying = false;
-    const tryApply = (): void => {
-      if (applying) return;
-      const phase = latestUi?.run.phase;
-      const quiet = !ready || phase === 'between' || phase === 'dead' || phase === 'wave_clear';
-      if (!quiet && Date.now() - started < UPDATE_APPLY_MAX_WAIT_MS) { window.setTimeout(tryApply, 1000); return; }
-      applying = true;
-      const go = (): void => { void apply(); };
-      if (ready) client.requestSave().then((s) => { s.savedAtMs = Date.now(); return storeSave(s); }).then(go, go);
-      else go();
-    };
-    tryApply();
+    const first = updateApply === null;
+    updateApply = apply;
+    if (!first) return;
+    ui.toast('Update ready: it installs when you restart the app.', 'info');
+    window.dispatchEvent(new CustomEvent('citadel:update-ready'));
+    maybeApplyWhileHidden();
   });
   window.setInterval(() => { if (ready && !document.hidden) client.requestSave(); }, AUTOSAVE_MS);
 
@@ -361,5 +408,7 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
     get fast() { return fast; },
     setFast: (n: number) => { fast = Math.max(1, Math.min(32, Math.floor(n) || 1)); pacer.reset(); },
     audio,
+    get updateReady() { return updateApply !== null; },
+    applyUpdate,
   };
 }

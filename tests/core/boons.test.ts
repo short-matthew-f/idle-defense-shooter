@@ -133,7 +133,7 @@ describe('boon offers', () => {
     expect(fitting / total).toBeGreaterThan(2 / 36 * 1.5);
   });
 
-  it('a boss clear offers boons (kind boss); another boss while one is pending queues (cap 3, oldest dropped)', () => {
+  it('a boss clear offers boons (kind boss); another boss while one is pending merges into it (no second offer)', () => {
     const sim = strongSim(2);
     const run = sim.world.run;
     runUntil(sim, () => run.deepestCleared >= 5, 12 * MIN);
@@ -141,13 +141,20 @@ describe('boon offers', () => {
     expect(run.boonOfferKind).toBe('boss');
     expect(run.boonOfferWave).toBe(5);
     const first = [...offer(sim)!];
+    const seq = run.boonOfferSeq;
     for (const wv of [10, 15, 20, 25]) offerForBossClear(sim.world, wv);
-    expect(run.boonQueue).toEqual([15, 20, 25]);
-    expect(run.boonQueue.length).toBe(BOON_QUEUE_CAP);
-    expect(offer(sim)).toEqual(first);   // the pending one is untouched
+    expect(run.boonQueue).toEqual([]);
+    expect(offer(sim)).toEqual(first);   // the pending one is untouched (never auto-picked)
+    expect(run.boonOfferSeq).toBe(seq);
+    expect(cmd(sim, { type: 'decline_boon' })).toBeNull();
+    expect(offer(sim)).toBeNull();       // no second offer in a row
+    // a queue an older save carried still drains, oldest first (cap BOON_QUEUE_CAP)
+    run.boonQueue = [15, 20];
+    expect(run.boonQueue.length).toBeLessThanOrEqual(BOON_QUEUE_CAP);
+    offerForBossClear(sim.world, 30);
     expect(cmd(sim, { type: 'decline_boon' })).toBeNull();
     expect(run.boonOfferWave).toBe(15);
-    expect(run.boonQueue).toEqual([20, 25]);
+    expect(run.boonQueue).toEqual([20]);
   });
 
   it('never auto-picks: an offer waits through 10 sim minutes of play', () => {
@@ -326,12 +333,13 @@ describe('boon lifetime', () => {
     expect(offer(sim)).not.toEqual(parkedOffer);
   });
 
-  it('save/load: the pending offer survives, the active boons do not (a reload is a fresh attempt)', () => {
+  it('save/load: a reload is not a death; the active boons, used-up boons and the pending offer survive, no new offer opens', () => {
     const sim = new Sim(null, 12);
     cmd(sim, { type: 'restart_checkpoint' });
     cmd(sim, { type: 'pick_boon', boon: offer(sim)![0] });
     offerForBossClear(sim.world, 5);
-    offerForBossClear(sim.world, 10);
+    sim.world.run.boonQueue = [10];   // as an older save could carry
+    sim.world.run.boonSpent = ['second_chance'];
     sim.world.run.cores = 3;
     cmd(sim, { type: 'reroll_boon' });
     const pending = [...offer(sim)!];
@@ -342,14 +350,30 @@ describe('boon lifetime', () => {
     expect(back.world.run.boonOffer).toEqual(pending);
     expect(back.world.run.boonRerolls).toBe(1);
     expect(back.world.run.boonQueue).toEqual([10]);
-    expect(back.world.build.boons).toEqual([]);
-    expect(back.world.stats.hasBoon(save.run.build.boons[0])).toBe(false);
-    // a save with no pending offer loads into the fresh attempt's start offer
+    expect(back.world.build.boons).toEqual(save.run.build.boons);
+    expect(back.world.stats.hasBoon(save.run.build.boons[0])).toBe(true);
+    expect(back.world.run.boonSpent).toEqual(['second_chance']);
+    // a save with no pending offer loads with no offer (a reload never grants or rerolls one)
     cmd(back, { type: 'decline_boon' }); cmd(back, { type: 'decline_boon' });
     expect(back.world.run.boonOffer).toBeNull();
     const again = Sim.load(JSON.parse(JSON.stringify(back.save())));
-    expect(again.world.run.boonOffer?.length).toBe(3);
-    expect(again.world.run.boonOfferKind).toBe('start');
+    expect(again.world.run.boonOffer).toBeNull();
+    expect(again.world.build.boons).toEqual(save.run.build.boons);
+    expect(again.world.run.attempts).toBe(back.world.run.attempts);
+  });
+
+  it('save/load: a save taken while the tower was dead loads as that death (boons cleared, start offer)', () => {
+    const sim = new Sim(null, 15);
+    cmd(sim, { type: 'restart_checkpoint' });
+    cmd(sim, { type: 'pick_boon', boon: offer(sim)![0] });
+    sim.world.run.phase = 'dead';
+    const save = JSON.parse(JSON.stringify(sim.save()));
+    expect(save.run.attemptEnded).toBe(true);
+    const back = Sim.load(save);
+    expect(back.world.build.boons).toEqual([]);
+    expect(back.world.run.boonOffer?.length).toBe(3);
+    expect(back.world.run.boonOfferKind).toBe('start');
+    expect(back.world.run.attempts).toBe(sim.world.run.attempts + 1);
   });
 
   it('load sanitizes junk boon fields', () => {
@@ -365,7 +389,7 @@ describe('boon lifetime', () => {
     expect(back.world.run.boonQueue).toEqual([5, 10]);
     expect(back.world.run.boonRerolls).toBe(0);
     expect(back.world.run.boonOfferKind).toBe('start');
-    expect(back.world.build.boons).toEqual([]);
+    expect(back.world.build.boons).toEqual(['overcharge']);   // junk dropped, the real one kept (a reload keeps boons)
     delete save.run.boonOffer; delete save.run.build.boons;
     expect(() => Sim.load(save)).not.toThrow();
   });

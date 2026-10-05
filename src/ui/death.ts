@@ -17,6 +17,23 @@ import { damageSourceName, deathHeadline, killerName, suggestPurchases, topDamag
 import { BOSS_BY_ID, TREE_LABEL } from './content';
 import type { UiCtx } from './ctx';
 import { STARTER_IDS, contentPool, poolShop } from './progression';
+import { frontierNear } from './forecast';
+
+/**
+ * The stalemate cause (sim agent S, Phase 1 item 7): the boss was not taking damage. Read from the TowerDeath payload or
+ * the wave state when the sim provides it (optional: older sims do not).
+ */
+export function stalemateOf(data: SimEvent['data'] | undefined, ui: Pick<UiState, 'wave'>): boolean {
+  const d = data as { stalled?: unknown; stalemate?: unknown } | undefined;
+  const w = ui.wave as { stalled?: unknown };
+  return !!(d?.stalled || d?.stalemate || w.stalled);
+}
+
+/** The death card's Frontier line (the deepest wave cleared is within 2 of it), or null. */
+export function frontierLine(ui: Pick<UiState, 'run' | 'forecast'>): string | null {
+  const f = ui.forecast?.frontier;
+  return frontierNear(ui) && f !== undefined ? `Past wave ${f} enemies harden fast. A Prestige pays here.` : null;
+}
 
 /** The card folds to its headline after this long without a touch (ms). */
 export const DEATH_SHRINK_MS = 10000;
@@ -28,6 +45,17 @@ export class DeathCard {
   private readonly cause = h('p', { class: 'dc-sub dc-cause' });
   private bossId: string | null = null;
   private readonly lead = h('p', { class: 'dc-lead' });
+  /** The Frontier line (and its Forecast button), first under the headline near the Frontier. */
+  private readonly frontierText = h('span');
+  private readonly frontier: HTMLElement;
+  /** "The Broodheart wasn't taking damage" and what to do about it (the sim's stalemate cause). */
+  private readonly stall = h('p', { class: 'dc-sub dc-stall' });
+  private stalled = false;
+  private stallName = 'boss';
+  /** performance.now() when the card last opened (the attention plan's death-first window, attention.ts). */
+  shownAt = 0;
+  /** The attention plan gave the card the lane (death first): the lanes place it whole, in the roomiest slot. */
+  first = false;
   private readonly list = h('div', { class: 'dc-list' });
   private key = '';
   private bought = new Set<string>();
@@ -43,8 +71,12 @@ export class DeathCard {
   constructor(private readonly ctx: UiCtx, private readonly rate: () => number) {
     const close = button(icon('close'), () => this.hide(), { class: 'btn icon-btn ghost dc-close', label: 'Dismiss' });
     this.fold = button(icon('down'), () => (this.folded || this.el.classList.contains('lane-folded') ? this.unfold() : this.setFolded(true)), { class: 'btn icon-btn ghost dc-fold', label: 'Show what could help' });
+    this.frontier = h('div', { class: 'dc-frontier' }, icon('prestige', 'ico tiny'), this.frontierText,
+      button('Forecast', () => { this.ctx.open('forecast'); this.setFolded(true); }, { class: 'btn small ghost dc-forecast' }));
+    this.frontier.hidden = true;
+    this.stall.hidden = true;
     this.el = h('section', { class: 'death-card', attrs: { role: 'status', 'aria-live': 'polite', 'aria-label': 'Tower destroyed' } },
-      h('div', { class: 'dc-head' }, icon('skull', 'ico'), this.title, this.fold, close), this.sub, this.cause, this.lead, this.list);
+      h('div', { class: 'dc-head' }, icon('skull', 'ico'), this.title, this.fold, close), this.frontier, this.stall, this.sub, this.cause, this.lead, this.list);
     this.el.hidden = true;
     this.title.addEventListener('click', () => { if (this.folded || this.el.classList.contains('lane-folded')) this.unfold(); });
     // reading or using it keeps it open
@@ -86,6 +118,9 @@ export class DeathCard {
     text(this.title, hd.title);
     text(this.sub, hd.sub);
     this.showCause(ui);
+    this.stalled = stalemateOf(data, ui);
+    this.stallName = (boss ?? 'boss').replace(/^The /, '');
+    this.shownAt = performance.now();
     this.bought.clear();
     this.key = '';
     this.el.hidden = false;
@@ -108,6 +143,13 @@ export class DeathCard {
     if (ui.run.phase === 'dead') this.showCause(ui);   // the ledger resets when the next attempt starts
     // progressive reveal: suggest only what the player can see (stage 0: the three starter stats; no slot before its category)
     const f = this.ctx.features();
+    // near the Frontier: say why the wall is here and where to look (prestige.ts / forecast.ts)
+    const fl = f.prestigeTab ? frontierLine(ui) : null;
+    text(this.frontierText, fl ?? '');
+    this.frontier.hidden = !fl;
+    (this.frontier.querySelector('.dc-forecast') as HTMLElement).hidden = !f.forecast;
+    this.stall.hidden = !this.stalled;
+    text(this.stall, `The ${this.stallName} wasn't taking damage. Buy Damage${f.abilities ? ', or slot its Counter ability' : ''}.`);
     // …and only cross-system buys whose parts this Prestige offers (progression.ts content pool)
     const pool = contentPool(ui, { unlockAll: f.unlockAll });
     const offered = poolShop(ui.shop, pool);

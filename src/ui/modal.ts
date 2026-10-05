@@ -37,6 +37,19 @@ export function mountModalLayer(root: HTMLElement): void {
 }
 
 export function anyModalOpen(): boolean { return stack.length > 0; }
+/**
+ * Back (history pop) with dialogs open: a dismissable top dialog closes, a non-dismissable one stays; either way the
+ * screen underneath must not change. Pure rule + the action.
+ */
+export function backOnModal(open: boolean, dismissable: boolean): 'navigate' | 'close' | 'stay' {
+  return !open ? 'navigate' : dismissable ? 'close' : 'stay';
+}
+export function handleBackWithModal(): 'navigate' | 'close' | 'stay' {
+  const top = stack[stack.length - 1];
+  const r = backOnModal(!!top, top?.opts.dismissable !== false);
+  if (r === 'close') top.handle.close();
+  return r;
+}
 export function topModalClass(): string | undefined { return stack[stack.length - 1]?.opts.className; }
 
 export function openModal(opts: ModalOptions): ModalHandle {

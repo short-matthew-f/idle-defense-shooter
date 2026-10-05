@@ -17,7 +17,8 @@ import type { BoonCategory, BoonId, BoonRarity } from '@sim/core/ids';
 import type { BuildState, Command, UiState } from '@sim/core/types';
 import { button, h, show, text, attr, clear } from './dom';
 import { boonCategoryIcon, icon, rarityIcon } from './icons';
-import { BOON_BY_ID, FUSIONS, TREE_LABEL } from './content';
+import { BOON_BY_ID, ELEMENTS, FUSIONS, HARDPOINTS, TREE_LABEL } from './content';
+import type { Features } from './progression';
 import { openModal, type ModalHandle } from './modal';
 import { titleCase } from './format';
 import type { UiCtx } from './ctx';
@@ -25,7 +26,7 @@ import type { UiCtx } from './ctx';
 export const CATEGORY_LABEL: Record<BoonCategory, string> = { surge: 'Surge', twist: 'Twist', trade: 'Trade', wild: 'Wild card' };
 export const RARITY_LABEL: Record<BoonRarity, string> = { common: 'Common', rare: 'Rare' };
 
-export interface BoonNeed { label: string; have: boolean }
+export interface BoonNeed { label: string; have: boolean; /** the raw need id ('fire', 'ordnance', 'fusion', …) */ id?: string }
 export interface BoonView {
   id: BoonId; name: string; category: BoonCategory; categoryLabel: string; rarity: BoonRarity; rarityLabel: string;
   short: string; desc: string; needs: BoonNeed[];
@@ -42,11 +43,23 @@ export function boonNeeds(id: BoonId, build: NeedsBuild | null): BoonNeed[] {
   return (d?.needs ?? []).map((n) => {
     if (n === 'fusion') {
       const have = !build || FUSIONS.some((f) => (build.ranks[f.node.id] | 0) > 0 && f.elements.every((e) => build.attunements.includes(e)));
-      return { label: 'a Fusion', have };
+      return { label: 'a Fusion', have, id: n };
     }
     const have = !build || build.hardpoints.includes(n as never) || build.attunements.includes(n as never) || !!build.extra?.includes(n);
-    return { label: TREE_LABEL[n as keyof typeof TREE_LABEL] ?? titleCase(n), have };
+    return { label: TREE_LABEL[n as keyof typeof TREE_LABEL] ?? titleCase(n), have, id: n };
   });
+}
+
+/**
+ * Progressive reveal for text the offer renders: may a "needs" tag name this system yet? Elements need `elements`,
+ * hardpoints `hardpoints`, a Fusion `cross`; anything else (e.g. 'primary') is always shown. No features: everything.
+ */
+export function needRevealed(id: string | undefined, f: Pick<Features, 'elements' | 'hardpoints' | 'cross'> | null): boolean {
+  if (!f || !id) return true;
+  if ((ELEMENTS as string[]).includes(id)) return f.elements;
+  if ((HARDPOINTS as string[]).includes(id)) return f.hardpoints;
+  if (id === 'fusion') return f.cross;
+  return true;
 }
 
 /** Everything a card or row shows for one boon. */
@@ -107,11 +120,12 @@ function categoryTag(v: BoonView, short = false): HTMLElement {
 }
 
 /** The tag row: rarity (diamond + "Rare"; commons carry none) and what the boon needs. */
-function needTags(v: BoonView): HTMLElement | null {
-  if (!v.needs.length && v.rarity !== 'rare') return null;
+function needTags(v: BoonView, f: Pick<Features, 'elements' | 'hardpoints' | 'cross'> | null = null): HTMLElement | null {
+  const needs = v.needs.filter((n) => needRevealed(n.id, f));
+  if (!needs.length && v.rarity !== 'rare') return null;
   return h('span', { class: 'bo-needs' },
     v.rarity === 'rare' ? h('span', { class: 'tag rare' }, rarityIcon('rare', 'ico tiny'), v.rarityLabel) : null,
-    ...v.needs.map((n) => h('span', { class: `tag${n.have ? ' have' : ' missing'}`, text: n.have ? n.label : `Needs ${n.label}`, title: n.have ? 'Your build has this' : 'Your build lacks this: the boon does nothing without it' })));
+    ...needs.map((n) => h('span', { class: `tag${n.have ? ' have' : ' missing'}`, text: n.have ? n.label : `Needs ${n.label}`, title: n.have ? 'Your build has this' : 'Your build lacks this: the boon does nothing without it' })));
 }
 
 /** A full row (active list, Build tab). */
@@ -200,6 +214,13 @@ export class BoonOffer {
   private readonly rerollCost = h('span', { class: 'price cores' });
   private readonly decline: HTMLButtonElement;
   private readonly chipQueue = h('span', { class: 'count' });
+  /** "Next wave holds while you choose · Continue" (UiState.run.holdTicksLeft > 0 after a boss clear). */
+  private readonly hold: HTMLElement;
+  /** Held by the attention plan (attention.ts): shown only as its chip (a death card, a celebration, a draft, a boss). */
+  private held = false;
+  private holding = false;
+  /** The player opened the chip while the plan held the card: it stays open until the hold ends. */
+  private opened = false;
   private seq = -1;
   private selected: BoonId | null = null;
   private replace: BoonId | null = null;
@@ -214,12 +235,15 @@ export class BoonOffer {
     this.reroll = button([icon('restart', 'ico tiny bo-ico-alt'), h('span', { class: 'bo-lbl', text: 'Reroll' }), this.rerollCost], () => this.send({ type: 'reroll_boon' }), { class: 'btn small bo-reroll' });
     this.decline = button([icon('close', 'ico tiny bo-ico-alt'), h('span', { class: 'bo-lbl', text: 'Decline' })], () => this.send({ type: 'decline_boon' }),
       { class: 'btn small ghost bo-decline', label: 'Decline: free, no boon this time', title: 'Free; you get no boon this time' });
-    const collapse = button(icon('down', 'ico'), () => this.setCollapsed(true), { class: 'btn icon-btn ghost bo-collapse', label: 'Set the offer aside (it waits as a "Boon ready" chip)' });
+    const collapse = button(icon('down', 'ico'), () => { this.setCollapsed(true); this.releaseHold(); }, { class: 'btn icon-btn ghost bo-collapse', label: 'Set the offer aside (it waits as a "Boon ready" chip)' });
+    this.hold = h('p', { class: 'attn-hold bo-hold' }, h('span', { text: 'Next wave holds while you choose' }),
+      button('Continue', () => this.releaseHold(), { class: 'btn small ghost', label: 'Continue: start the next wave now (the offer stays)' }));
+    this.hold.hidden = true;
     this.el = h('section', { class: 'boon-offer', attrs: { role: 'region', 'aria-label': 'Boon offer' } },
-      this.cards, this.detail,
+      this.hold, this.cards, this.detail,
       h('div', { class: 'bo-foot' }, this.heading, this.take, this.reroll, this.decline, collapse));
     this.el.hidden = true;
-    this.chip = button([icon('boon', 'ico tiny'), 'Boon ready', this.chipQueue], () => this.setCollapsed(false), { class: 'btn ctl boon-chip', label: 'A boon offer is waiting: show it' });
+    this.chip = button([icon('boon', 'ico tiny'), 'Boon ready', this.chipQueue], () => { this.opened = true; this.held = false; this.setCollapsed(false); }, { class: 'btn ctl boon-chip', label: 'A boon offer is waiting: show it' });
     this.chip.hidden = true;
     if (typeof ResizeObserver !== 'undefined') {
       this.ro = new ResizeObserver(() => this.publishHeight());
@@ -232,6 +256,23 @@ export class BoonOffer {
 
   /** Show a set-aside offer again (Build tab, chip). */
   expand(): void { this.setCollapsed(false); }
+
+  /** The attention plan holds the card (it shows as its chip; a tap on the chip still opens it). */
+  setHeld(on: boolean): void {
+    if (!on) this.opened = false;
+    const v = on && !this.opened;
+    if (v === this.held) return;
+    this.held = v;
+    this.key = '';
+    const ui = this.ctx.state();
+    if (ui) this.update(ui);
+  }
+
+  /** The player set the decision aside (or pressed Continue): the sim's boss-clear hold ends. */
+  private releaseHold(): void {
+    const ui = this.ctx.state();
+    if ((ui?.run.holdTicksLeft ?? 0) > 0) this.ctx.host.send({ type: 'release_hold' });
+  }
 
   update(ui: UiState): void {
     const r = ui.run;
@@ -247,13 +288,18 @@ export class BoonOffer {
     const active = r.boons ?? [];
     if (this.replace && !active.includes(this.replace)) this.replace = null;
     const cost = r.boonRerollCost ?? 1;
-    const key = JSON.stringify([offer, this.selected, this.collapsed, active, r.boonCap, r.cores >= cost, cost, r.boonQueueLength, r.boonOfferKind, this.replace, ui.build.hardpoints, ui.build.attunements]);
+    this.holding = (r.holdTicksLeft ?? 0) > 0;
+    const f = this.ctx.features();
+    const key = JSON.stringify([offer, this.selected, this.collapsed, this.held, this.holding, f.cores, f.elements, f.hardpoints, f.cross, active, r.boonCap, r.cores >= cost, cost, r.boonQueueLength, r.boonOfferKind, this.replace, ui.build.hardpoints, ui.build.attunements]);
     if (key === this.key) return;
     this.key = key;
     const has = offer.length > 0;
-    show(this.el, has && !this.collapsed);
-    show(this.chip, has && this.collapsed);
-    document.body.classList.toggle('boon-open', has && !this.collapsed);
+    // the chip opens a held card too (the player asked): only a chip tap clears `held` until the plan sets it again
+    const hidden = this.collapsed || this.held;
+    show(this.el, has && !hidden);
+    show(this.chip, has && hidden);
+    document.body.classList.toggle('boon-open', has && !hidden);
+    show(this.hold, has && this.holding);
     text(this.chipQueue, r.boonQueueLength > 0 ? `+${r.boonQueueLength}` : '');
     if (!has) { this.publishHeight(); return; }
     this.render(ui, offer, active, cost);
@@ -270,11 +316,11 @@ export class BoonOffer {
         categoryTag(v, true),
         h('span', { class: 'bo-name', text: v.name }),
         h('span', { class: 'bo-short', text: v.short }),
-        needTags(v),
+        needTags(v, this.ctx.features()),
         on ? h('span', { class: 'bo-sel' }, icon('check', 'ico tiny')) : null,
       ], () => this.select(id), { class: `bo-card cat-${v.category} r-${v.rarity}${on ? ' on' : ''}` });
       attr(card, 'aria-pressed', on ? 'true' : 'false');
-      attr(card, 'aria-label', `${v.name}. ${v.categoryLabel}, ${v.rarityLabel}. ${v.desc}${v.needs.filter((n) => !n.have).map((n) => ` Needs ${n.label}.`).join('')}${on ? ' Selected: press Take to pick it.' : ' Tap to select.'}`);
+      attr(card, 'aria-label', `${v.name}. ${v.categoryLabel}, ${v.rarityLabel}. ${v.desc}${v.needs.filter((n) => !n.have && needRevealed(n.id, this.ctx.features())).map((n) => ` Needs ${n.label}.`).join('')}${on ? ' Selected: press Take to pick it.' : ' Tap to select.'}`);
       this.cards.appendChild(card);
     }
     // detail: the selected card's full text, and what it replaces at the cap
@@ -303,6 +349,8 @@ export class BoonOffer {
     this.rerollCost.replaceChildren(icon('cores', 'ico tiny'), String(rr.cost));
     this.reroll.disabled = !rr.can;
     attr(this.reroll, 'aria-label', rr.label);
+    // progressive reveal: no Cores before the player has been shown them (progression.ts 'cores')
+    show(this.reroll, this.ctx.features().cores);
     this.reroll.title = rr.can ? `Three new cards for ${rr.cost} Core${rr.cost === 1 ? '' : 's'}` : `Needs ${rr.cost} Core${rr.cost === 1 ? '' : 's'}`;
   }
 
