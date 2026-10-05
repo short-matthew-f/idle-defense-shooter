@@ -150,13 +150,16 @@ function pace(run: RunState): number {
 }
 
 /** Cheapest not-yet-maxed behavior-changing Scrap unlock in the shop (mechanic/fusion/linkage/infusion), or null. */
-function cheapestMechanic(w: WorldImpl): number | null {
-  let best: number | null = null;
+function cheapestMechanic(w: WorldImpl): number | null { return cheapestMechanicEntry(w)?.cost ?? null; }
+
+/** The entry cheapestMechanic prices (Forecast.wallGaugeNode names it), or null. */
+function cheapestMechanicEntry(w: WorldImpl): { node: string; cost: number } | null {
+  let best: { node: string; cost: number } | null = null;
   for (const e of buildShop(w)) {
     if (e.currency !== 'scrap') continue;
     if (e.kind !== 'mechanic' && e.kind !== 'fusion' && e.kind !== 'linkage' && e.kind !== 'infusion') continue;
     if (e.locked || e.rank >= e.maxRank) continue;
-    if (best === null || e.cost < best) best = e.cost;
+    if (best === null || e.cost < best.cost) best = { node: e.node, cost: e.cost };
   }
   return best;
 }
@@ -196,6 +199,7 @@ export function computeForecast(w: WorldImpl): Forecast {
   return {
     echoesNow, echoRate, peakRate, nextBossEchoes, nextBossRate, reclimbSeconds,
     wallGaugeSeconds: wallGaugeSeconds(w),
+    ...((): { wallGaugeNode?: string } => { const e = cheapestMechanicEntry(w); return e ? { wallGaugeNode: e.node } : {}; })(),
     recommended: isRecommended(hist, run.deepestCleared, checkpointCycleSeconds(run))
       || frontierRecommends(run.deepestCleared, run.deepestDeath ?? 0, w.trial ? undefined : frontierWave(meta), echoRate, peakRate),
     curve,

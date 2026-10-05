@@ -34,7 +34,7 @@ export const SWARM_HP = 0.2;
 
 export function startTrial(m: RunMachine, id: TrialId): string | null {
   const w = m.w, meta = w.meta;
-  if (prank(meta, 'prestige.trials') <= 0) return 'Trials are locked (Prestige II)';
+  if (prank(meta, 'prestige.trials') <= 0) return 'Trials are locked (Echo tier II)';
   if (w.trial) return 'A Trial is already running';
   const k = TRIALS.findIndex((t) => t.id === id);
   if (k < 0) return 'Unknown Trial';

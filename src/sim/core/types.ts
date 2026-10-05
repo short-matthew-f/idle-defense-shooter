@@ -787,6 +787,8 @@ export interface Forecast {
   nextBossEchoes: number; nextBossRate: number;
   reclimbSeconds: number;
   wallGaugeSeconds: number | null;
+  /** UX Phase 2: the unlock the Wall gauge prices (shop entry node id), absent when none. */
+  wallGaugeNode?: string;
   recommended: boolean;
   curve: { seconds: number; rate: number }[];
   /** Onboarding pass: the Frontier (waves past it are hardened, economy/curves.ts) and where a Prestige now would move it. */

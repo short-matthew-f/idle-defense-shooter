@@ -113,7 +113,7 @@ export function doPrestige(m: RunMachine, cmd: Extract<Command, { type: 'prestig
   if (!frameUnlocked(meta, frame)) return 'Frame locked';
   let dial = 0;
   if (cmd.threatDial !== undefined && cmd.threatDial !== 0) {
-    if (prank(meta, 'prestige.threat_dial') <= 0) return 'Threat Dial locked (Prestige III)';
+    if (prank(meta, 'prestige.threat_dial') <= 0) return 'Threat Dial locked (Echo tier III)';
     if (!(cmd.threatDial >= 0) || cmd.threatDial > maxThreatDial(meta)) return 'Threat Dial out of range';
     dial = Math.floor(cmd.threatDial);
   }
@@ -149,7 +149,7 @@ export function setThreatDial(w: WorldImpl, level: number): string | null {
 
 export function saveBlueprint(w: WorldImpl, bp: Blueprint): string | null {
   const meta = w.meta, slots = prank(meta, 'prestige.blueprint_slots');
-  if (slots <= 0) return 'Blueprint Slots locked (Prestige II)';
+  if (slots <= 0) return 'Blueprint Slots locked (Echo tier II)';
   const copy: Blueprint = JSON.parse(JSON.stringify(bp)) as Blueprint;
   const at = meta.blueprints.findIndex((b) => b.name === copy.name);
   if (at >= 0) { meta.blueprints[at] = copy; return null; }

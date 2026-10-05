@@ -98,7 +98,7 @@ function dispatch(m: RunMachine, cmd: Command): string | null {
       const sp = cmd.speed;
       if (sp !== 1 && sp !== 2 && sp !== 4 && sp !== 8) return 'Invalid speed';
       if (sp !== 1 && run.wave > w.meta.deepestEver) return 'Speed controls only on solved waves';
-      if (sp > allowedSpeed(run, w.meta)) return (w.meta.prestigeRanks['prestige.speed_controls'] | 0) > 0 ? `×${sp} needs a higher Speed Controls rank` : 'Manual speed needs Speed Controls (Prestige III)';
+      if (sp > allowedSpeed(run, w.meta)) return (w.meta.prestigeRanks['prestige.speed_controls'] | 0) > 0 ? `×${sp} needs a higher Speed Controls rank` : 'Manual speed needs Speed Controls (Echo tier III)';
       run.speedMultiplier = sp;
       return null;
     }

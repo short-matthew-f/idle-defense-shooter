@@ -31,13 +31,13 @@ export const FRAMES: FrameDef[] = [
     effects: [], flags: [],
   },
   {
-    id: 'arsenal', name: 'Arsenal', unlock: 'Prestige II: Frames',
+    id: 'arsenal', name: 'Arsenal', unlock: 'Echo tier II: Frames',
     hardpointCap: 4, attunementCap: 1,
     trait: 'Hardpoint trees cost 15% less; primary damage −25%.',
     effects: [fx('ballistics.damage@final', 'mul', -0.25)], flags: ['hardpoint_discount_15'],
   },
   {
-    id: 'conductor', name: 'Conductor', unlock: 'Prestige II: Frames',
+    id: 'conductor', name: 'Conductor', unlock: 'Echo tier II: Frames',
     hardpointCap: 2, attunementCap: 3,
     trait: 'Statuses apply +1 stack; Fusions start at rank 1.',
     effects: [], flags: ['statuses_plus_one', 'fusions_start_rank1'],

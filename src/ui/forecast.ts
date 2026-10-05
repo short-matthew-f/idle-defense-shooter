@@ -145,7 +145,7 @@ export class ForecastPanel {
     text(this.reclimb.val, f ? fmtDuration(f.reclimbSeconds) : '—');
     text(this.reclimb.sub, f ? `vs ${fmtDuration(ui.run.playSeconds)} this run` : '');
     const wg = f?.wallGaugeSeconds ?? ui.wallGaugeSeconds;
-    const wl = wallGaugeLines(wg, wallTarget(ui.shop));
+    const wl = wallGaugeLines(wg, wallTarget(f?.wallGaugeNode ? ui.shop.filter((e) => e.node === f.wallGaugeNode) : ui.shop));
     text(this.wall.val, wl.val);
     text(this.wall.sub, wl.sub);
     this.wall.el.classList.toggle('warn', wl.warn);
