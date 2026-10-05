@@ -171,7 +171,7 @@ export class GameUi {
       battle, arenaTop: battle.querySelector<HTMLElement>('.arena-top')!, death: this.death, offer: this.boonOffer.el,
       coach: this.coach, feed: this.feed, starter: this.starter.el, row: this.abilities.row, armHint: this.abilities.hint, oc: this.active.el,
     }, { arena: () => host.arena?.() ?? null, layout: () => this.shell.layout, battleVisible: () => this.shell.battleVisible });
-    this.attn = new Attention({ death: this.death, feed: this.feed, offer: this.boonOffer, draft: this.draft, coach: this.coach,
+    this.attn = new Attention({ host, death: this.death, feed: this.feed, offer: this.boonOffer, draft: this.draft, coach: this.coach,
       battleVisible: () => this.shell.battleVisible, changed: () => { this.lanes.schedule(); this.hints.refresh(); } });
     setArenaSource(() => host.arena?.() ?? null);
     const layout = this.shell.onLayout;

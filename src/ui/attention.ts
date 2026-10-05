@@ -20,6 +20,9 @@ import type { DeathCard } from './death';
 import type { Feed } from './feed';
 import type { BoonOffer } from './boons';
 import type { DraftModal } from './draft';
+import type { UiHost } from './host';
+import { button } from './dom';
+import { icon } from './icons';
 
 /** The death card owns the lane this long after a death (ms). */
 export const DEATH_FIRST_MS = 8000;
@@ -99,6 +102,8 @@ export interface AttnParts {
   coach: CoachBanner;
   /** The arena is on screen (phone: the Battle tab; desktop: always). */
   battleVisible(): boolean;
+  /** The worker host (the "Update ready · Restart" chip: updateReady / applyUpdate). Optional. */
+  host?: UiHost;
   /** Something changed that the overlay lanes and pointer hints should re-fit to. */
   changed(): void;
 }
@@ -107,13 +112,32 @@ export class Attention {
   plan: AttnPlan = planAttention({ now: 0, deathShownAt: null, deathWantFull: false, bossClearAt: -Infinity, draftWaiting: false, offerPending: false, liveBoss: false });
   private key = '';
 
-  constructor(private readonly p: AttnParts) {}
+  /**
+   * "Update ready · Restart": a persistent chip in the arena-strip (beside the boon chip) while a new version waits; the
+   * page never reloads under the player (app/game.ts), a tap restarts into it.
+   */
+  readonly updateChip: HTMLButtonElement;
+
+  constructor(private readonly p: AttnParts) {
+    this.updateChip = button([icon('restart', 'ico tiny'), 'Update ready · Restart'], () => p.host?.applyUpdate?.(), { class: 'btn ctl update-chip', label: 'A new version is ready: restart into it' });
+    this.updateChip.hidden = true;
+    p.offer.chip.parentElement?.insertBefore(this.updateChip, p.offer.chip.nextSibling);
+    if (typeof window !== 'undefined') window.addEventListener('citadel:update-ready', () => this.syncUpdate());
+  }
+
+  private syncUpdate(): void {
+    const on = !!this.p.host?.updateReady?.();
+    if (on === !this.updateChip.hidden) return;
+    this.updateChip.hidden = !on;
+    this.p.changed();
+  }
 
   /** Pointer rings and hints wait (HintDriver `blocked`). */
   get hintsHeld(): boolean { return this.plan.hintsHeld; }
 
   /** Every UiState (before the components update) and on the fold / dismiss of the death card. */
   update(ui: UiState, now = performance.now()): void {
+    this.syncUpdate();
     const P = this.p, d = P.death;
     const plan = planAttention({
       now,

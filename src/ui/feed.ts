@@ -10,6 +10,7 @@ import { h } from './dom';
 import { icon } from './icons';
 import { titleCase } from './format';
 import { boonName } from './boons';
+import { BOSS_BY_ID } from './content';
 import type { ToastKind } from './ctx';
 import type { Features } from './progression';
 import { prefs, setPref } from './prefs';
@@ -55,6 +56,9 @@ export class Feed {
   private summary: { item: Item; parts: string[]; until: number } | null = null;
   /** performance.now() of the last boss kill (the attention plan's celebration beat, attention.ts); -Infinity: none. */
   bossClearAt = -Infinity;
+  private lastStep = -Infinity;
+  /** The current boss's name (the step-in toast). */
+  private bossName = 'boss';
 
   toast(msg: string, kind: ToastKind = 'info', ms = 3600): void { this.push(msg, kind, ms); }
 
@@ -166,7 +170,7 @@ export class Feed {
       else if (e.type === Ev.BossKilled) { beat.unshift('Boss destroyed'); this.bossClearAt = performance.now(); }
       else if (e.type === Ev.Prestige) this.toast('Prestige complete: a new machine begins', 'good');
       else if (e.type === Ev.Ascend) this.toast('Ascension complete', 'good');
-      else if (e.type === Ev.Rush) this.rush();
+      else if (e.type === Ev.Rush) this.rush(e.src === 'boss.step_in');
     }
     // one beat at a boss clear: boss down, checkpoint, Cores (and a slot opening, update()) in ONE line
     if (cores > 0) beat.push(`+${cores} Core${cores > 1 ? 's' : ''}`);
@@ -178,8 +182,15 @@ export class Feed {
   }
 
   /** Anti-stall Rush (a stalled wave's enemies charge the tower): a subtle, rate-limited note. */
-  private rush(): void {
+  private rush(boss: boolean): void {
     const now = performance.now();
+    if (boss) {
+      // a boss that takes no damage steps in (run/stall.ts): say why, once per boss fight
+      if (now - this.lastStep < RUSH_TOAST_GAP_MS) return;
+      this.lastStep = now;
+      this.toast(`The ${this.bossName} isn't taking damage, so it steps in`, 'warn', 4000);
+      return;
+    }
     if (now - this.lastRush < RUSH_TOAST_GAP_MS) return;
     this.lastRush = now;
     this.toast('Stragglers rush the tower', 'info', 2800);
@@ -193,6 +204,7 @@ export class Feed {
 
   /** State edges: draft ready, Prestige recommended. Slot toasts wait for their category to be revealed (progression.ts). */
   update(ui: UiState, f?: Pick<Features, 'elements' | 'hardpoints'>): void {
+    if (ui.wave.bossId) this.bossName = (BOSS_BY_ID.get(ui.wave.bossId)?.name ?? 'boss').replace(/^The /, '');
     const d = ui.run.pendingDraft ? ui.run.pendingDraft.join(',') : '';
     // at a boss clear the draft presents itself after the beat (attention.ts): no separate toast then
     if (d && d !== this.lastDraft && !this.summaryOpen()) this.toast('Anomaly draft ready', 'info');

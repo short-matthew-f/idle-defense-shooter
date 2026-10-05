@@ -74,9 +74,10 @@ describe('boss-clear summary, Frontier, stalemate', () => {
   });
 
   it('stalemate: read from the death payload or the wave state when the sim provides it', () => {
-    const ui = (stalled?: boolean) => ({ wave: stalled === undefined ? {} : { stalled } }) as unknown as UiState;
-    expect(stalemateOf(undefined, ui())).toBe(false);
-    expect(stalemateOf({ stalled: true } as never, ui())).toBe(true);
-    expect(stalemateOf(undefined, ui(true))).toBe(true);
+    const ui = (stalled: 'boss' | 'wave' | null) => ({ wave: { stalled } }) as unknown as UiState;
+    expect(stalemateOf(undefined, ui(null))).toBe(false);
+    expect(stalemateOf(undefined, ui('wave'))).toBe(false);
+    expect(stalemateOf({ stalled: 'boss' } as never, ui(null))).toBe(true);
+    expect(stalemateOf(undefined, ui('boss'))).toBe(true);
   });
 });

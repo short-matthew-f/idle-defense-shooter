@@ -20,13 +20,12 @@ import { STARTER_IDS, contentPool, poolShop } from './progression';
 import { frontierNear } from './forecast';
 
 /**
- * The stalemate cause (sim agent S, Phase 1 item 7): the boss was not taking damage. Read from the TowerDeath payload or
- * the wave state when the sim provides it (optional: older sims do not).
+ * The stalemate cause (Phase 1 item 7): the boss was not taking damage (UiState.wave.stalled === 'boss', kept through
+ * `dead`; or a TowerDeath payload saying so).
  */
 export function stalemateOf(data: SimEvent['data'] | undefined, ui: Pick<UiState, 'wave'>): boolean {
-  const d = data as { stalled?: unknown; stalemate?: unknown } | undefined;
-  const w = ui.wave as { stalled?: unknown };
-  return !!(d?.stalled || d?.stalemate || w.stalled);
+  const d = data as { stalled?: unknown } | undefined;
+  return d?.stalled === 'boss' || ui.wave.stalled === 'boss';
 }
 
 /** The death card's Frontier line (the deepest wave cleared is within 2 of it), or null. */
