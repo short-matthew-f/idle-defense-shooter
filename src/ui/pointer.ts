@@ -25,7 +25,7 @@ import { prefs, setPref } from './prefs';
 import { ABILITIES, ABILITY_BY_ID } from './content';
 import { STARTER_NODES, features as featuresOf, stageOf, starterPick, type Features } from './progression';
 import { starterVisible } from './starter';
-import { allHints, finishedHints, initialHintsDone, nextHint, registerHint, type Hint, type HintCtx, type HintScreen } from './hints';
+import { ELEMENTS_SEEN, allHints, finishedHints, initialHintsDone, nextHint, registerHint, type Hint, type HintCtx, type HintScreen } from './hints';
 
 // ---------------------------------------------------------------- pure geometry
 
@@ -442,6 +442,8 @@ export class HintDriver {
   private readonly bannerMs = new Map<string, number>();
   private bannerAt = 0;
   private bannerLast = '';
+  /** The Elements slot picker was open at the last tick (leaving it retires the Elements hint: hints.ts ELEMENTS_SEEN). */
+  private pickerOpen = false;
 
   constructor(root: HTMLElement, private readonly src: HintSources) {
     root.appendChild(this.pointer.el);
@@ -515,6 +517,9 @@ export class HintDriver {
         markDone(initialHintsDone(featuresOf(ui), stageOf(ui)));
       }
       let c = this.ctx(ui, f);
+      const pk = c.nav.screen === 'upgrades' && c.shop.cat === 'elements' && c.shop.tree.startsWith('slot:');
+      if (this.pickerOpen && !pk) { markDone([ELEMENTS_SEEN]); c = { ...c, done: new Set(prefs().hintsDone) }; }
+      this.pickerOpen = pk;
       const over = finishedHints(this.shown, ui, c);
       if (over.length) { markDone(over); for (const id of over) this.shown.delete(id); c = { ...c, done: new Set(prefs().hintsDone) }; }
       const next = nextHint(ui, c, (t) => !!resolveTarget(t));

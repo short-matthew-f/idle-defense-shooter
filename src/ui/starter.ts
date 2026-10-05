@@ -103,6 +103,13 @@ export class StarterPanel {
   }
 }
 
+/** Chip-width names (about 8 characters fit beside a two-slot ability row at 375 px): the long stat labels, shortened. */
+export const CHIP_LABELS: Readonly<Record<string, string>> = {
+  'Shot speed': 'Shot spd', 'Crit chance': 'Crit %', 'Crit damage': 'Crit dmg', 'Shield recharge': 'Shld rchg',
+  'All fire rate': 'All rate', 'Cooldown cut': 'CD cut', 'Scrap gain': 'Scrap +', 'Resistance': 'Resist',
+};
+export const chipLabel = (label: string): string => CHIP_LABELS[label] ?? label;
+
 /** What the Battle dock's quick-buy chip offers (pure): an affordable starter stat first (it knows about pressure and
  * hull), else the cheapest affordable Scrap upgrade in the pool, else the next thing to save for. */
 export function quickPick(ui: StarterState, pooled: readonly ShopEntry[]): { entry: ShopEntry; label: string; affordable: boolean } | null {
@@ -144,7 +151,7 @@ export class QuickBuyChip {
     const key = `${e.node}|${e.rank}|${e.cost}|${p.affordable}|${p.label}`;
     if (key === this.key) return;
     this.key = key;
-    text(this.name, p.label);
+    text(this.name, chipLabel(p.label));
     this.price.replaceChildren(icon('scrap', 'ico tiny'), fmtNum(e.cost));
     this.el.classList.toggle('ready', p.affordable);
     disable(this.el, !p.affordable);

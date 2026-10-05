@@ -37,6 +37,8 @@ export function mountModalLayer(root: HTMLElement): void {
 }
 
 export function anyModalOpen(): boolean { return stack.length > 0; }
+/** The shell's Back guard (shell.ts): called when a dialog opens / the last one closes, so Back closes the dialog. */
+export const modalHooks: { opened: (() => void) | null; emptied: (() => void) | null } = { opened: null, emptied: null };
 /**
  * Back (history pop) with dialogs open: a dismissable top dialog closes, a non-dismissable one stays; either way the
  * screen underneath must not change. Pure rule + the action.
@@ -70,6 +72,7 @@ export function openModal(opts: ModalOptions): ModalHandle {
       const entry = i >= 0 ? stack.splice(i, 1)[0] : null;
       if (layer && !stack.length) layer.hidden = true;
       opts.onClose?.();
+      if (!stack.length) modalHooks.emptied?.();
       const opener = entry?.opener as HTMLElement | null;
       if (opener && document.contains(opener)) opener.focus?.({ preventScroll: true });
     },
@@ -85,6 +88,7 @@ export function openModal(opts: ModalOptions): ModalHandle {
   layer.hidden = false;
   layer.appendChild(wrap);
   stack.push({ handle, opts, opener: document.activeElement });
+  modalHooks.opened?.();
   const focusable = card.querySelector<HTMLElement>('.modal-body button:not([disabled]), .modal-body input, .modal-body select, .modal-foot button:not([disabled])');
   (focusable ?? card.querySelector<HTMLElement>('button'))?.focus({ preventScroll: true });
   return handle;

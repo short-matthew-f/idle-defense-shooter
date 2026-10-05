@@ -71,6 +71,9 @@ describe('boss-clear summary, Frontier, stalemate', () => {
     expect(frontierText(ui(3, 4))).toBeNull();
     expect(frontierLine(ui(27, 28, 28))).toBe('Past wave 28 enemies harden fast. A Prestige pays here.');
     expect(frontierLine(ui(10, 11, 28))).toBeNull();
+    // a death past the Frontier says why even when the run's deepest-cleared is far below it (N-15)
+    expect(frontierLine(ui(10, 71, 60), 71)).toBe('Past wave 60 enemies harden fast. A Prestige pays here.');
+    expect(frontierLine(ui(10, 50, 60), 50)).toBeNull();
   });
 
   it('stalemate: read from the death payload or the wave state when the sim provides it', () => {

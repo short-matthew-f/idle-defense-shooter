@@ -5,7 +5,7 @@
  */
 import '../styles/theme.css';
 import '../styles/controls.css';
-import { Ev, type SimEvent, type UiState } from '@sim/core/types';
+import { Ev, type Command, type SimEvent, type UiState } from '@sim/core/types';
 import { sectorIndexForWave } from '@sim/data/sectors';
 import { h } from './dom';
 import { Hud, StatusStrip } from './hud';
@@ -89,8 +89,16 @@ export class GameUi {
   readonly attn: Attention;
 
   constructor(root: HTMLElement, readonly host: UiHost) {
+    // any game command from the UI ends a "stay with the fight" hold: once the player acts, the run goes on
+    const acting: UiHost = new Proxy(host, {
+      get: (t, p) => {
+        if (p === 'send') return (cmd: Command) => { this.shell?.noteCommand(); t.send(cmd); };
+        const v = (t as unknown as Record<string | symbol, unknown>)[p];
+        return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(t) : v;
+      },
+    });
     this.ctx = {
-      host,
+      host: acting,
       state: () => this.latest,
       open: (s, arg) => this.open(s, arg),
       toast: (m, k) => this.feed.toast(m, k),
@@ -176,7 +184,6 @@ export class GameUi {
     setArenaSource(() => host.arena?.() ?? null);
     // UX Phase 2 item 10 (decision-hold.ts): a tab opened from the fight holds the run until Battle is back (≤ 30 s)
     for (const el of [this.death.el, this.coach.el, this.boonOffer.el, this.boonOffer.chip]) el.addEventListener('click', () => this.shell.armDecision(), true);
-    this.shell.isGuided = (tab) => { const t = this.hints.pointer.targetEl; return !!t && t.closest('[data-tab]')?.getAttribute('data-tab') === tab; };
     const layout = this.shell.onLayout;
     this.shell.onLayout = () => { layout?.(); this.lanes.schedule(); this.hints.pointer.schedule(); };
     // the wallet follows the view at once (a category or segment switch, not only the next UiState)
@@ -245,7 +252,7 @@ export class GameUi {
     if (q?.on && !p.coachSeen.includes(QM_COACH_ID)) markCoachSeen([QM_COACH_ID]);   // switched on from its card: never re-offer
     else if (f.quartermaster && q?.unlocked && !q.on) {
       out.push({ id: QM_COACH_ID, icon: 'blueprint', text: QM_COACH_TEXT, action: { label: 'Turn on', run: () => {
-        this.host.send({ type: 'set_quartermaster', on: true });
+        this.ctx.host.send({ type: 'set_quartermaster', on: true });
         this.feed.toast('Quartermaster on: its card is at the top of Upgrades', 'good');
       } } });
     }
@@ -314,6 +321,9 @@ export class GameUi {
    */
   expectOffline(seconds: number, estimate: number): void {
     if (this.pendingOffline) clearTimeout(this.pendingOffline.timer);
+    this.pendingOffline = null;
+    // no income to wait for: the sim reports no Scrap, so the card says so now (not after the fallback timer)
+    if (estimate <= 0 && seconds >= 300) { showOfflineReturn(seconds, 0, true, this.latest); return; }
     const timer = window.setTimeout(() => {
       this.pendingOffline = null;
       // zero income is explained on the card (after a real absence), not a bare toast
@@ -366,7 +376,7 @@ export class GameUi {
     const f = this.feats;
     if (k >= '1' && k <= '4') { if (this.shell.battleVisible && f.abilities) { this.abilities.press(Number(k) - 1); e.preventDefault(); } }
     else if (k === 'escape') this.abilities.cancel();
-    else if (k === 'p') { const ui = this.latest; if (ui && f.runControls) this.host.send({ type: 'set_mode', mode: ui.run.mode === 'push' ? 'patrol' : 'push' }); }
+    else if (k === 'p') { const ui = this.latest; if (ui && f.runControls) this.ctx.host.send({ type: 'set_mode', mode: ui.run.mode === 'push' ? 'patrol' : 'push' }); }
     else if (k === 'b') this.shell.togglePanel();
     else if (k === 'f') { if (f.forecast) this.open('forecast'); }
     else if (k === 'q') {

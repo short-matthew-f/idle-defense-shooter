@@ -20,17 +20,18 @@ export class DecisionHold {
   since: number | null = null;
   private armedAt = -Infinity;
 
-  /** A tap landed on a decision source (death card, coach line, offer, ring). */
+  /** A tap landed on a decision source (death card, coach line, offer). */
   arm(now: number): void { this.armedAt = now; }
 
   /**
-   * A navigation away from Battle happened at `now` on a layout that hides the arena. `guided` = a pointer ring led to
-   * it. Returns true when the hold should start (it was armed or guided, and none is running).
+   * A navigation away from Battle happened at `now` on a layout that hides the arena. Returns true when the hold should
+   * start (a decision source was just tapped and none is running). A pointer ring is a hint, not a decision source:
+   * following one never holds the run.
    */
-  navigatedAway(now: number, guided: boolean): boolean {
+  navigatedAway(now: number): boolean {
     const armed = now - this.armedAt <= ARM_WINDOW_MS;
     this.armedAt = -Infinity;
-    if (this.since !== null || !(armed || guided)) return false;
+    if (this.since !== null || !armed) return false;
     this.since = now;
     return true;
   }

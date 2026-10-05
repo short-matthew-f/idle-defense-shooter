@@ -157,6 +157,54 @@ export async function decisions({ browser, BASE, OUT, check, attachLogs }) {
     await page.waitForFunction(() => (window.__citadel.game.latestUi()?.run.pendingDoctrines ?? []).length === 0, null, { timeout: 5000 }).catch(() => {});
     const after = await page.evaluate(() => (window.__citadel.game.latestUi()?.run.pendingDoctrines ?? []).length);
     check(`decide ${vp.id}: Cancel change empties the queue`, after === 0, { after });
+    // ---- 3b. navigation fixes (scripted; polling because headless runs on software GL)
+    const rich = await page.evaluate(async () => { const s = await window.__citadel.game.client.requestSave(); s.run.scrap = 1e12; s.savedAtMs = Date.now(); return s; });
+    await load(rich);
+    await page.waitForFunction(() => window.__citadel.game.latestUi()?.run.phase === 'combat', null, { timeout: 60000 });
+    const poll = async (fn, ms = 4000) => { const t0 = Date.now(); for (;;) { const v = await page.evaluate(typeof fn === 'string' ? `(${'()=>'}${fn})()` : fn); if (v || Date.now() - t0 > ms) return v; await page.waitForTimeout(100); } };
+    const sumRanks = () => page.evaluate(() => Object.values(window.__citadel.game.latestUi().build.ranks).reduce((a, b) => a + b, 0));
+    // N-01: the Upgrades tab (as a pointer ring would lead the player there) never holds the run, and a buy lands within ~1 s
+    await page.locator('.tabbar .tab-btn[data-tab="upgrades"]').first().tap();
+    await page.waitForTimeout(300);
+    const heldOnTab = await page.evaluate(() => window.__citadel.game.paused);
+    const r0 = await sumRanks();
+    await page.locator('.screen.s-upgrades .node .btn.buy:not([disabled])').first().tap();
+    const bought = await poll(`Object.values(window.__citadel.game.latestUi().build.ranks).reduce((a, b) => a + b, 0) > ${r0}`, 3000);
+    check(`nav ${vp.id}: a guided Upgrades visit does not hold the run, and a buy there raises a rank within ~1 s`, heldOnTab === false && !!bought, { heldOnTab, r0, r1: await sumRanks() });
+    await page.screenshot({ path: `${OUT}/nav-${vp.id}-upgrades-buy.png` });
+    // N-01 (b): a hold from a decision source ends when the player sends any command
+    await page.locator('.tabbar .tab-btn[data-tab="battle"]').first().tap();
+    await page.waitForTimeout(300);
+    await page.evaluate(() => { const sh = window.__citadel.game.ui.shell; sh.armDecision(); sh.go('upgrades'); });
+    await page.waitForTimeout(300);
+    const held2 = await page.evaluate(() => window.__citadel.game.paused);
+    const r2 = await sumRanks();
+    await page.locator('.screen.s-upgrades .node .btn.buy:not([disabled])').first().tap();
+    const live2 = await poll(() => !window.__citadel.game.paused);
+    const grew = await poll(`Object.values(window.__citadel.game.latestUi().build.ranks).reduce((a, b) => a + b, 0) > ${r2}`, 3000);
+    check(`nav ${vp.id}: a decision hold ends as soon as the player buys (the buy lands)`, held2 === true && live2 === true && !!grew, { held2, live2, grew });
+    // N-02 / N-03: Kill-Chain Inspector opened from another tab stays open; Back with a dialog on Battle closes it and stays in the app
+    await page.locator('.tabbar .tab-btn[data-tab="upgrades"]').first().tap();
+    await page.waitForTimeout(300);
+    await page.locator('.tabbar .tab-btn[data-tab="more"]').first().tap();
+    await page.waitForTimeout(300);
+    await page.locator('.menu-item', { hasText: 'Kill-Chain Inspector' }).first().tap();
+    await page.waitForTimeout(1200);
+    const insp = await page.evaluate(() => ({ modal: !!document.querySelector('.modal-card'), tab: document.body.className.match(/tab-(\w+)/g) }));
+    check(`nav ${vp.id}: the Kill-Chain Inspector opened from More stays open (it used to close at once)`, insp.modal, insp);
+    const url0 = page.url();
+    await page.goBack().catch(() => {});
+    await page.waitForTimeout(600);
+    const afterBack = await page.evaluate(() => ({ modal: !!document.querySelector('.modal-card'), url: location.href }));
+    check(`nav ${vp.id}: Back with that dialog up on Battle closes it and does not leave the app`, !afterBack.modal && afterBack.url === url0, { afterBack, url0 });
+    // closing a dialog with its own control leaves history as it was (a later Back does not eat a screen)
+    await page.keyboard.press('Space');
+    await page.waitForTimeout(500);
+    const spaceOpen = await page.evaluate(() => !!document.querySelector('.modal-card'));
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(700);
+    const closed = await page.evaluate(() => ({ modal: !!document.querySelector('.modal-card'), url: location.href }));
+    check(`nav ${vp.id}: Esc closes the dialog and stays on the app`, spaceOpen && !closed.modal && closed.url === url0, { spaceOpen, ...closed });
     check(`decide ${vp.id}: no console errors`, errors.length === 0, errors.slice(0, 5));
     await ctx.close();
   }

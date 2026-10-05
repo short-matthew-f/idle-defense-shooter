@@ -26,7 +26,7 @@ import { button, h, text, attr, show } from './dom';
 import { icon } from './icons';
 import { BATTLE, NavModel, PANEL_WIDTH, DOCK_GAP, PHONE_ARENA_BIAS, STARTER_CONTENT, RAIL_WIDTH, TABS, battleInsets, readNavState, shellLayout, tabBadges, tabReachable, tabsShown, writeNavState, type NavOp, type NavState, type ShellLayout, type TabId } from './shell-logic';
 import { features as featuresOf, type Features } from './progression';
-import { anyModalOpen, handleBackWithModal } from './modal';
+import { anyModalOpen, handleBackWithModal, modalHooks } from './modal';
 import { prefs, setPref } from './prefs';
 import type { UiHost } from './host';
 import type { StatusStrip } from './hud';
@@ -83,9 +83,11 @@ export class Shell {
   private readonly hold = new DecisionHold();
   private holdTimer = 0;
   private readonly lowHp = new LowHpAlert();
-  /** A pointer ring points at this tab's button (GameUi sets it from the hint driver). */
-  isGuided: ((tab: TabId) => boolean) | null = null;
-  private guidedNav = false;
+  /** A guard history entry sits above the screen while a dialog is open (Back closes the dialog instead of leaving). */
+  private guard = false;
+  /** popstates this shell caused itself (nav 'back' ops / guard removal) that have not landed yet: [count, deadline ms]. */
+  private selfNav: [number, number] = [0, 0];
+  private selfGuard: [number, number] = [0, 0];
 
   constructor(root: HTMLElement, private readonly host: UiHost, private readonly parts: ShellParts) {
     this.panelOpen = prefs().panelOpen;
@@ -97,8 +99,6 @@ export class Shell {
       b.setAttribute('role', 'tab');
       b.dataset.tab = t.id;
       b.dataset.hint = `tab-${t.id}`;   // pointer hints (hints.ts)
-      // a ring on this tab (read at pointerdown: the pointer clears its target in the click's capture phase)
-      b.addEventListener('pointerdown', () => { this.guidedNav = !!this.isGuided?.(t.id); });
       badge.hidden = true;
       this.tabBtns.set(t.id, { b, badge });
       this.tabbar.appendChild(b);
@@ -123,6 +123,9 @@ export class Shell {
     // history: Battle is the bottom entry
     try { history.replaceState(writeNavState(BATTLE), ''); } catch { /* sandboxed frames */ }
     window.addEventListener('popstate', (e) => this.onPop(e.state));
+    modalHooks.opened = () => this.syncGuard();
+    modalHooks.emptied = () => this.dropGuard();
+    this.syncGuard();
     window.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape' || anyModalOpen() || this.layout === 'desktop' || this.view.tab === 'battle') return;
       if (document.body.classList.contains('arming')) return;   // Esc cancels the armed ability first
@@ -162,8 +165,7 @@ export class Shell {
     this.run(this.nav.go({ tab, sub }));
     this.view = this.nav.current;
     if (this.view.tab !== 'battle') this.panel = this.view;
-    const guided = this.guidedNav && this.view.tab === tab; this.guidedNav = false;
-    if (from === 'battle' && this.view.tab !== 'battle' && this.hold.navigatedAway(performance.now(), guided)) this.startHold();
+    if (from === 'battle' && this.view.tab !== 'battle' && this.hold.navigatedAway(performance.now())) this.startHold();
     this.apply();
   }
 
@@ -180,6 +182,9 @@ export class Shell {
     this.holdTimer = window.setTimeout(() => this.endHold(), this.hold.left(performance.now()));
     this.markHeld(true);
   }
+
+  /** The player sent a game command: the run goes on (a hold ends as soon as they act). */
+  noteCommand(): void { if (this.hold.active) this.endHold(); }
 
   private endHold(): void {
     window.clearTimeout(this.holdTimer);
@@ -216,14 +221,51 @@ export class Shell {
     this.go(tab);
   }
 
+  private static pending(x: [number, number]): boolean {
+    if (x[0] > 0 && Date.now() > x[1]) x[0] = 0;   // the popstate never came: do not stay blind
+    return x[0] > 0;
+  }
+  private static take(x: [number, number]): boolean {
+    if (!Shell.pending(x)) return false;
+    x[0]--; return true;
+  }
+
+  /** A dialog is open on a screen with no history entry below it (Battle, desktop): push a guard so Back closes it. */
+  private syncGuard(): void {
+    if (this.guard || !anyModalOpen()) return;
+    if (Shell.pending(this.selfNav) || Shell.pending(this.selfGuard)) return;   // a self-issued Back is still landing: wait for it
+    if (this.layout !== 'desktop' && this.view.tab !== 'battle') return;        // another entry sits below: onPop re-pushes
+    try { history.pushState(writeNavState(this.layout === 'desktop' ? BATTLE : this.view), ''); this.guard = true; } catch { /* history unavailable */ }
+  }
+
+  /** The last dialog closed by itself (not by Back): take the guard entry off again. */
+  private dropGuard(): void {
+    if (!this.guard) return;
+    this.guard = false;
+    this.selfGuard = [this.selfGuard[0] + 1, Date.now() + 1500];
+    try { history.back(); } catch { this.selfGuard[0] = 0; }
+  }
+
   private onPop(state: unknown): void {
+    if (Shell.take(this.selfGuard)) { this.syncGuard(); return; }      // our own guard removal
+    const own = Shell.take(this.selfNav);                              // our own navigation: a dialog opened since is not "Back"
+    if (this.guard && anyModalOpen()) {
+      this.guard = false;
+      if (handleBackWithModal() === 'stay' || anyModalOpen()) this.syncGuard();
+      return;
+    }
     if (this.layout === 'desktop') return;
+    if (own) { this.afterOwnPop(state); return; }
     // Back with a dialog open closes it (or is ignored when it cannot be dismissed) and leaves the screen underneath alone:
     // the entry Back just left is pushed again so history and the nav stack stay in step
     if (handleBackWithModal() !== 'navigate') {
       try { history.pushState(writeNavState(this.nav.current), ''); } catch { /* history unavailable */ }
       return;
     }
+    this.afterOwnPop(state);
+  }
+
+  private afterOwnPop(state: unknown): void {
     const r = this.nav.pop(readNavState(state));
     this.run(r.ops);
     this.view = r.show;
@@ -231,12 +273,13 @@ export class Shell {
     this.apply();
     // Forward / Back onto a tab that is no longer revealed (Unlock everything switched off): Battle instead
     if (!this.reachable(this.view.tab)) this.go('battle');
+    this.syncGuard();
   }
 
   private run(ops: NavOp[]): void {
     for (const o of ops) {
       try {
-        if (o.op === 'back') history.go(-o.n);
+        if (o.op === 'back') { this.selfNav = [this.selfNav[0] + 1, Date.now() + 1500]; history.go(-o.n); }
         else if (o.op === 'push') history.pushState(writeNavState(o.state), '');
         else history.replaceState(writeNavState(o.state), '');
       } catch { /* history unavailable */ }

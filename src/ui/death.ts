@@ -28,10 +28,10 @@ export function stalemateOf(data: SimEvent['data'] | undefined, ui: Pick<UiState
   return d?.stalled === 'boss' || ui.wave.stalled === 'boss';
 }
 
-/** The death card's Frontier line (the deepest wave cleared is within 2 of it), or null. */
-export function frontierLine(ui: Pick<UiState, 'run' | 'forecast'>): string | null {
+/** The death card's Frontier line (the deepest wave cleared is within 2 of it, or the tower fell past it), or null. */
+export function frontierLine(ui: Pick<UiState, 'run' | 'forecast'>, deathWave = 0): string | null {
   const f = ui.forecast?.frontier;
-  return frontierNear(ui) && f !== undefined ? `Past wave ${f} enemies harden fast. A Prestige pays here.` : null;
+  return f !== undefined && (frontierNear(ui) || (f <= 100 && deathWave > f)) ? `Past wave ${f} enemies harden fast. A Prestige pays here.` : null;
 }
 
 /** The card folds to its headline after this long without a touch (ms). */
@@ -50,6 +50,7 @@ export class DeathCard {
   /** "The Broodheart wasn't taking damage" and what to do about it (the sim's stalemate cause). */
   private readonly stall = h('p', { class: 'dc-sub dc-stall' });
   private stalled = false;
+  private deathWave = 0;
   private stallName = 'boss';
   /** performance.now() when the card last opened (the attention plan's death-first window, attention.ts). */
   shownAt = 0;
@@ -71,7 +72,7 @@ export class DeathCard {
     const close = button(icon('close'), () => this.hide(), { class: 'btn icon-btn ghost dc-close', label: 'Dismiss' });
     this.fold = button(icon('down'), () => (this.folded || this.el.classList.contains('lane-folded') ? this.unfold() : this.setFolded(true)), { class: 'btn icon-btn ghost dc-fold', label: 'Show what could help' });
     this.frontier = h('div', { class: 'dc-frontier' }, icon('prestige', 'ico tiny'), this.frontierText,
-      button('Forecast', () => { this.ctx.open('forecast'); this.setFolded(true); }, { class: 'btn small ghost dc-forecast' }));
+      button(['Forecast', icon('right', 'ico tiny chev')], () => { this.ctx.open('forecast'); this.setFolded(true); }, { class: 'btn small dc-forecast', label: 'Open the Forecast' }));
     this.frontier.hidden = true;
     this.stall.hidden = true;
     this.el = h('section', { class: 'death-card', attrs: { role: 'status', 'aria-live': 'polite', 'aria-label': 'Tower destroyed' } },
@@ -119,6 +120,7 @@ export class DeathCard {
     this.showCause(ui);
     this.stalled = stalemateOf(data, ui);
     this.stallName = (boss ?? 'boss').replace(/^The /, '');
+    this.deathWave = wave;
     this.shownAt = performance.now();
     this.bought.clear();
     this.key = '';
@@ -143,7 +145,7 @@ export class DeathCard {
     // progressive reveal: suggest only what the player can see (stage 0: the three starter stats; no slot before its category)
     const f = this.ctx.features();
     // near the Frontier: say why the wall is here and where to look (prestige.ts / forecast.ts)
-    const fl = f.prestigeTab ? frontierLine(ui) : null;
+    const fl = f.prestigeTab ? frontierLine(ui, this.deathWave) : null;
     text(this.frontierText, fl ?? '');
     this.frontier.hidden = !fl;
     // at the Frontier more Scrap buys are not the answer (a Prestige is): the line replaces the suggestions, so the card fits a 375 px phone

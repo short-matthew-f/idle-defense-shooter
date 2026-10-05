@@ -107,9 +107,15 @@ const emptySlot = (list: readonly (string | null)[], open: number): number => {
   return -1;
 };
 
-/** Upgrades → category → control. */
-function viaUpgrades(c: HintCtx, cat: string | null, last: HintStep): HintStep {
-  if (c.nav.screen !== 'upgrades') return { target: 'tab-upgrades', text: 'Open Upgrades', final: false };
+/** Pseudo hint id in prefs.hintsDone: the player opened the Elements slot picker and left it (the hint retires: they have seen it). */
+export const ELEMENTS_SEEN = 'elements-seen';
+
+/**
+ * Upgrades → category → control. The tab-level ring shows only on Battle (or Upgrades): a ring that follows the player
+ * onto every other screen is a nag, so from Build / Prestige / More the hint waits (null) until they are back on Battle.
+ */
+function viaUpgrades(c: HintCtx, cat: string | null, last: HintStep): HintStep | null {
+  if (c.nav.screen !== 'upgrades') return c.nav.screen === null || c.nav.battle ? { target: 'tab-upgrades', text: 'Open Upgrades', final: false } : null;
   if (cat && c.shop.cat !== cat) return { target: `cat-${cat}`, text: 'Tap here', final: false };
   return last;
 }
@@ -148,7 +154,7 @@ export const HINTS: readonly HintDef[] = [
   {
     // the first real choice: point at the picker, never at an option (the choice is the player's)
     id: 'elements', prio: 20, coach: 'elements', feature: 'elements', kind: 'event',
-    when: (ui, c) => c.f.elements && emptySlot(ui.build.attunements, ui.run.attunementSlotsOpen) >= 0,
+    when: (ui, c) => c.f.elements && !c.done.has(ELEMENTS_SEEN) && emptySlot(ui.build.attunements, ui.run.attunementSlotsOpen) >= 0,
     step: (ui, c) => {
       const slot = emptySlot(ui.build.attunements, ui.run.attunementSlotsOpen);
       return viaUpgrades(c, 'elements', c.shop.tree === `slot:${slot}`

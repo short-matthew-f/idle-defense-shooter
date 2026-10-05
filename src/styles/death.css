@@ -28,6 +28,8 @@
 .dc-frontier { display: flex; align-items: center; gap: 8px; margin: 4px 0 6px; font-size: 14px; font-weight: 600; color: var(--warn, var(--text)); }
 .dc-frontier > span { flex: 1; min-width: 0; }
 .dc-frontier .btn { flex: none; }
+/* a real button, not text: bordered, 44 px tall, with a chevron */
+.dc-frontier .dc-forecast { min-height: 44px; min-width: 44px; padding: 0 10px 0 14px; gap: 4px; border: 1px solid var(--accent, var(--border)); background: var(--bg-2, transparent); color: var(--text); font-weight: 700; }
 .dc-stall { color: var(--text); }
 /* the card owns the lane but the room is short (lanes.ts): the buys come first, the restart / cause lines go */
 .death-card.dc-tight > .dc-sub:not(.dc-stall) { display: none; }

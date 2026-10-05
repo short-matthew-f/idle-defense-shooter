@@ -23,3 +23,11 @@ body.shell-phone:not(.tab-battle) .coach-banner, body.shell-rail:not(.tab-battle
 /* phones wrap a compact line to two lines before it ellipsizes (the coach queue, attention.ts) */
 .coach-banner.compact .btn { position: relative; min-height: 36px; height: 36px; }
 .coach-banner.compact .btn::after { content: ''; position: absolute; inset: -4px 0; }
+
+/* a line with an action button (the Quartermaster card): below 430 px the two buttons go under the text, not beside it
+   (beside it the sentence squeezed into 8 lines at 393 px) */
+@media (max-width: 430px) {
+  .coach-banner:has(.coach-act:not([hidden])) { flex-wrap: wrap; row-gap: 6px; }
+  .coach-banner:has(.coach-act:not([hidden])) .coach-text { flex: 1 1 calc(100% - 44px); }
+  .coach-banner:has(.coach-act:not([hidden])) .coach-act { flex: 1 1 0; margin-left: 42px; }
+}

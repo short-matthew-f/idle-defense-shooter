@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { features, type Features } from '../../src/ui/progression';
-import { BANNER_HOLD_MS, HINTS, HINT_LABEL_MAX_WORDS, allHints, bannerHolds, finishedHints, initialHintsDone, nextHint, registerHint, type HintCtx, type HintUi } from '../../src/ui/hints';
+import { BANNER_HOLD_MS, ELEMENTS_SEEN, HINTS, HINT_LABEL_MAX_WORDS, allHints, bannerHolds, finishedHints, initialHintsDone, nextHint, registerHint, type HintCtx, type HintUi } from '../../src/ui/hints';
 import { QM_COACH } from '../../src/ui/pointer';
 
 const feats = (best: number, prestige = 0, unlockAll = false): Features =>
@@ -86,6 +86,14 @@ describe('pointer hints: chains (tab → category → control)', () => {
     expect(nextHint(u, ctx(f2, { nav: up, shop: { cat: 'elements', tree: 'fire' } }))).toMatchObject({ target: 'slot-chip', final: false });
     expect(nextHint(u, ctx(f2, { nav: up, shop: { cat: 'elements', tree: 'slot:0' } }))).toMatchObject({ target: 'slot-picker', final: true });
     for (const d of HINTS) for (const s of [d.step(u, ctx(f2, { nav: up, shop: { cat: 'elements', tree: 'slot:0' } }))]) expect(s?.target ?? '').not.toMatch(/fire|lightning|poison|frost/);
+  });
+  it('Elements: the tab-level ring shows only on Battle; it does not follow the player onto Build / Prestige / More (N-05)', () => {
+    for (const screen of ['build', 'prestige', 'more'] as const) expect(nextHint(u, ctx(f2, { nav: { screen, battle: false } }))?.id ?? null).not.toBe('elements');
+    expect(nextHint(u, ctx(f2))).toMatchObject({ id: 'elements', target: 'tab-upgrades' });
+  });
+  it('Elements retires once the player has seen the picker', () => {
+    expect(nextHint(u, ctx(f2, { done: new Set([ELEMENTS_SEEN]) }))).toBeNull();
+    expect(finishedHints(['elements'], u, ctx(f2, { done: new Set([ELEMENTS_SEEN]) }))).toEqual(['elements']);
   });
   it('Elements retires once the slot is filled', () => {
     const filled = ui({ attOpen: 1, att: ['fire'] });
