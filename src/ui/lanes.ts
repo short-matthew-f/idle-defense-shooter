@@ -299,9 +299,10 @@ export class OverlayLanes {
         }
         const ranked = whole ? [...ids].sort((x, y) => (slot(y)!.b - slot(y)!.t) - (slot(x)!.b - slot(x)!.t)) : ids;
         for (const id of ranked) opts.push({ slot: id, h: full(id), minH: MIN_DEATH });
-        if (!whole) for (const id of ids) opts.push({ slot: id, h: folded(id), compact: true });
+        // no room for the whole card even in its tight form: its headline (never over the tower or the HUD)
+        if (!D.wantFull) for (const id of ids) opts.push({ slot: id, h: folded(id), compact: true });
       }
-      items.push({ id: 'death', kind: 'card', opts, floor: D.wantFull || D.first ? MIN_DEATH : undefined });
+      items.push({ id: 'death', kind: 'card', opts, floor: D.wantFull ? MIN_DEATH : undefined });
     }
     const order = (L === 'rail' ? ['T', 'S', 'B'] : ['B', 'T']).filter((id) => !(L === 'rail' && id === 'S' && offerOn));
     const hs: Record<string, number[]> = {};

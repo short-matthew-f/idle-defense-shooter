@@ -918,7 +918,7 @@ async function overlays() {
         const hard = r.findings.filter((f) => HARD.has(f.kind));
         await page.screenshot({ path: `${OUT}/phone-overlays-${vp.id}-${c.id}-${label}.png` });
         const names = r.overlays.map((o) => o.name);
-        check(`overlays ${vp.id} ${c.id} ${label}: nothing major is covered (tower, dock, HUD, tab bar, each other, safe area, dead taps)`, hard.length === 0 && names.length >= 3,
+        check(`overlays ${vp.id} ${c.id} ${label}: nothing major is covered (tower, dock, HUD, tab bar, each other, safe area, dead taps)`, hard.length === 0 && names.length >= (label === 'death' ? 2 : 3),   // a fresh death holds the offer as its chip (attention.ts)
           hard.length ? hard : { overlays: names, arena: r.arena });
       }
     }
