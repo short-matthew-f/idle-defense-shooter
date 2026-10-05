@@ -169,7 +169,7 @@ export async function attention({ browser, BASE, OUT, check, attachLogs }) {
       const lines = [];
       const t1 = Date.now();
       let wave = 0;
-      while (Date.now() - t1 < 200000) {
+      while (Date.now() - t1 < 330000) {
         const r = await page.evaluate(() => {
           const u = window.__citadel.game.latestUi();
           const c = document.querySelector('.coach-banner');
@@ -181,7 +181,7 @@ export async function attention({ browser, BASE, OUT, check, attachLogs }) {
         });
         wave = r.deepest;
         if (r.coach && lines[lines.length - 1]?.id !== r.coach) lines.push({ id: r.coach, wave: r.wave });
-        if (r.coach) { await page.waitForTimeout(400); await page.evaluate(() => document.querySelector('.coach-banner:not([hidden]) .coach-ok')?.click()); }
+        if (r.coach) { await page.waitForTimeout(400); await page.evaluate((id) => { const c = document.querySelector('.coach-banner:not([hidden])'); if (c && c.dataset.coach === id) c.querySelector('.coach-ok')?.click(); }, r.coach); }
         if (lines.some((l) => l.id === 'abilities') || r.deepest >= 14) break;
         await page.waitForTimeout(250);
       }

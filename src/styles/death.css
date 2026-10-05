@@ -32,3 +32,9 @@
 /* the card owns the lane but the room is short (lanes.ts): the buys come first, the restart / cause lines go */
 .death-card.dc-tight > .dc-sub:not(.dc-stall) { display: none; }
 .death-card.dc-tight .dc-lead { margin-top: 0; }
+.death-card.dc-tight > .dc-lead { display: none; }
+.death-card.dc-tight .dc-list { flex-direction: row; gap: 6px; }
+.death-card.dc-tight .btn.dc-item { flex: 1 1 0; min-width: 0; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; padding: 6px 8px; font-size: 14px; line-height: 1.2; }
+.death-card.dc-tight .btn.dc-item .dc-name { flex: none; overflow-wrap: anywhere; }
+.death-card.dc-tight .btn.dc-item > .ico { display: none; }
+.death-card.dc-tight .dc-more { display: none; }
