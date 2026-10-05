@@ -16,7 +16,7 @@ import type { ElementId, HardpointId } from '@sim/core/ids';
 import type { ShopEntry, UiState } from '@sim/core/types';
 import { CHASSIS_LINKAGES, FUSIONS, INFUSIONS, TRIADS, WEAPON_LINKAGES } from '@sim/data/index';
 import { etaSeconds, nextPurchase } from './advice';
-import { ABILITIES_REVEAL_WAVE, CONTENT_POOL } from '@sim/data/content-pool';
+import { ABILITIES_REVEAL_WAVE, CONTENT_POOL, DOCTRINES_REVEAL_WAVE } from '@sim/data/content-pool';
 
 // ---------------------------------------------------------------- the table
 
@@ -36,7 +36,7 @@ export const FEATURE_IDS = [
   // stage 2
   'elements',
   // stage 3
-  'buildTab', 'hardpoints', 'moreTab',
+  'buildTab', 'hardpoints', 'moreTab', 'doctrines',
   // stage 4
   'abilities', 'overcharge',
   // stage 5
@@ -71,6 +71,7 @@ export const UNLOCKS: Readonly<Record<FeatureId, Unlock>> = {
   buildTab: W(10, 'Build tab'),
   hardpoints: W(10, 'Upgrades → Hardpoints (first hardpoint slot opens at 10)'),
   moreTab: W(10, 'More tab (Settings and Help are reachable from a Battle chip before this)'),
+  doctrines: W(DOCTRINES_REVEAL_WAVE, 'Doctrine forks in the Upgrades trees (pick one path per tree)'),
   abilities: W(ABILITIES_REVEAL_WAVE, 'Ability bar, Command Energy, tap-to-cast'),
   overcharge: W(12, 'Overcharge (wired by another system)'),
   boons: W(15, 'Boons on the Build tab and the boon explainer (offers themselves always show)'),

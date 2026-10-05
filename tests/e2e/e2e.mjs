@@ -862,7 +862,7 @@ async function touchCheck() {
 // ================================================================ phone: overlays never block anything major (src/ui/lanes.ts)
 async function overlays() {
   // crafted saves: the overlays that can be up at once, at the stages where they first pile up
-  const LADDER = ['start', 'checkpoint', 'elements', 'build', 'abilities', 'boons', 'anomalies', 'bulk', 'prestige', 'cross', 'inspector', 'cores', 'frame', 'exotics', 'patrol', 'machine', 'salvage', 'overcharge'];
+  const LADDER = ['start', 'checkpoint', 'elements', 'build', 'abilities', 'boons', 'anomalies', 'bulk', 'prestige', 'cross', 'inspector', 'cores', 'frame', 'exotics', 'doctrines', 'patrol', 'machine', 'salvage', 'overcharge'];
   const OFFER = "s.run.boonOffer = ['iron_skin', 'thick_plating', 'miser']; s.run.boonOfferKind = 'boss'; s.run.boonOfferSeq = 3; s.run.boonOfferWave = 11; ";
   const combos = [
     { id: 'stage0', mut: `${OFFER}s.run.scrap = 60;`, prefs: null, toasts: true },
@@ -936,7 +936,7 @@ async function overlays() {
 
 // ================================================================ phone: boss tells respect the unlock ladder; no silent swaps (src/ui/tells.ts)
 async function tells() {
-  const LADDER = ['start', 'checkpoint', 'elements', 'build', 'abilities', 'boons', 'anomalies', 'bulk', 'prestige', 'cross', 'inspector', 'cores', 'frame', 'exotics', 'patrol', 'machine', 'salvage', 'overcharge'];
+  const LADDER = ['start', 'checkpoint', 'elements', 'build', 'abilities', 'boons', 'anomalies', 'bulk', 'prestige', 'cross', 'inspector', 'cores', 'frame', 'exotics', 'doctrines', 'patrol', 'machine', 'salvage', 'overcharge'];
   const viewports = [
     { id: '393', viewport: { width: 393, height: 852 }, safe: { top: 59, bottom: 34 } },
     { id: '375', viewport: { width: 375, height: 667 }, safe: { top: 20, bottom: 0 } },
@@ -1240,7 +1240,7 @@ async function calm() {
     if (s.meta.settings && s.meta.settings.quartermaster) s.meta.settings.quartermaster.on = true;
     s.savedAtMs = Date.now();`;
   const PREFS = { revealInit: true, hintsInit: true, contentInit: true, buyCoach: 3, contentSeen: ['fire', 'lightning', 'poison', 'frost', 'ordnance', 'drones', 'blade'],
-    coachSeen: ['start', 'checkpoint', 'elements', 'build', 'abilities', 'boons', 'anomalies', 'bulk', 'prestige', 'cross', 'inspector', 'cores', 'frame', 'exotics', 'patrol', 'machine', 'salvage', 'overcharge', 'qm-on'], tabsVisited: ['battle', 'upgrades', 'build', 'prestige', 'more'] };
+    coachSeen: ['start', 'checkpoint', 'elements', 'build', 'abilities', 'boons', 'anomalies', 'bulk', 'prestige', 'cross', 'inspector', 'cores', 'frame', 'exotics', 'doctrines', 'patrol', 'machine', 'salvage', 'overcharge', 'qm-on'], tabsVisited: ['battle', 'upgrades', 'build', 'prestige', 'more'] };
   for (const vp of viewports) {
     const ctx = await browser.newContext({ viewport: vp.viewport, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
     await ctx.route('**/favicon.ico', (r) => r.fulfill({ status: 204, body: '' }));

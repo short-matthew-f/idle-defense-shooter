@@ -14,7 +14,7 @@ import { prefs, setPref } from './prefs';
 import type { FeatureId, Features } from './progression';
 
 export type CoachId = 'start' | 'checkpoint' | 'elements' | 'patrol' | 'build' | 'abilities' | 'boons' | 'anomalies' | 'bulk' | 'prestige' | 'cross' | 'inspector'
-  | 'cores' | 'frame' | 'exotics' | 'machine' | 'salvage' | 'overcharge';
+  | 'cores' | 'frame' | 'exotics' | 'doctrines' | 'machine' | 'salvage' | 'overcharge';
 
 export interface CoachMsg {
   id: CoachId;
@@ -31,6 +31,7 @@ export const COACH: readonly CoachMsg[] = [
   { id: 'elements', feature: 'elements', icon: 'bolt', text: 'Your first real choice: attune an element in Upgrades → Elements.' },
   { id: 'patrol', feature: 'runControls', icon: 'restart', text: 'Push climbs and fights bosses. Patrol loops cleared waves and keeps earning, even while you are away.' },
   { id: 'build', feature: 'buildTab', icon: 'blueprint', text: 'A weapon slot is open: mount a second weapon on the Build tab.' },
+  { id: 'doctrines', feature: 'doctrines', icon: 'blueprint', text: 'Doctrine fork: pick one path for this tree. You can change it at a checkpoint.' },
   { id: 'abilities', feature: 'abilities', icon: 'target', text: 'Abilities: tap one to spend Command Energy (CE), then tap the field.' },
   { id: 'boons', feature: 'boons', icon: 'boon', text: 'Boons help until the tower falls. Pick one, or decline.' },
   { id: 'anomalies', feature: 'anomalies', icon: 'info', text: 'Anomaly drafts follow bosses: each card bends the rules until you Prestige.' },
@@ -74,7 +75,7 @@ export function activeCoachLive(a: { crates: number; overcharge: { ready: boolea
  * later line never marks them read (staleWith). 'cross' is here because its reveal depends on the build (the first Cross
  * node), so it can arrive after later lines in the table.
  */
-export const VERB_COACH: ReadonlySet<CoachId> = new Set<CoachId>(['checkpoint', 'elements', 'patrol', 'build', 'abilities', 'cross']);
+export const VERB_COACH: ReadonlySet<CoachId> = new Set<CoachId>(['checkpoint', 'elements', 'patrol', 'build', 'doctrines', 'abilities', 'cross']);
 
 /**
  * The message to show now, or null, among unread messages whose feature is on: an event explainer whose subject is

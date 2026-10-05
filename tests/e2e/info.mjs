@@ -13,7 +13,7 @@ const VPS = [
   { id: '393', viewport: { width: 393, height: 852 }, safe: { top: 59, bottom: 34 } },
   { id: '375', viewport: { width: 375, height: 667 }, safe: { top: 20, bottom: 0 } },
 ];
-const SEEN = ['start', 'checkpoint', 'elements', 'build', 'abilities', 'boons', 'anomalies', 'bulk', 'prestige', 'cross', 'inspector', 'cores', 'frame', 'exotics', 'patrol', 'machine', 'salvage', 'overcharge'];
+const SEEN = ['start', 'checkpoint', 'elements', 'build', 'abilities', 'boons', 'anomalies', 'bulk', 'prestige', 'cross', 'inspector', 'cores', 'frame', 'exotics', 'doctrines', 'patrol', 'machine', 'salvage', 'overcharge'];
 
 export async function info({ browser, BASE, OUT, check, attachLogs }) {
   for (const vp of VPS) {

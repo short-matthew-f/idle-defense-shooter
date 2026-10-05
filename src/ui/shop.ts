@@ -28,7 +28,7 @@ import { fmtDuration, fmtNum, fmtStatChange, splitDesc, substituteDesc, titleCas
 import { nextPurchase } from './advice';
 import { CHASSIS, ELEMENTS, ELEMENT_BLURB, HARDPOINTS, HARDPOINT_BLURB, NODE_BY_ID, TREE_BY_ID, TREE_LABEL } from './content';
 import { confirmDialog, openModal } from './modal';
-import { doctrineFork, forkKey, freeDoctrineTrees } from './doctrine';
+import { doctrineFork, doctrinesShown, forkKey, freeDoctrineTrees } from './doctrine';
 import { prefs, setPref } from './prefs';
 import { POOL_COMPLETE_AT, STARTER_IDS, contentPool, newInPool, poolShop, type ContentPool, type Features } from './progression';
 import { QuartermasterPanel } from './quartermaster';
@@ -609,7 +609,8 @@ export class Shop {
     const inCat = (t: string): boolean => c === 'chassis' ? (CHASSIS as string[]).includes(t)
       : c === 'elements' ? (ui.build.attunements as (string | null)[]).includes(t)
       : c === 'hardpoints' ? (ui.build.hardpoints as (string | null)[]).includes(t) || frame.includes(t) : false;
-    return freeDoctrineTrees(ui).filter(inCat);
+    if (!doctrinesShown(ui, this.f.unlockAll)) return [];
+    return freeDoctrineTrees({ shop: ui.shop, build: ui.build }).filter(inCat);
   }
 
   /** A decision waits in this category: an empty slot with something to put in it, or a free Doctrine fork. */
@@ -874,8 +875,10 @@ export class Shop {
     out.push(...nodes(t.shared.map((n) => n.id)));
     const chosen = [ui.build.doctrines[t.id], ui.build.secondDoctrines[t.id]].filter(Boolean) as DoctrineId[];
     const forkOpen = ui.shop.some((e) => e.kind === 'doctrine' && e.tree === t.id && !e.locked);
-    out.push({ t: 'head', text: 'Doctrine', sub: chosen.length ? undefined : forkOpen ? 'Choose one path.' : `The fork opens after ${t.forkRequirement} core nodes.` });
-    out.push({ t: 'fork', tree: t.id });
+    if (doctrinesShown(ui, this.f.unlockAll)) {
+      out.push({ t: 'head', text: 'Doctrine', sub: chosen.length ? undefined : forkOpen ? 'Choose one path.' : `The fork opens after ${t.forkRequirement} core nodes.` });
+      out.push({ t: 'fork', tree: t.id });
+    }
     for (const d of t.doctrines) {
       if (!chosen.includes(d.id)) continue;
       out.push({ t: 'head', text: d.name, sub: d.identity });
