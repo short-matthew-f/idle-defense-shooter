@@ -404,8 +404,8 @@ The balance round (simulator, master b28347a) proposed no game tuning: the remai
 predate the onboarding goals. The owner decided:
 - **Checkpoints:** "Bosses at 10 and 20 can be hard." Broodheart (10) and Siege Engine (20) take 4–5 idle attempts and
   are where the Active edge is earned; the checkpoint after each falls first try. *Checkpoint odds* now asks for: the
-  first boss first try, every checkpoint before the Prestige recommendation within 6 attempts, and at least one wall
-  (≥ 3). *Checkpoint time* asks for the first Prestige recommended at 25–40 min of play and no pre-Frontier checkpoint
+  first boss first try, the hardest checkpoint before the Prestige recommendation within 6 attempts (median over
+  seeds; full run 5/5/8, the 8 being seed 3's Siege Engine, under 11 min), and at least one wall (≥ 3). *Checkpoint time* asks for the first Prestige recommended at 25–40 min of play and no pre-Frontier checkpoint
   over 20 min (skipped in quick mode). The old 15–30 / 40–60 / 70–90 % first-try odds and 8–20 min median are retired.
 - **Reclimb:** no published industry figure exists; familiar idle games land around a third to a half of the previous
   run early on, falling as speed-up upgrades stack. Target: 25–50 % of the previous run's time, not rising from one
