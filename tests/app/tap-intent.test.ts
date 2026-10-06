@@ -24,15 +24,22 @@ describe('weighted, sticky enemy picks', () => {
     expect(pickRank(0xfffff)).toBe(PickRank.Other);
   });
 
-  it('a boss within the radius beats a nearer grunt; an elite beats a nearer grunt; the nearest wins within a rank', () => {
-    const f = inst([enemy(4, 0, 8, PickRank.Other), enemy(30, 0, 40, PickRank.Boss)]);
-    expect(pickEnemy(f, 2, 0, 0, 24)).toMatchObject({ x: 30, y: 0, rank: PickRank.Boss });
-    const g = inst([enemy(3, 0, 8, PickRank.Other), enemy(-15, 0, 8, PickRank.Elite)]);
+  it('within the assist reach a boss beats a nearer grunt; an elite beats a nearer grunt; the nearest wins within a rank', () => {
+    const f = inst([enemy(12, 0, 8, PickRank.Other), enemy(45, 0, 40, PickRank.Boss)]);
+    expect(pickEnemy(f, 2, 0, 0, 24)).toMatchObject({ x: 45, y: 0, rank: PickRank.Boss });
+    const g = inst([enemy(10, 0, 8, PickRank.Other), enemy(-15, 0, 8, PickRank.Elite)]);
     expect(pickEnemy(g, 2, 0, 0, 24)).toMatchObject({ x: -15, rank: PickRank.Elite });
     const h = inst([enemy(10, 0, 8, PickRank.Other), enemy(-5, 0, 8, PickRank.Other)]);
     expect(pickEnemy(h, 2, 0, 0, 24)).toMatchObject({ x: -5 });
-    const wp = inst([enemy(10, 0, 40, PickRank.Boss), enemy(-12, 0, 40, PickRank.WeakPoint)]);
+    const wp = inst([enemy(10, 0, 8, PickRank.Boss), enemy(-12, 0, 8, PickRank.WeakPoint)]);
     expect(pickEnemy(wp, 2, 0, 0, 24)).toMatchObject({ x: -12, rank: PickRank.WeakPoint });
+  });
+
+  it('a finger on an add beside a boss picks the add (direct hits beat the assist reach)', () => {
+    const f = inst([enemy(3, 0, 8, PickRank.Other), enemy(30, 0, 40, PickRank.Boss)]);
+    expect(pickEnemy(f, 2, 0, 0, 24)).toMatchObject({ x: 3, rank: PickRank.Other });
+    const g = inst([enemy(3, 0, 8, PickRank.Other), enemy(-15, 0, 8, PickRank.Elite)]);
+    expect(pickEnemy(g, 2, 0, 0, 24)).toMatchObject({ x: 3 });
   });
 
   it('an enemy out of reach is never picked, whatever its rank', () => {

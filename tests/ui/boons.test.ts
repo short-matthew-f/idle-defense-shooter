@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { BoonId } from '../../src/sim/core/ids';
 import { BOONS } from '../../src/sim/data/boons';
 import {
-  activeSummary, boonName, needRevealed, boonNeeds, boonView, offerHeading, pickCommand, replacedBy, rerollState, CATEGORY_LABEL,
+  activeSummary, arrivesAsChip, attemptKey, boonName, needRevealed, boonNeeds, boonView, offerHeading, pickCommand, replacedBy, rerollState, CATEGORY_LABEL,
 } from '../../src/ui/boons';
 import { tabBadges, type BadgeState } from '../../src/ui/shell-logic';
 
@@ -81,5 +81,16 @@ describe('boon UI helpers', () => {
     expect(tabBadges(withOffer).build).toMatchObject({ kind: 'alert', label: 'Boon offer waiting' });
     const both = { ...withOffer, run: { ...withOffer.run, pendingDraft: ['tithe'] as never } };
     expect(tabBadges(both).build?.label).toBe('Anomaly draft waiting');
+  });
+});
+
+describe('set-aside memory (C-08)', () => {
+  it('a later offer arrives as the chip only in the attempt the player set one aside in', () => {
+    const k = attemptKey(2, 5);
+    expect(arrivesAsChip({ key: k, aside: true }, k)).toBe(true);
+    expect(arrivesAsChip({ key: k, aside: true }, attemptKey(2, 6))).toBe(false);   // a new attempt
+    expect(arrivesAsChip({ key: k, aside: true }, attemptKey(3, 5))).toBe(false);   // a Prestige (attempts restart too)
+    expect(arrivesAsChip({ key: k, aside: false }, k)).toBe(false);                 // nothing set aside
+    expect(arrivesAsChip({ key: '', aside: false }, k)).toBe(false);
   });
 });

@@ -51,8 +51,9 @@ export interface WeightedPick extends PickResult {
 }
 
 /**
- * Phase 3 weighted, sticky enemy pick (fixes A-05, A-06, C-14). Among the enemies within reach of (x, y) (the same reach
- * as nearestEnemy), the highest rank wins (boss, weak point open first, then elite, then the rest), the nearest within
+ * Phase 3 weighted, sticky enemy pick (fixes A-05, A-06, C-14). A finger on an enemy's body picks that enemy (nearest
+ * centre among such direct hits), so adds beside a boss stay tappable. Otherwise, among the enemies within reach of (x, y)
+ * (the same reach as nearestEnemy), the highest rank wins (boss, weak point open first, then elite, then the rest), the nearest within
  * a rank. Then stickiness: an enemy already designated (reticle drawn on it) keeps the tap when it is no more than
  * `stickyWu` world units farther than that best candidate, so taps in a formation do not flick the designation around.
  * Pure (tests/app/pick.test.ts); the sim still resolves `designate_at` by the position this returns.
@@ -61,6 +62,7 @@ export function pickEnemy(instances: Float32Array, count: number, x: number, y: 
   const n = Math.min(count, Math.floor(instances.length / INSTANCE_FLOATS));
   let best: WeightedPick | null = null;
   let sticky: PickResult | null = null;
+  let bestDirect = false;
   for (let i = 0; i < n; i++) {
     const o = i * INSTANCE_FLOATS;
     if (instances[o + 9] !== ENEMY_LAYER) continue;
@@ -68,7 +70,9 @@ export function pickEnemy(instances: Float32Array, count: number, x: number, y: 
     const d = Math.hypot(ex - x, ey - y);
     if (d > Math.max(minReach, r + PICK_PAD)) continue;
     const rank = pickRank(instances[o + 11]);
-    if (!best || rank > best.rank || (rank === best.rank && d < best.dist)) best = { x: ex, y: ey, dist: d, rank, marked: false };
+    // a finger on an enemy's body (d <= its radius) beats the assist reach: adds beside a boss stay tappable
+    const direct = d <= r;
+    if (!best || better(direct, rank, d, bestDirect, best.rank, best.dist)) { best = { x: ex, y: ey, dist: d, rank, marked: false }; bestDirect = direct; }
     if ((!sticky || d < sticky.dist) && reticleAt(instances, count, ex, ey)) sticky = { x: ex, y: ey, dist: d };
   }
   if (!best) return null;
@@ -78,6 +82,13 @@ export function pickEnemy(instances: Float32Array, count: number, x: number, y: 
   }
   best.marked = reticleAt(instances, count, best.x, best.y);
   return best;
+}
+
+/** Direct hits (finger on the body) first, nearest among them; otherwise the highest rank, nearest within a rank. */
+function better(direct: boolean, rank: number, d: number, bDirect: boolean, bRank: number, bDist: number): boolean {
+  if (direct !== bDirect) return direct;
+  if (direct) return d < bDist || (d === bDist && rank > bRank);
+  return rank > bRank || (rank === bRank && d < bDist);
 }
 
 function findBody(instances: Float32Array, n: number, x: number, y: number): number {
