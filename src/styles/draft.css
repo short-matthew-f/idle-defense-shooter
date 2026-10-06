@@ -13,3 +13,19 @@
 .draft-timer { margin: 10px 0 0; font-size: 14px; color: var(--text-dim); }
 .draft-foot { display: grid; grid-template-columns: auto 1fr 1fr; gap: 8px; }
 @media (min-width: 600px) { .draft-foot { grid-template-columns: 1fr auto auto; } .draft-foot > :first-child { justify-self: start; } }
+/* short viewports (a landscape phone): each card's Pick sticks to the bottom of the dialog's scroller, so it is always in
+   reach whichever card the player is reading; the cards are tighter */
+@media (max-height: 520px) {
+  .draft-cards { gap: 8px; margin-top: 4px; }
+  .anomaly-card { padding: 8px 10px 0; gap: 4px; }
+  .anomaly-card .btn.primary { position: sticky; bottom: 0; z-index: 1; margin: 4px 0 0; box-shadow: 0 -6px 8px -2px var(--bg-2); }
+  .anomaly-card::after { content: ''; display: block; height: 8px; flex: none; }
+  .an-desc { line-height: 1.3; }
+  /* the dialog gives the cards the height: balance beside the title, a one-line intro, a slimmer foot */
+  .modal-wrap:has(.draft-modal) { padding-top: calc(var(--safe-top) + 6px); padding-bottom: calc(var(--safe-bottom) + 6px); }
+  .draft-modal .modal-titles { flex-direction: row; align-items: baseline; flex-wrap: wrap; gap: 0 14px; padding: 4px 0; }
+  .draft-modal .modal-body { padding: 8px 14px 6px; }
+  .draft-modal .modal-foot { padding: 6px 14px; }
+  .draft .dim { margin: 0 0 2px; }
+  .draft-timer { margin: 6px 0 0; }
+}

@@ -1,10 +1,10 @@
 /* Offline return card (src/ui/offline.ts) */
 .offline { display: flex; flex-direction: column; gap: 10px; }
 .offline p { margin: 0; line-height: 1.4; }
-.offline .off-gain { display: flex; align-items: center; gap: 8px; font-size: 28px; font-weight: 800; color: var(--scrap); }
+.offline .off-gain { display: flex; align-items: center; gap: 8px; font-size: 1.75rem; font-weight: 800; color: var(--scrap); }
 .offline .off-gain .ico { width: 28px; height: 28px; }
-.offline .off-counted { font-size: 16px; }
-.offline .off-zero { font-size: 16px; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--bg-2); }
+.offline .off-counted { font-size: 1rem; }
+.offline .off-zero { font-size: 1rem; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--bg-2); }
 .offline .off-now b { color: var(--scrap); }
-.offline .off-boss { font-size: 16px; color: var(--text-dim); }
-.offline-modal .off-continue { min-height: 52px; font-size: 18px; }
+.offline .off-boss { font-size: 1rem; color: var(--text-dim); }
+.offline-modal .off-continue { min-height: 52px; font-size: 1.125rem; }

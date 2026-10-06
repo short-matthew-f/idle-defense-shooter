@@ -12,7 +12,7 @@ const ELEMENTS: readonly string[] = ['fire', 'lightning', 'poison', 'frost'];
 const WEAPONS: readonly string[] = ['primary', ...HARDPOINTS];
 const PROFILES: readonly string[] = ['nearest', 'closest_to_tower', 'lowest_hp', 'highest_hp', 'elites', 'support', 'fastest', 'designated'];
 const MODES: readonly string[] = ['push', 'patrol'];
-const SETTINGS: Readonly<Record<string, 'number' | 'boolean'>> = { clarity: 'number', autoPrestige: 'boolean', autocastOff: 'number' };
+const SETTINGS: Readonly<Record<string, 'number' | 'boolean'>> = { clarity: 'number', autoPrestige: 'boolean', autocastOff: 'number', tellAssist: 'boolean' };
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): boolean => typeof v === 'string' && v.length > 0 && v.length <= 128;

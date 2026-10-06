@@ -42,6 +42,9 @@ import { MoreScreen, PrestigeScreen, type MoreSub } from './screens';
 import { Shell } from './shell';
 import { WalletBar, updateLiveWallets, type WalletView } from './wallet';
 import { anyModalOpen, mountModalLayer } from './modal';
+import { ArenaLabel, mountA11y } from './a11y';
+import { announce, mountAnnouncer } from './announce';
+import { SrWatch } from './sr-watch';
 import { sectorAccent } from './content';
 import type { UiHost } from './host';
 import type { ScreenId, ToastKind, UiCtx } from './ctx';
@@ -85,6 +88,9 @@ export class GameUi {
   private readonly hints: HintDriver;
   /** Where the transient overlays go on Battle (lanes.ts): clear of the tower, the dock, the HUD and each other. */
   readonly lanes: OverlayLanes;
+  /** Phase 3 (A-20): the arena canvas's label and the screen-reader lines. */
+  private readonly arenaLabel = new ArenaLabel();
+  private readonly srWatch: SrWatch;
   /** Which overlay may ask for attention now (attention.ts): death first, the boss-clear beat, one decision, boss mode. */
   readonly attn: Attention;
 
@@ -102,10 +108,13 @@ export class GameUi {
       state: () => this.latest,
       open: (s, arg) => this.open(s, arg),
       toast: (m, k) => this.feed.toast(m, k),
+      toastAction: (m, k, ms, a, e) => this.feed.toastAction(m, k, ms, a, e),
       features: () => this.feats,
     };
     this.feats = features({ run: { deepestCleared: 0 }, meta: { deepestEver: 0, prestigeCount: 0 } }, { unlockAll: this.unlockAll });
     mountModalLayer(root);
+    mountA11y();
+    mountAnnouncer();
     this.hud = new Hud(this.ctx);
     this.abilities = new AbilityBar(this.ctx);
     this.active = new ActiveWidget(this.ctx);
@@ -189,6 +198,9 @@ export class GameUi {
     // the wallet follows the view at once (a category or segment switch, not only the next UiState)
     this.shop.onViewChange = () => this.refreshWallet();
     this.prestigeScreen.onViewChange = () => this.refreshWallet();
+    this.srWatch = new SrWatch(
+      () => battle.querySelector('.boss-bar .tell')?.getAttribute('aria-label') ?? null,
+      () => battle.querySelector('.boss-bar .boss-name')?.textContent ?? 'Boss');
     window.addEventListener('keydown', (e) => this.onKey(e));
   }
 
@@ -294,6 +306,8 @@ export class GameUi {
     this.codex.update(ui);
     this.directives.update(ui);
     this.trials.update(ui);
+    this.arenaLabel.update(ui);
+    this.srWatch.update(ui, this.feats.prestigeTab);
     this.lanes.apply();   // before the pointer: its label keeps clear of where the overlays now are
     this.hints.update(ui, this.feats);
   }
@@ -304,7 +318,7 @@ export class GameUi {
     this.active.onEvents(events);
     this.shop.notePurchases(events);   // bulk-buy summary toast
     for (const e of events) {
-      if (e.type === Ev.TowerDeath && this.latest) this.death.show(e.a || this.latest.run.wave, this.latest, e.data);
+      if (e.type === Ev.TowerDeath && this.latest) { this.death.show(e.a || this.latest.run.wave, this.latest, e.data); announce(`Tower destroyed on wave ${e.a || this.latest.run.wave}`, true); }
       else if (e.type === Ev.WaveClear || e.type === Ev.Prestige || e.type === Ev.Ascend) this.death.hide();
       else if (e.type === Ev.Purchase && e.data?.via !== 'quartermaster') this.shop.noteBuy();   // automatic buys are not the player's
     }

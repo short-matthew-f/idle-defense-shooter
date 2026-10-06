@@ -1,7 +1,8 @@
 /**
  * Modal layer: stacked dialogs over the battlefield (the field stays visible behind a dim
- * backdrop). Escape / backdrop tap close dismissable dialogs; focus moves into the dialog and
- * returns to the opener on close.
+ * backdrop). Escape / backdrop tap close dismissable dialogs. Phase 3 (A-04): while a dialog is open the rest of the
+ * app is `inert` (and lower dialogs in the stack), Tab cycles inside the top dialog, initial focus goes to the title
+ * (confirmDialog: the safe Cancel), and focus returns to the opener on close.
  */
 import '../styles/modal.css';
 import { button, h } from './dom';
@@ -23,7 +24,44 @@ export interface ModalOptions {
 export interface ModalHandle { el: HTMLElement; close(): void; readonly open: boolean; setTitle(t: string): void }
 
 let layer: HTMLElement | null = null;
-const stack: { handle: ModalHandle; opts: ModalOptions; opener: Element | null }[] = [];
+const stack: { handle: ModalHandle; opts: ModalOptions; opener: Element | null; wrap: HTMLElement }[] = [];
+/** Elements made inert while dialogs are open (restored when the last one closes). */
+let inerted: HTMLElement[] = [];
+
+/** Everything outside `keep`'s ancestor chain (up to <body>) that a dialog must make inert (live regions stay live). */
+export function inertTargets(keep: HTMLElement): HTMLElement[] {
+  const out: HTMLElement[] = [];
+  for (let el: HTMLElement | null = keep; el && el !== document.body; el = el.parentElement) {
+    const parent: HTMLElement | null = el.parentElement;
+    if (!parent) break;
+    for (const sib of Array.from(parent.children) as Element[]) {
+      if (sib === el || !(sib instanceof HTMLElement) || sib.inert || sib.classList.contains('sr-live')) continue;
+      if (sib.tagName === 'SCRIPT' || sib.tagName === 'STYLE') continue;
+      out.push(sib);
+    }
+  }
+  return out;
+}
+
+function syncInert(): void {
+  if (!layer) return;
+  if (stack.length && !inerted.length) { inerted = inertTargets(layer); for (const el of inerted) el.inert = true; }
+  else if (!stack.length && inerted.length) { for (const el of inerted) el.inert = false; inerted = []; }
+  stack.forEach((s, i) => { s.wrap.inert = i < stack.length - 1; });
+}
+
+/** The keyboard-focusable elements inside a dialog card, in order. */
+function focusables(card: HTMLElement): HTMLElement[] {
+  return Array.from(card.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+    .filter((e) => !e.hidden && !e.closest('[hidden]') && e.getClientRects().length > 0);
+}
+
+/** Tab / Shift+Tab wrap inside the top dialog (pure index rule). */
+export function trapIndex(current: number, count: number, back: boolean): number {
+  if (count <= 0) return -1;
+  if (current < 0) return back ? count - 1 : 0;
+  return back ? (current - 1 + count) % count : (current + 1) % count;
+}
 
 export function mountModalLayer(root: HTMLElement): void {
   layer = h('div', { class: 'modal-layer', attrs: { 'aria-live': 'off' } });
@@ -33,6 +71,19 @@ export function mountModalLayer(root: HTMLElement): void {
     if (e.key !== 'Escape' || !stack.length) return;
     const top = stack[stack.length - 1];
     if (top.opts.dismissable !== false) { e.preventDefault(); e.stopPropagation(); top.handle.close(); }
+  }, true);
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab' || !stack.length) return;
+    const card = stack[stack.length - 1].handle.el;
+    const list = focusables(card);
+    if (!list.length) { e.preventDefault(); return; }
+    const i = list.indexOf(document.activeElement as HTMLElement);
+    // inside the list and not at an end: let the browser move focus normally
+    if (i > 0 && i < list.length - 1) return;
+    if (i === 0 && !e.shiftKey && list.length > 1) return;
+    if (i === list.length - 1 && e.shiftKey && list.length > 1) return;
+    e.preventDefault();
+    list[trapIndex(i, list.length, e.shiftKey)]?.focus();
   }, true);
 }
 
@@ -59,6 +110,7 @@ export function openModal(opts: ModalOptions): ModalHandle {
   const titleEl = h('h2', { class: 'modal-title', text: opts.title });
   const id = `m${Math.random().toString(36).slice(2, 8)}`;
   titleEl.id = id;
+  titleEl.tabIndex = -1;   // initial focus lands here (never on a confirm or destructive action)
   const head = h('div', { class: 'modal-head' }, opts.wallet ? h('div', { class: 'modal-titles' }, titleEl, opts.wallet) : titleEl);
   let isOpen = true;
   const handle: ModalHandle = {
@@ -71,6 +123,7 @@ export function openModal(opts: ModalOptions): ModalHandle {
       const i = stack.findIndex((s) => s.handle === handle);
       const entry = i >= 0 ? stack.splice(i, 1)[0] : null;
       if (layer && !stack.length) layer.hidden = true;
+      syncInert();
       opts.onClose?.();
       if (!stack.length) modalHooks.emptied?.();
       const opener = entry?.opener as HTMLElement | null;
@@ -87,10 +140,13 @@ export function openModal(opts: ModalOptions): ModalHandle {
   handle.el = card;
   layer.hidden = false;
   layer.appendChild(wrap);
-  stack.push({ handle, opts, opener: document.activeElement });
+  const prevTop = stack[stack.length - 1];
+  // a dialog opened from another one returns focus to its control; one opened from inert app content to the element
+  // that had focus before (the opener)
+  stack.push({ handle, opts, opener: prevTop && !prevTop.handle.el.contains(document.activeElement) ? prevTop.handle.el.querySelector('.modal-title') : document.activeElement, wrap });
+  syncInert();
   modalHooks.opened?.();
-  const focusable = card.querySelector<HTMLElement>('.modal-body button:not([disabled]), .modal-body input, .modal-body select, .modal-foot button:not([disabled])');
-  (focusable ?? card.querySelector<HTMLElement>('button'))?.focus({ preventScroll: true });
+  titleEl.focus({ preventScroll: true });
   return handle;
 }
 

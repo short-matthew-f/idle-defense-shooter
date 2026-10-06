@@ -18,7 +18,7 @@
 //   phone touch       (docs/TOUCH.md) More → Help → Touch test: the canvas marker lands on the tap; calibration with honest
 //                     taps says "accurate" and stores nothing; a synthetic 40 px pointer offset (taps read 40 px below the
 //                     finger) is measured, calibrated away (prefs touchCal), survives a reload, and Reset restores identity
-//   phone overlays    (src/ui/lanes.ts, overlap.mjs) at 393×852 (DPR 2, notch insets) and 375×667: crafted saves at stage 0,
+//   phone overlays    (src/ui/lanes.ts, overlap.mjs) at 393×852 (DPR 2, notch insets), 375×667, 320×568 and 375×667 at 130 % text: crafted saves at stage 0,
 //                     stage 4 and after the first Prestige with every overlay up at once (coach banner, three toasts, the boon
 //                     offer or its chip, the pointer ring, the armed hint, a boss bar with its tell, the death card): no overlay
 //                     covers the tower, the Upgrade / ability / Overcharge buttons, the HUD, the tab bar, the coach buttons or
@@ -874,6 +874,9 @@ async function overlays() {
   const viewports = [
     { id: '393', viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, safe: { top: 59, bottom: 34 } },
     { id: '375', viewport: { width: 375, height: 667 }, deviceScaleFactor: 2, safe: { top: 20, bottom: 0 } },
+    // Phase 3 (A-01): the smallest phone width and the largest in-game text size
+    { id: '320', viewport: { width: 320, height: 568 }, deviceScaleFactor: 2, safe: { top: 20, bottom: 0 } },
+    { id: '375-text130', viewport: { width: 375, height: 667 }, deviceScaleFactor: 2, safe: { top: 20, bottom: 0 }, textScale: 130 },
   ];
   const HARD = new Set(['cover', 'pair', 'clip', 'centre', 'deadtap']);
   for (const vp of viewports) {
@@ -903,7 +906,7 @@ async function overlays() {
           r.onsuccess = () => { const t = r.result.transaction('saves', 'readwrite'); t.objectStore('saves').put(save, 'main'); t.oncomplete = () => { r.result.close(); res(); }; t.onerror = () => rej(t.error); };
           r.onerror = () => rej(r.error);
         });
-      }, { save, prefs: c.prefs });
+      }, { save, prefs: vp.textScale ? { ...(c.prefs ?? {}), textScale: vp.textScale } : c.prefs });
       await page.goto(`${BASE}?fast=1`);
       await ready();
       await page.waitForFunction(() => !!document.querySelector('.boon-offer:not([hidden])'), null, { timeout: 10000 }).catch(() => {});

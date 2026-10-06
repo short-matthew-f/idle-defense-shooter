@@ -19,7 +19,7 @@ body.shell-rail .oc-wrap { bottom: calc(12px + var(--safe-bottom, 0px)); }
 .oc-meter { stroke: var(--info); stroke-linecap: round; transition: stroke-dasharray 0.12s linear; }
 .oc-window { stroke: transparent; stroke-width: 7; }
 .oc-charge { stroke: #fff; stroke-width: 3; stroke-linecap: round; }
-.oc-label { position: relative; z-index: 1; font-size: 12px; font-weight: 800; letter-spacing: 0.04em; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.oc-label { position: relative; z-index: 1; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.04em; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 
 .btn.oc-btn.ready { border-color: var(--scrap); }
 .btn.oc-btn.ready .oc-meter { stroke: var(--scrap); }
@@ -49,11 +49,11 @@ body.shell-rail .oc-wrap { bottom: calc(12px + var(--safe-bottom, 0px)); }
 #ui > .salvage-floaters * { pointer-events: none; }
 .salvage-floater {
   position: absolute; pointer-events: none; transform: translate(-50%, -100%); white-space: nowrap;
-  font: 800 15px/1 var(--font, system-ui); color: var(--scrap); font-variant-numeric: tabular-nums;
+  font: 800 0.9375rem/1 var(--font, system-ui); color: var(--scrap); font-variant-numeric: tabular-nums;
   text-shadow: 0 1px 0 #000, 0 0 6px rgba(0, 0, 0, 0.9);
   animation: salvage-rise 0.95s ease-out forwards;
 }
-.salvage-floater.passive { font-size: 12px; font-weight: 700; opacity: 0.7; color: var(--text-dim); }
+.salvage-floater.passive { font-size: 0.75rem; font-weight: 700; opacity: 0.7; color: var(--text-dim); }
 @keyframes salvage-rise {
   0% { transform: translate(-50%, -60%) scale(0.85); opacity: 0; }
   15% { transform: translate(-50%, -100%) scale(1.05); opacity: 1; }
@@ -65,3 +65,7 @@ body.shell-rail .oc-wrap { bottom: calc(12px + var(--safe-bottom, 0px)); }
   .oc-meter { transition: none; }
 }
 @keyframes salvage-fade { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
+/* Phase 3: the ready glow pulses for 5 s, then holds steady (ui/active.ts adds `steady`). */
+.btn.oc-btn.ready.steady::after { animation: none; }
+.salvage-floater.oc-perfect { color: var(--scrap); letter-spacing: 0.04em; }
+.salvage-floater.oc-weak { color: var(--text-dim); }

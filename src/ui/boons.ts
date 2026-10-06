@@ -23,6 +23,9 @@ import { openModal, type ModalHandle } from './modal';
 import { titleCase } from './format';
 import type { UiCtx } from './ctx';
 
+/** How long the Undo toast after a landscape Decline stays (ms). */
+export const UNDO_MS = 6000;
+
 export const CATEGORY_LABEL: Record<BoonCategory, string> = { surge: 'Surge', twist: 'Twist', trade: 'Trade', wild: 'Wild card' };
 export const RARITY_LABEL: Record<BoonRarity, string> = { common: 'Common', rare: 'Rare' };
 
@@ -90,6 +93,13 @@ export function offerHeading(kind: 'start' | 'boss', queued: number): { title: s
   const why = kind === 'boss' ? 'Boss cleared' : 'New attempt';
   return { title: 'Pick a boon', sub: queued > 0 ? `${why} · +${queued} waiting` : why };
 }
+
+/** "Set aside" memory (presentation only; the player still chooses every boon): which attempt the player set an offer aside in. */
+export interface AsideMemory { key: string; aside: boolean }
+/** One key per attempt of a Prestige: the memory resets when a new attempt starts and at a Prestige. */
+export const attemptKey = (prestigeCount: number, attempts: number): string => `${prestigeCount | 0}:${attempts | 0}`;
+/** Does a new offer arrive as the "Boon ready" chip (the player set an offer aside earlier in this attempt)? */
+export const arrivesAsChip = (mem: AsideMemory, key: string): boolean => mem.aside && mem.key === key;
 
 /** Reroll button state: the price (1, then 2, …) and whether the Cores cover it. */
 export function rerollState(cores: number, cost: number): { cost: number; can: boolean; label: string } {
@@ -225,6 +235,11 @@ export class BoonOffer {
   private selected: BoonId | null = null;
   private replace: BoonId | null = null;
   private collapsed = false;
+  /** C-08: the player set an offer aside in this attempt, so the next ones arrive as the chip (reset by a new attempt / Prestige / opening the chip). */
+  private aside: AsideMemory = { key: '', aside: false };
+  private asideKey = '';
+  /** A-11: Decline sent after the Undo toast (landscape): the offer hides meanwhile; Undo restores it. */
+  private declining: { seq: number; dismiss: () => void } | null = null;
   private key = '';
   private offer: BoonId[] = [];
   private ro: ResizeObserver | null = null;
@@ -233,9 +248,9 @@ export class BoonOffer {
     this.take = button([icon('check', 'ico tiny'), 'Take'], () => this.confirm(), { class: 'btn primary bo-take' });
     // landscape phones show the icons instead of the words (styles/boons.css); the labels stay for screen readers
     this.reroll = button([icon('restart', 'ico tiny bo-ico-alt'), h('span', { class: 'bo-lbl', text: 'Reroll' }), this.rerollCost], () => this.send({ type: 'reroll_boon' }), { class: 'btn small bo-reroll' });
-    this.decline = button([icon('close', 'ico tiny bo-ico-alt'), h('span', { class: 'bo-lbl', text: 'Decline' })], () => this.send({ type: 'decline_boon' }),
+    this.decline = button(h('span', { class: 'bo-dec-lbl', text: 'Decline' }), () => this.onDecline(),
       { class: 'btn small ghost bo-decline', label: 'Decline: free, no boon this time', title: 'Free; you get no boon this time' });
-    const collapse = button(icon('down', 'ico'), () => { this.setCollapsed(true); this.releaseHold(); }, { class: 'btn icon-btn ghost bo-collapse', label: 'Set the offer aside (it waits as a "Boon ready" chip)' });
+    const collapse = button(icon('down', 'ico'), () => { this.aside = { key: this.asideKey, aside: true }; this.setCollapsed(true); this.releaseHold(); }, { class: 'btn icon-btn ghost bo-collapse', label: 'Set the offer aside (it waits as a "Boon ready" chip)' });
     this.hold = h('p', { class: 'attn-hold bo-hold' }, h('span', { text: 'Next wave holds while you choose' }),
       button('Continue', () => this.releaseHold(), { class: 'btn small ghost', label: 'Continue: start the next wave now (the offer stays)' }));
     this.hold.hidden = true;
@@ -243,7 +258,7 @@ export class BoonOffer {
       this.hold, this.cards, this.detail,
       h('div', { class: 'bo-foot' }, this.heading, this.take, this.reroll, this.decline, collapse));
     this.el.hidden = true;
-    this.chip = button([icon('boon', 'ico tiny'), 'Boon ready', this.chipQueue], () => { this.opened = true; this.held = false; this.setCollapsed(false); }, { class: 'btn ctl boon-chip', label: 'A boon offer is waiting: show it' });
+    this.chip = button([icon('boon', 'ico tiny'), 'Boon ready', this.chipQueue], () => { this.opened = true; this.held = false; this.aside = { key: '', aside: false }; this.setCollapsed(false); }, { class: 'btn ctl boon-chip', label: 'A boon offer is waiting: show it' });
     this.chip.hidden = true;
     if (typeof ResizeObserver !== 'undefined') {
       this.ro = new ResizeObserver(() => this.publishHeight());
@@ -255,7 +270,7 @@ export class BoonOffer {
   get pending(): boolean { return this.offer.length > 0; }
 
   /** Show a set-aside offer again (Build tab, chip). */
-  expand(): void { this.setCollapsed(false); }
+  expand(): void { this.aside = { key: '', aside: false }; this.setCollapsed(false); }
 
   /** The attention plan holds the card (it shows as its chip; a tap on the chip still opens it). */
   setHeld(on: boolean): void {
@@ -280,25 +295,31 @@ export class BoonOffer {
     const seq = r.boonOfferSeq ?? 0;
     if (seq !== this.seq || offer.join() !== this.offer.join()) {
       // a new offer always shows itself; a reroll keeps the collapse state but clears the selection
-      if (seq !== this.seq) this.collapsed = false;
+      // (C-08: unless the player set an offer aside earlier in this attempt: then it arrives as the chip too)
+      this.asideKey = attemptKey(ui.meta.prestigeCount, r.attempts);
+      if (seq !== this.seq) { this.collapsed = arrivesAsChip(this.aside, this.asideKey); this.cancelDecline(); }
       this.seq = seq;
       if (!this.selected || !offer.includes(this.selected)) this.selected = null;
       this.offer = [...offer];
     }
+    this.asideKey = attemptKey(ui.meta.prestigeCount, r.attempts);
+    if (this.aside.aside && this.aside.key !== this.asideKey) this.aside = { key: '', aside: false };
+    if (!offer.length) this.cancelDecline();
     const active = r.boons ?? [];
     if (this.replace && !active.includes(this.replace)) this.replace = null;
     const cost = r.boonRerollCost ?? 1;
     this.holding = (r.holdTicksLeft ?? 0) > 0;
     const f = this.ctx.features();
-    const key = JSON.stringify([offer, this.selected, this.collapsed, this.held, this.holding, f.cores, f.elements, f.hardpoints, f.cross, active, r.boonCap, r.cores >= cost, cost, r.boonQueueLength, r.boonOfferKind, this.replace, ui.build.hardpoints, ui.build.attunements]);
+    const key = JSON.stringify([offer, this.selected, this.collapsed, this.held, this.holding, f.cores, f.elements, f.hardpoints, f.cross, active, r.boonCap, r.cores >= cost, cost, r.boonQueueLength, r.boonOfferKind, this.replace, ui.build.hardpoints, ui.build.attunements, !!this.declining]);
     if (key === this.key) return;
     this.key = key;
     const has = offer.length > 0;
     // the chip opens a held card too (the player asked): only a chip tap clears `held` until the plan sets it again
     const hidden = this.collapsed || this.held;
-    show(this.el, has && !hidden);
-    show(this.chip, has && hidden);
-    document.body.classList.toggle('boon-open', has && !hidden);
+    const away = !!this.declining;   // declined, within the Undo window: neither the card nor the chip
+    show(this.el, has && !hidden && !away);
+    show(this.chip, has && hidden && !away);
+    document.body.classList.toggle('boon-open', has && !hidden && !away);
     show(this.hold, has && this.holding);
     text(this.chipQueue, r.boonQueueLength > 0 ? `+${r.boonQueueLength}` : '');
     if (!has) { this.publishHeight(); return; }
@@ -376,6 +397,36 @@ export class BoonOffer {
       list.appendChild(boonRowEl(boonView(id, needsBuild(ui)), i === 0 ? 'Oldest' : null,
         [button(id === (this.replace ?? active[0]) ? 'Chosen' : 'Replace this', () => { this.replace = id; m.close(); this.key = ''; const s = this.ctx.state(); if (s) this.update(s); }, { class: `btn small${id === (this.replace ?? active[0]) ? ' primary' : ''}` })]));
     });
+  }
+
+  /**
+   * Decline. On a landscape phone (the card there is a small column and its old X read as "close") the word stays, and the
+   * decline waits for an Undo toast: the offer hides for a few seconds, Undo brings it back, otherwise the decline is sent.
+   */
+  private onDecline(): void {
+    const ui = this.ctx.state();
+    if (!ui || !document.body.classList.contains('shell-rail') || !this.ctx.toastAction) { this.send({ type: 'decline_boon' }); return; }
+    const seq = ui.run.boonOfferSeq ?? 0;
+    this.selected = null; this.replace = null;
+    const slot: { seq: number; dismiss: () => void } = { seq, dismiss: () => {} };
+    this.declining = slot;
+    slot.dismiss = this.ctx.toastAction('Boon offer declined', 'info', UNDO_MS, { label: 'Undo', run: () => { if (this.declining === slot) this.declining = null; this.refresh(); } },
+      () => { if (this.declining === slot) { this.declining = null; if ((this.ctx.state()?.run.boonOfferSeq ?? -1) === seq) this.ctx.host.send({ type: 'decline_boon' }); this.refresh(); } });
+    this.refresh();
+  }
+
+  /** The offer changed under a pending decline (a new attempt): forget it. */
+  private cancelDecline(): void {
+    const d = this.declining;
+    if (!d) return;
+    this.declining = null;
+    d.dismiss();
+  }
+
+  private refresh(): void {
+    this.key = '';
+    const ui = this.ctx.state();
+    if (ui) this.update(ui);
   }
 
   private send(cmd: Command): void {

@@ -18,21 +18,21 @@ body.shell-desktop .starter { bottom: calc(16px + var(--safe-bottom)); }
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 70%, transparent), 0 6px 18px rgba(0, 0, 0, 0.5); }
   50% { box-shadow: 0 0 0 10px transparent, 0 0 26px 4px color-mix(in srgb, var(--accent) 55%, transparent); }
 }
-.st-main { display: inline-flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 800; }
+.st-main { display: inline-flex; align-items: center; gap: 8px; font-size: 1.25rem; font-weight: 800; }
 .st-main .ico { width: 24px; height: 24px; }
-.st-sub { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 1px; font-size: 14px; font-weight: 700; line-height: 17px; }
+.st-sub { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 1px; font-size: 0.875rem; font-weight: 700; line-height: 17px; }
 .st-sub .price { display: inline-flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; }
 .btn.st-btn.ready .st-sub .price, .btn.st-btn.ready .st-sub .price .ico { color: inherit; }
 .st-why {
   margin: 0; max-width: 100%; padding: 3px 10px; border-radius: 10px; background: rgba(11, 13, 18, 0.72);
-  color: var(--text); font-size: 14px; font-weight: 600; line-height: 18px; text-align: center;
+  color: var(--text); font-size: 0.875rem; font-weight: 600; line-height: 18px; text-align: center;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .st-why:empty { display: none; }
 .st-list { display: flex; gap: 6px; width: 100%; }
 .btn.st-item {
   flex: 1 1 0; min-width: 0; min-height: var(--touch); padding: 2px 6px; border-radius: 12px; flex-direction: column; gap: 0;
-  background: rgba(22, 28, 40, 0.92); font-size: 14px; line-height: 17px;
+  background: rgba(22, 28, 40, 0.92); font-size: 0.875rem; line-height: 17px;
 }
 .btn.st-item:disabled { opacity: 0.7; }
 .btn.st-item.affordable { border-color: var(--accent); }

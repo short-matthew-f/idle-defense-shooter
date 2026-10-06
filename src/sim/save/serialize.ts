@@ -175,6 +175,7 @@ function sanitize(s: SaveState): void {
   if (!Array.isArray(m.blueprints)) m.blueprints = [];
   if (!isObj(m.settings)) m.settings = newMeta().settings;
   m.settings.quartermaster = sanitizeQuartermaster(m.settings.quartermaster);   // unknown trees / shares repaired; missing = off
+  if (m.settings.tellAssist !== undefined && typeof m.settings.tellAssist !== 'boolean') delete m.settings.tellAssist;   // Phase 3: absent = off
   m.echoes = Math.max(0, finiteOr(m.echoes, 0)); m.stars = Math.max(0, finiteOr(m.stars, 0));
   sanitizeRun(s.run);
   if (m.parkedRun) { if (isObj(m.parkedRun) && isObj(m.parkedRun.build)) sanitizeRun(m.parkedRun); else delete m.parkedRun; }

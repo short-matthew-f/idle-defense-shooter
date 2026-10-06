@@ -2,7 +2,7 @@
 .feed { display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
 .toast {
   --tc: var(--info); display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--radius-s);
-  background: var(--bg-1); border: 1px solid var(--line-2); border-left: 4px solid var(--tc); font-size: 14px; font-weight: 600;
+  background: var(--bg-1); border: 1px solid var(--line-2); border-left: 4px solid var(--tc); font-size: 0.875rem; font-weight: 600;
   box-shadow: var(--shadow); animation: toast-in 0.2s ease-out; transition: opacity 0.3s, transform 0.3s;
 }
 .toast .ico { color: var(--tc); }
@@ -12,3 +12,4 @@
 .toast.t-codex { --tc: var(--echo); }
 .toast.out { opacity: 0; transform: translateY(-6px); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+.toast.has-action { padding-right: 6px; } .toast-layer .toast .toast-act { pointer-events: auto; flex: none; min-height: 44px; min-width: 64px; }

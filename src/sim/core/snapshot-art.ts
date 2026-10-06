@@ -12,7 +12,7 @@
  *   telegraphs  layer 7 lines / rings (artillery aim, healer pulse, charger wind-up glow)
  * Bosses: the body plus a per-boss table of moving parts, phase-dependent plates and weak-point nodes.
  */
-import { AnimKind, AnimRate, EnemyFlag, INST_FLAG_SCALE, InstFlag, RStatus, Shape } from './types';
+import { AnimKind, AnimRate, EnemyFlag, INST_FLAG_SCALE, InstFlag, PICK_RANK_SCALE, PickRank, RStatus, Shape } from './types';
 import type { BossDef } from '../data/schema';
 import { cos, sin, TAU, PI } from '../math/lut';
 import { kindIndex, bossIndex } from './content';
@@ -158,7 +158,9 @@ export function writeEnemy(out: ArtWriter, v: EnemyView): number {
   let cr = v.cr, cg = v.cg, cb = v.cb;
   if (burrowed) { cr *= 0.45; cg *= 0.4; cb *= 0.4; }
   if (isBoss && v.bossPhase > 0) { const h = v.bossPhase === 1 ? 0.18 : 0.32; cr = cr + (1 - cr) * h; cg *= 1 - h * 0.6; cb *= 1 - h * 0.7; }
-  out.push(x, y, re, rot, bodyShape, cr, cg, cb, burrowed ? alpha * 0.6 : alpha, 4, v.hp, packed);
+  // Phase 3 tap intent: the body's aux1 also carries its pick rank (types.ts PICK_RANK_SHIFT; app/pick.ts prefers it)
+  const rank = isBoss ? ((v.flags & EnemyFlag.WeakPointOpen) ? PickRank.WeakPoint : PickRank.Boss) : (v.flags & EnemyFlag.Elite) ? PickRank.Elite : PickRank.Other;
+  out.push(x, y, re, rot, bodyShape, cr, cg, cb, burrowed ? alpha * 0.6 : alpha, 4, v.hp, packed + rank * PICK_RANK_SCALE);
 
   if (isBoss) writeBossParts(out, v, cr, cg, cb);
   else if (!v.lod) writeComposite(out, v, cr, cg, cb, windup, dash, burrowed);

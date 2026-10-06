@@ -388,7 +388,9 @@ export interface MetaState {
     /** Reachability addition: Autocast switched off per ability, a bitmask over the ABILITIES data order (bit k = ABILITIES[k]). */
     autocastOff?: number;
     /** Quartermaster addition: auto-buy of stat ranks (unlocks at prestigeCount ≥ 1). Absent in old saves = off. */
-    quartermaster?: QuartermasterSettings };
+    quartermaster?: QuartermasterSettings;
+    /** Phase 3 accessibility: boss tell windows last ×1.5 (data/bosses.ts tellWindowTicks). Absent in old saves = off. */
+    tellAssist?: boolean };
   // --- WP8 additions (optional) ---
   /** The main run, parked while a Trial runs (run/trials.ts). */
   parkedRun?: RunSave;
@@ -628,6 +630,13 @@ export const enum InstFlag { Part = 1, Detail = 2, Chain = 4, Flash = 8, Soft = 
 export const enum RStatus { Burn = 1, Chill = 2, Frozen = 4, Poison = 8, Shock = 16, Bleed = 32, Brittle = 64, Marked = 128 }
 export const enum AnimKind { None = 0, Breathe = 1, Wobble = 2, Spin = 3, Jitter = 4, Heavy = 5, Pulse = 6, Sway = 7, SlowSpin = 8 }
 export const enum AnimRate { Normal = 0, Slow = 1, Frozen = 2, Fast = 3 }
+/**
+ * Phase 3 tap intent: bits 20-21 of an enemy BODY's aux1 (layer 4, unflagged) carry its pick rank, so the app's tap
+ * picker (app/pick.ts) prefers a boss (weak point open first), then an elite, over a nearer grunt. Presentation only:
+ * the renderer masks the low 20 bits; the sim still resolves `designate_at` by position.
+ */
+export const enum PickRank { Other = 0, Elite = 1, Boss = 2, WeakPoint = 3 }
+export const PICK_RANK_SCALE = 1 << 20;
 
 /**
  * Instance stream, 12 floats per instance:

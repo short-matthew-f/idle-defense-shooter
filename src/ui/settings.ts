@@ -11,7 +11,9 @@ import { icon } from './icons';
 import { confirmDialog } from './modal';
 import { unlockedCoach } from './coach';
 import { prefs, setPref } from './prefs';
-import { graphicsSettings } from './graphics-settings';
+import { graphicsSettings, motionRow, segmented } from './graphics-settings';
+import { assistSettingRows } from './assist-settings';
+import { applyLeftHand, applyTextScale, textScaleOf, type TextScale } from './a11y';
 import { soundSettings } from '../audio/ui';
 import type { UiCtx } from './ctx';
 import { openTouchTest } from './touch-test';
@@ -102,7 +104,20 @@ export function settingsPanel(ctx: UiCtx): HTMLElement {
     setPref('unlockAll', v);
     ctx.toast(v ? 'Everything unlocked: every tab and control shows' : 'Unlocks follow your progress again', 'info');
   });
+  const textSize = segmented<'100' | '115' | '130'>('Text size', [['100', '100 %'], ['115', '115 %'], ['130', '130 %']], String(textScaleOf(prefs().textScale)) as '100' | '115' | '130', (v) => {
+    const s: TextScale = textScaleOf(Number(v));
+    setPref('textScale', s);
+    applyTextScale(s);
+  });
   const body = h('div', { class: 'settings' },
+    // Phase 3 (A-17): accessibility first, so it is found without scrolling
+    h('h3', { class: 'sec-title', text: 'Accessibility' }),
+    row('Text size', textSize, 'Scales the interface text', true),
+    motionRow(row),
+    row('Left-hand layout', toggle('Left-hand layout', prefs().leftHand, (v) => { setPref('leftHand', v); applyLeftHand(v); }), 'Abilities, Overcharge, quick-buy and run controls move to the left'),
+    row('Screen reader announcements', toggle('Screen reader announcements', prefs().srAnnounce !== false, (v) => setPref('srAnnounce', v)), 'Speaks boss starts, boss tells, deaths and Prestige'),
+    ...assistSettingRows(ctx, row, toggle),
+    h('h3', { class: 'sec-title', text: 'Game' }),
     row('Clarity', h('div', { class: 'range-wrap' }, slider, val), 'Spectacle ↔ Clarity: player effects fade, enemies never do', true),
     row('Unlock everything', unlock, 'For experienced players: every tab, control and choice from the start, instead of one at a time as you climb.'),
     row('Show pointer hints', toggle('Show pointer hints', prefs().pointerHints !== false, (v) => setPref('pointerHints', v)), 'A soft ring on the control a tip is about'),
@@ -110,7 +125,7 @@ export function settingsPanel(ctx: UiCtx): HTMLElement {
     ...graphicsSettings(ctx, row, toggle),
     ...soundSettings(row, toggle),
     h('h3', { class: 'sec-title', text: 'Save' }),
-    h('p', { class: 'dim small', text: 'Autosaves to this device every 30 s and at every checkpoint.' }),
+    h('p', { class: 'dim small', text: 'Saves to this device about 2 s after every change, and at every checkpoint.' }),
     h('div', { class: 'row gap wrap' }, exportBtn, downloadBtn), exportArea,
     importArea, h('div', { class: 'row gap wrap' }, importBtn),
     h('h3', { class: 'sec-title', text: 'App' }),

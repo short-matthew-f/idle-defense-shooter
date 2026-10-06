@@ -14,7 +14,9 @@ import { Ev, type RenderSnapshot, type SaveState, type UiState } from '@sim/core
 import { sectorIndexForWave } from '@sim/data/sectors';
 import { SimClient } from './sim-client';
 import { TickPacer, offlineSecondsOnReturn, HIDDEN_OFFLINE_AFTER_S } from './pacing';
-import { CRATE_REACH_PX, nearestCrate, nearestEnemy, reticleAt, tapReach } from './pick';
+import { CRATE_REACH_PX, STICKY_PX, nearestCrate, pickEnemy, tapReach } from './pick';
+import { HapticCues } from '@ui/assist-cues';
+import { buzz } from '@ui/decision-hold';
 import { TapRouter, TOWER_HOLD_PX, holdOnTower } from './active-tap';
 import { TOWER_RADIUS } from '@sim/core/types';
 import { FieldOverlay } from './overlay';
@@ -209,6 +211,9 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
       console.info(`[cmd] ${cmd} rejected: ${message}`);
       const now = performance.now();
       if (message === lastCmdErr && now - lastCmdErrAt < 1500) return;   // no toast spam for repeated taps
+      // Phase 3 tap intent: a designation tap whose enemy died or moved between the frame and the sim is silent (the
+      // ripple already showed where the tap landed); a toast for it reads as an error the player did not make
+      if (cmd === 'designate_at') return;
       lastCmdErr = message; lastCmdErrAt = now;
       ui.toast(message, 'warn');
     };
@@ -247,7 +252,12 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
     ui.update(latestUi);
     audio.director.setSimSpeed(latestUi.run.speedMultiplier * fast);
     audio.director.onUi(latestUi);
+    // Phase 3: optional vibration cues (Settings → Vibration cues; only offered where navigator.vibrate exists)
+    const u = latestUi;
+    const cue = haptics.update(!!u.wave.tellActive && u.wave.tellTicksLeft > 0, u.tower.maxHp > 0 ? u.tower.hp / u.tower.maxHp : 1, u.run.phase === 'combat');
+    if (cue && prefs().hapticCues) buzz(cue === 'tell' ? [60, 40, 60] : [90, 60, 90]);
   }
+  const haptics = new HapticCues();
   function scheduleUi(): void {
     if (uiTimer) return;
     const wait = Math.max(0, UI_MIN_INTERVAL_MS - (performance.now() - lastUiAt));
@@ -348,12 +358,13 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
     // Reach is at least ~22 CSS px (a thumb), not 24 world units (under 8 px on a phone).
     const snap = app.snapshot;
     const live = snap && snap.instances.buffer.byteLength > 0 ? snap : null;
-    const hit = live ? nearestEnemy(live.instances, live.instanceCount, x, y, tapReach(app.camera.scale)) : null;
+    // Phase 3: weighted (boss, weak point, elite first) and sticky (a designated enemy within STICKY_PX keeps the tap)
+    const hit = live ? pickEnemy(live.instances, live.instanceCount, x, y, tapReach(app.camera.scale), STICKY_PX / Math.max(1e-6, app.camera.scale)) : null;
     // Active edge (docs/ACTIVE.md, app/active-tap.ts): crates first; an enemy tap is an assist shot and a designation
     if (!paused) {
       const f = ui.ctx.features();
       const crate = live && f.salvage ? nearestCrate(live.instances, live.instanceCount, x, y, tapReach(app.camera.scale, CRATE_REACH_PX)) : null;
-      const marked = !!(live && hit && reticleAt(live.instances, live.instanceCount, hit.x, hit.y));
+      const marked = !!hit?.marked;
       const route = taps.route(crate, hit, ui.abilities.arming.armed, app.camera.scale, performance.now(), marked, { assist: f.tapAssist, salvage: f.salvage });
       if (route.kind === 'collect') {
         client.send({ type: 'collect_salvage', x: route.x, y: route.y });
@@ -363,7 +374,7 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
       if (route.kind === 'enemy' && route.assist) client.send({ type: 'tap_assist', x: route.x, y: route.y });
       if (route.kind === 'enemy' && !route.designate) { overlay.tap(route.x, route.y, true, performance.now() / 1000); return; }
     }
-    if (!paused) overlay.tap(hit ? hit.x : x, hit ? hit.y : y, !!hit, performance.now() / 1000);
+    overlay.tap(hit ? hit.x : x, hit ? hit.y : y, !!hit, performance.now() / 1000);   // a ripple on every tap, misses too
     ui.tapField(x, y, hit ? { x: hit.x, y: hit.y } : null);
   };
   // Active edge: hold on the tower while Overcharge is ready charges it; lifting fires (the sim times the window)
@@ -379,8 +390,17 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
   app.input.onHoldEnd = (cancelled) => {
     if (!charging) return;
     charging = false;
+    if (!ui.active.isCharging) return;   // the auto-release assist (or the sim) already let go
     client.send(cancelled ? { type: 'overcharge', action: 'cancel' } : { type: 'overcharge', action: 'release', hold: ui.active.heldSeconds() });
     ui.active.hold(false);
+  };
+  // Phase 3 tap intent: hold delay from Settings; a short unmoved aim over an enemy or crate is a tap (input.ts)
+  app.input.holdDelay = () => prefs().holdDelayMs;
+  app.input.tapTarget = (x, y) => {
+    const snap = app.snapshot;
+    if (!snap || snap.instances.buffer.byteLength === 0) return false;
+    return !!pickEnemy(snap.instances, snap.instanceCount, x, y, tapReach(app.camera.scale))
+      || (ui.ctx.features().salvage && !!nearestCrate(snap.instances, snap.instanceCount, x, y, tapReach(app.camera.scale, CRATE_REACH_PX)));
   };
   app.input.onAimStart = (a) => {
     if (!ready || paused) return;

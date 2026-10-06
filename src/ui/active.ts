@@ -17,6 +17,10 @@ import { h, show, styleVar, attr, text } from './dom';
 import { fmtNum } from './format';
 import { markCoachSeen } from './coach';
 import type { UiCtx } from './ctx';
+import { prefs } from './prefs';
+import { buzz } from './decision-hold';
+import { gameAudio } from '../audio/index';
+import { autoReleaseDue, bandEntered, GLOW_PULSE_MS } from './assist-cues';
 
 const O = ACTIVE.overcharge;
 
@@ -79,6 +83,9 @@ export class ActiveWidget {
   /** The sim's hold (s) at the last UiState while charging, and when it arrived: the arc follows the sim, not the wall clock. */
   private simHold = -1;
   private simHoldAt = 0;
+  /** Phase 3: when the meter became ready (the glow pulses GLOW_PULSE_MS, then holds steady: class `steady`). */
+  private readyAt = -1;
+  private steadyTimer = 0;
 
   constructor(private readonly ctx: UiCtx) {
     const s = svg('svg', { viewBox: '0 0 64 64', class: 'oc-ring', 'aria-hidden': 'true' });
@@ -123,6 +130,15 @@ export class ActiveWidget {
     if (!this.charging) arc(this.meter, 0, f);
     styleVar(this.btn, '--oc', f.toFixed(3));
     this.btn.classList.toggle('ready', oc.ready);
+    if (oc.ready && this.readyAt < 0) {
+      this.readyAt = performance.now();
+      this.btn.classList.remove('steady');
+      this.steadyTimer = window.setTimeout(() => { this.steadyTimer = 0; this.btn.classList.add('steady'); }, GLOW_PULSE_MS);
+    } else if (!oc.ready && this.readyAt >= 0) {
+      this.readyAt = -1;
+      if (this.steadyTimer) { clearTimeout(this.steadyTimer); this.steadyTimer = 0; }
+      this.btn.classList.remove('steady');
+    }
     this.btn.classList.toggle('filling', !oc.ready && f < 1);
     attr(this.btn, 'aria-disabled', oc.ready || this.charging ? 'false' : 'true');
     if (!this.charging) text(this.label, oc.ready ? 'HOLD' : `${Math.floor(f * 100)}%`);
@@ -136,6 +152,9 @@ export class ActiveWidget {
     const now = performance.now();
     return this.simHold >= 0 ? this.simHold + Math.min(0.15, (now - this.simHoldAt) / 1000) : (now - this.chargeStart) / 1000;
   }
+
+  /** A charge is running in this widget (false once auto-release, the sim or a lift ended it). */
+  get isCharging(): boolean { return this.charging; }
 
   /** The tower hold started (true) or ended (false) a charge (app/game.ts sends the commands). */
   hold(on: boolean): void { if (on) this.begin(); else { if (this.charging) markCoachSeen(['overcharge']); this.stopAnim(); } }
@@ -159,12 +178,18 @@ export class ActiveWidget {
     this.simHold = -1;
     this.btn.classList.add('charging');
     arc(this.meter, 0, 1);
+    let prev = 0;
     const tick = (): void => {
       if (!this.charging) return;
       // the sim's hold (UiState, 10 Hz) extrapolated by at most 0.15 s, so a slow device's lagging sim and the arc agree;
       // before the first UiState of this charge, the time since the press
       const secs = this.heldSeconds();
       arc(this.charge, 0, secs / O.maxHoldSeconds);
+      // Phase 3 timing cues: a tick (and a short vibration where supported) on entering the bright band; the optional
+      // auto-release lets go at the top of the band through the normal release command
+      if (bandEntered(prev, secs)) { gameAudio()?.director.onUiTap('toggle'); buzz(15); }
+      prev = secs;
+      if (autoReleaseDue(secs, prefs().overchargeAssist)) { this.end(false); return; }
       const zone = holdZone(secs);
       this.btn.dataset.zone = zone;
       text(this.label, zone === 'perfect' ? 'NOW' : zone === 'late' ? 'LATE' : '…');
@@ -187,7 +212,11 @@ export class ActiveWidget {
   onEvents(events: readonly SimEvent[]): void {
     for (const e of events) {
       // doing the thing retires its coach line (coach.ts 'salvage' / 'overcharge')
-      if (e.type === Ev.Overcharge) { markCoachSeen(['overcharge']); continue; }
+      if (e.type === Ev.Overcharge) {
+        markCoachSeen(['overcharge']);
+        this.floater(0, -40, e.a > 0 ? 'PERFECT' : 'WEAK', true, e.a > 0 ? 'oc-perfect' : 'oc-weak');   // Phase 3: release verdict
+        continue;
+      }
       if (e.type !== Ev.SalvageCollect || !(e.a > 0)) continue;
       const tap = e.src === 'salvage.tap';
       if (tap) markCoachSeen(['salvage']);
@@ -195,7 +224,7 @@ export class ActiveWidget {
     }
   }
 
-  private floater(wx: number, wy: number, label: string, tap: boolean): void {
+  private floater(wx: number, wy: number, label: string, tap: boolean, cls = ''): void {
     if (this.live >= MAX_FLOATERS || this.ctx.host.isPaused()) return;
     if (!this.floaters) {
       this.floaters = h('div', { class: 'salvage-floaters', attrs: { 'aria-hidden': 'true' } });
@@ -204,7 +233,7 @@ export class ActiveWidget {
     let p: { x: number; y: number };
     try { p = this.ctx.host.touch.toClient(wx, wy); } catch { return; }
     if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
-    const el = h('span', { class: `salvage-floater${tap ? '' : ' passive'}`, text: label });
+    const el = h('span', { class: `salvage-floater${tap ? '' : ' passive'}${cls ? ` ${cls}` : ''}`, text: label });
     el.style.left = `${p.x.toFixed(1)}px`;
     el.style.top = `${p.y.toFixed(1)}px`;
     this.floaters.appendChild(el);

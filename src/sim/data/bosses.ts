@@ -359,3 +359,11 @@ export function graftSources(w: number): [BossId, BossId] {
   return [BOSSES[a].id, BOSSES[b].id];
 }
 
+
+/** Phase 3 tell-window assist (meta.settings.tellAssist): boss tell windows last this much longer. */
+export const TELL_ASSIST_MULT = 1.5;
+
+/** Ticks a boss tell window stays open: `windowSeconds` at 60 Hz, ×TELL_ASSIST_MULT with the assist on (deterministic). */
+export function tellWindowTicks(windowSeconds: number, assist: boolean | undefined): number {
+  return Math.max(1, Math.round(windowSeconds * 60 * (assist ? TELL_ASSIST_MULT : 1)));
+}

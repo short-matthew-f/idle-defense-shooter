@@ -11,12 +11,12 @@
 .rule-head { display: flex; align-items: center; gap: 4px; padding: 2px 4px 2px 6px; flex-wrap: wrap; }
 .grip { color: var(--text-faint); cursor: grab; display: inline-flex; }
 .rule-num { width: 22px; text-align: center; font-weight: 800; color: var(--accent); }
-.rule-text { flex: 1 1 180px; min-width: 0; font-size: 14px; line-height: 1.35; padding: 4px 0; }
+.rule-text { flex: 1 1 180px; min-width: 0; font-size: 0.875rem; line-height: 1.35; padding: 4px 0; }
 .q-builder { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px 10px; border-top: 1px solid var(--line); }
 .builder { padding: 8px 10px 10px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
 .conds { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 .cond-row, .act-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.kw { font-weight: 800; font-size: 14px; color: var(--accent); min-width: 46px; }
+.kw { font-weight: 800; font-size: 0.875rem; color: var(--accent); min-width: 46px; }
 .kw.do { color: var(--ok); }
 .num-wrap { display: inline-flex; align-items: center; gap: 4px; }
 .targeting { display: flex; flex-direction: column; }
@@ -26,6 +26,6 @@
 .bp p { margin: 2px 0; }
 .bp-name { display: flex; gap: 6px; align-items: center; font-weight: 700; }
 /* Reachability: a rule that can never act says why; Blueprint rows carry Overwrite / Delete */
-.rule-warn { margin: 6px 0 0; font-size: 14px; line-height: 1.4; color: var(--warn); }
+.rule-warn { margin: 6px 0 0; font-size: 0.875rem; line-height: 1.4; color: var(--warn); }
 .bp-head { display: flex; align-items: center; gap: 8px; }
 .bp-head .bp-name { flex: 1; min-width: 0; }

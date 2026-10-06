@@ -6,7 +6,7 @@
  */
 import '../styles/feed.css';
 import { Ev, type SimEvent, type UiState } from '@sim/core/types';
-import { h } from './dom';
+import { button, h } from './dom';
 import { icon } from './icons';
 import { titleCase } from './format';
 import { boonName } from './boons';
@@ -39,7 +39,7 @@ export function summaryText(parts: readonly string[]): string {
   return [...new Set(parts)].join(' · ');
 }
 
-interface Item { el: HTMLElement; left: number; queuedAt: number; shownAt: number; timer: number; leaving: boolean }
+interface Item { el: HTMLElement; left: number; queuedAt: number; shownAt: number; timer: number; leaving: boolean; /** Runs once when the toast is gone for good (expired, dropped or dismissed). */ end?: () => void }
 
 export class Feed {
   readonly el = h('div', { class: 'feed', attrs: { 'aria-live': 'polite', role: 'status' } });
@@ -62,11 +62,26 @@ export class Feed {
 
   toast(msg: string, kind: ToastKind = 'info', ms = 3600): void { this.push(msg, kind, ms); }
 
-  private push(msg: string, kind: ToastKind, ms: number): Item {
-    const t = h('div', { class: `toast t-${kind}` }, icon(ICON[kind], 'ico tiny'), h('span', { text: msg }));
+  /**
+   * A toast with one action button ("Undo"). `run` fires on the tap (the toast then leaves); `end` fires once when the toast
+   * is gone for any reason, so a caller that deferred something can finish it. Returns a function that dismisses the toast.
+   */
+  toastAction(msg: string, kind: ToastKind, ms: number, action: { label: string; run: () => void }, end?: () => void): () => void {
+    const item = this.push(msg, kind, ms, action);
+    item.end = end;
+    return () => { if (this.items.includes(item) && !item.leaving) this.expire(item); };
+  }
+
+  private push(msg: string, kind: ToastKind, ms: number, action?: { label: string; run: () => void }): Item {
+    const t = h('div', { class: `toast t-${kind}${action ? ' has-action' : ''}` }, icon(ICON[kind], 'ico tiny'), h('span', { text: msg }));
     t.hidden = true;
     this.el.appendChild(t);
+    const self: { item?: Item } = {};
+    if (action) {
+      t.appendChild(button(action.label, () => { action.run(); if (self.item && this.items.includes(self.item) && !self.item.leaving) this.expire(self.item); }, { class: 'btn small toast-act' }));
+    }
     const item: Item = { el: t, left: ms, queuedAt: performance.now(), shownAt: 0, timer: 0, leaving: false };
+    self.item = item;
     this.items.push(item);
     while (this.items.length > FEED_MAX_QUEUED) {
       const i = this.items.findIndex((x) => !x.shownAt);
@@ -124,6 +139,9 @@ export class Feed {
     clearTimeout(x.timer);
     x.el.remove();
     this.items.splice(i, 1);
+    const end = x.end;
+    x.end = undefined;
+    end?.();
   }
 
   /** The first `limit` toasts show (their clocks run); the rest wait (clocks paused); stale waiting ones go. */

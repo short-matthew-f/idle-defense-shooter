@@ -1,6 +1,6 @@
 /* The attention plan (src/ui/attention.ts). Boss mode: the starter's glow pauses so the boss and its tell are clear. */
 body.attn-boss .btn.st-btn.ready { animation: none; }
 /* the boss-clear hold line on the boon offer and in the draft dialog */
-.attn-hold { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 14px; color: var(--text-dim); }
+.attn-hold { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 0.875rem; color: var(--text-dim); }
 .attn-hold > span { flex: 1; min-width: 0; }
 .attn-hold .btn { flex: none; }

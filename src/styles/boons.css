@@ -94,12 +94,13 @@ body.shell-rail .bo-cards { grid-column: 1; grid-row: 1; }
 body.shell-rail .bo-detail { grid-column: 1; grid-row: 2; }
 body.shell-rail .bo-foot {
   grid-column: 2; grid-row: 1 / span 2; align-self: start; margin-top: 0; width: 156px;
-  display: grid; grid-template-columns: minmax(0, 1fr) 44px 44px; grid-template-rows: 44px 44px; gap: 6px;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto 44px; grid-template-rows: 44px 44px; gap: 6px;
 }
 body.shell-rail .bo-heading, body.shell-rail .btn.bo-take { grid-column: 1 / span 3; grid-row: 1; }
 body.shell-rail .bo-heading { justify-content: center; padding: 0 2px; }
 body.shell-rail .btn.bo-reroll { grid-column: 1; grid-row: 2; padding: 0 6px; }
-body.shell-rail .btn.bo-decline { grid-column: 2; grid-row: 2; padding: 0; background: var(--bg-3); border-color: var(--line-2); }
+/* Decline keeps its word on a landscape phone (an X alone read as "close"; A-11); Reroll is the icon + price */
+body.shell-rail .btn.bo-decline { grid-column: 2; grid-row: 2; padding: 0 10px; background: var(--bg-3); border-color: var(--line-2); }
 body.shell-rail .btn.bo-collapse { grid-column: 3; grid-row: 2; }
 body.shell-rail .bo-lbl { display: none; }
 body.shell-rail .bo-rare-meta { display: inline-flex; }
@@ -111,9 +112,16 @@ body.shell-rail .boon-offer.narrow { display: block; }
 body.shell-rail .boon-offer.narrow .bo-foot { width: auto; margin-top: 6px; }
 body.shell-rail .boon-offer.narrow:not(.thin) .bo-foot { display: flex; }
 body.shell-rail .boon-offer.narrow:not(.thin) .bo-heading { justify-content: flex-start; padding-left: 4px; }
-/* very narrow: one card per row */
-.boon-offer.thin .bo-cards { grid-template-columns: minmax(0, 1fr); }
-.boon-offer.thin .bo-short { -webkit-line-clamp: 2; }
+/* very narrow: one card per row, each a compact two-column row (category | name over the numbers) so three cards and the foot
+   fit a landscape phone's side lane without scrolling much */
+.boon-offer.thin .bo-cards { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+.boon-offer.thin .bo-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 6px; row-gap: 0; align-items: center; padding: 3px 6px 3px; min-height: var(--touch); }
+.boon-offer.thin .bo-card > .bo-name { grid-column: 1; grid-row: 1; }
+.boon-offer.thin .bo-card > .bo-meta { grid-column: 2; grid-row: 1; justify-self: end; font-size: 0.875rem; }
+.boon-offer.thin .bo-card > .bo-short { grid-column: 1 / span 2; grid-row: 2; -webkit-line-clamp: 1; }
+.boon-offer.thin .bo-card > .bo-needs { grid-column: 1 / span 2; grid-row: 3; }
+.boon-offer.thin .bo-card > .bo-sel { top: 2px; right: 2px; }
+.boon-offer.thin .bo-card > .bo-meta .bo-rare-meta { display: none; }
 
 /* ---------------------------------------------------------------- active row (under the top bar) */
 .arena-strip { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; align-self: stretch; pointer-events: none !important; min-width: 0; }

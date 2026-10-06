@@ -36,6 +36,7 @@ import { bossState, ctrlAt, resetBossState } from './bosses/state';
 import { blockProjectiles, initCtrl, moveBoss, openWeakPoint, releaseCtrl, updateCtrl } from './bosses/controller';
 import { segDist } from './bosses/common';
 import { TELLS } from './bosses/registry';
+import { tellWindowTicks } from '../data/bosses';
 import { ROLE_GEN, K, AI_DASH, AI_WINDUP } from './behaviors/kinds';
 import { MOVE_DASH, MOVE_NONE } from './bosses/state';
 import { onEnemyKilled, onEnemyStatus, onEnemyTowerHit, renderBehaviors, veteranMul } from './behaviors/support';
@@ -286,7 +287,7 @@ export class BossSystem implements System {
       if (c.tellSeq !== c.renderedTellSeq) { c.renderedTellSeq = c.tellSeq; out.fx(FxKind.Tell, x, y, 1, 0.35, 0.3, r * 2.2, 1); }
       if (c.counterSeq !== c.renderedCounterSeq) { c.renderedCounterSeq = c.counterSeq; out.fx(FxKind.Counter, x, y, 1, 0.95, 0.4, r * 2, 14); }
       if (c.tellActive) {
-        const k = c.tellTicks / Math.max(1, Math.round(c.def.tell.windowSeconds * 60));
+        const k = c.tellTicks / tellWindowTicks(c.def.tell.windowSeconds, w.meta.settings.tellAssist);
         out.push(x, y, r * (1.3 + 0.5 * k), 0, Shape.Ring, 1, 0.35, 0.3, 0.9, 7);
         if (c.seg) out.push(c.fx, c.fy, 4, 0, Shape.Line, 1, 0.45, 0.3, 0.8, 7, c.fx2, c.fy2);
         else if (c.tellId === 'gate_open') out.push(c.fx, c.fy, 30, 0, Shape.Ring, 1, 0.45, 0.3, 0.9, 7);

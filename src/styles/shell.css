@@ -20,7 +20,7 @@
 }
 .tab-ico { position: relative; display: grid; place-items: center; width: 52px; height: 28px; border-radius: 14px; }
 .tab-ico .ico { width: 24px; height: 24px; }
-.tab-label { font-size: 14px; font-weight: 600; line-height: 16px; white-space: nowrap; letter-spacing: -0.01em; }
+.tab-label { font-size: 0.875rem; font-weight: 600; line-height: 16px; white-space: nowrap; letter-spacing: -0.01em; }
 .tab-btn:hover .tab-ico { background: var(--bg-3); }
 .tab-btn.active { color: var(--text); }
 .tab-btn.active .tab-ico { background: color-mix(in srgb, var(--accent) 26%, transparent); color: var(--accent); }
@@ -28,7 +28,7 @@
 /* badges are the one place text may be under 14 px */
 .tab-badge {
   position: absolute; top: -5px; left: calc(50% + 7px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
-  font-size: 11px; font-weight: 800; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums;
+  font-size: 0.6875rem; font-weight: 800; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums;
   background: var(--accent); color: var(--on-accent); box-shadow: 0 0 0 2px var(--bg-0);
 }
 .tab-badge.alert { background: var(--warn); color: #000; animation: pulse 1.8s infinite; }
@@ -83,7 +83,7 @@ body.shell-desktop .screen-top { padding-top: 10px; }
 .status-strip {
   flex: 1 1 auto; display: flex; align-items: center; gap: 12px; min-height: 44px; min-width: 0; padding: 0 8px 0 12px;
   border-radius: 12px; background: var(--bg-2); border: 1px solid var(--line); color: var(--text);
-  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; text-align: left; touch-action: manipulation;
+  font: inherit; font-size: 0.875rem; font-weight: 600; cursor: pointer; text-align: left; touch-action: manipulation;
 }
 .status-strip:hover { background: var(--bg-3); }
 .ss-wave-wrap { display: flex; align-items: center; gap: 4px; white-space: nowrap; flex: none; }
@@ -179,4 +179,4 @@ body.shell-phone.no-tabbar .battle-layer { bottom: var(--safe-bottom); }
 @keyframes tab-hp-flash { from { opacity: 1; } to { opacity: 0.25; } }
 @media (prefers-reduced-motion: reduce) { .tab-btn.hp-alert .tab-ico { animation: none; } .tab-btn.hp-alert { box-shadow: inset 0 3px 0 var(--bad); } }
 .tab-btn.held .tab-ico { position: relative; }
-.tab-btn.held .tab-ico::after { content: '❚❚'; position: absolute; top: -3px; right: -9px; font-size: 10px; line-height: 16px; padding: 0 3px; border-radius: 8px; background: var(--warn); color: #000; letter-spacing: -1px; }
+.tab-btn.held .tab-ico::after { content: '❚❚'; position: absolute; top: -3px; right: -9px; font-size: 0.625rem; line-height: 16px; padding: 0 3px; border-radius: 8px; background: var(--warn); color: #000; letter-spacing: -1px; }

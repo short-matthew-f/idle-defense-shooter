@@ -6,7 +6,7 @@
 // Overlays: coach banner, toasts, pointer ring + label, boon offer card, death card, boss bar (+ tell), armed hint,
 // salvage floaters, open modals (reported, never flagged: a modal blocks on purpose).
 // Protected targets: the tower's hold zone (arena centre), the Upgrade button and the starter stats, the ability buttons,
-// the Overcharge button, the tab bar, the top bar (wave / Scrap / HP), the boss bar, each run control and the boon chip,
+// the Overcharge button, the quick-buy chip, the tab bar, the top bar (wave / Scrap / HP), the boss bar, each run control and the boon chip,
 // the pointer ring's current target, the coach banner's buttons and the boon offer's Take.
 // Findings (kind); the first five are hard rules (the e2e fails on them), the last three are measures:
 //   cover        an overlay covers a protected target by more than `tol` px in both directions
@@ -90,6 +90,7 @@ export function auditOverlays(opts = {}) {
   document.querySelectorAll('.starter .st-item').forEach((el, i) => addT(`starter-item${i}`, el));
   document.querySelectorAll('.ability-row .btn.ability').forEach((el, i) => addT(`ability${i}`, el));
   addT('overcharge', document.querySelector('.oc-btn'));
+  addT('quick-buy', document.querySelector('.abilities .btn.quick-buy'));
   if (!document.body.classList.contains('no-tabbar') || document.body.classList.contains('shell-desktop')) addT('tabbar', document.querySelector('.tabbar'));
   addT('topbar', document.querySelector('.topbar'));
   addT('boss-bar', document.querySelector('.boss-bar'));

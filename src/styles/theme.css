@@ -40,7 +40,7 @@
 
 [hidden] { display: none !important; }
 
-#ui { font: 15px/1.35 var(--font); color: var(--text); }
+#ui { font: 0.9375rem/1.35 var(--font); color: var(--text); }
 /* Zero specificity: still beats the UA button styles, but never overrides a component's own colour
    (it used to force light text onto the bright accent of primary buttons: contrast 1.7–2.1). */
 :where(#ui) :where(button, input, select, textarea) { font: inherit; color: inherit; }
@@ -53,7 +53,7 @@
 .wrap { flex-wrap: wrap; }
 .grow { flex: 1; }
 .dim { color: var(--text-dim); }
-.small { font-size: 14px; }
+.small { font-size: 0.875rem; }
 .tabular, .res-val, .bar-label, .price { font-variant-numeric: tabular-nums; }
 
 .ico { width: 20px; height: 20px; flex: none; display: inline-block; vertical-align: middle; }

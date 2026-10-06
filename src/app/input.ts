@@ -57,6 +57,8 @@ export interface InputCallbacks {
   onHoldStart?: (worldX: number, worldY: number) => boolean;
   /** The claimed hold ended: lifted (false) or cancelled by a second finger / pointercancel (true). */
   onHoldEnd?: (cancelled: boolean) => void;
+  /** Phase 3: is there an enemy or crate at world (x, y)? A short unmoved aim over one is a tap (classifyPress). */
+  tapTarget?: (worldX: number, worldY: number) => boolean;
 }
 
 export interface InputOptions {
@@ -70,6 +72,36 @@ export interface InputOptions {
 
 const MAX_POINTERS = 2;
 
+/** Phase 3 tap intent (A-05, A-06, C-14): the default press-to-hold time (ms), before the player's extra hold delay. */
+export const HOLD_MS = 260;
+/** Movement (CSS px) that turns a press into a drag: a thumb rolls more than a mouse. Was 10. */
+export const SLOP_PX = 16;
+/** Settings → Hold delay: extra ms on top of HOLD_MS (Default / Longer / Longest). */
+export const HOLD_DELAYS = [0, 150, 300] as const;
+/** A press that became an aim but never moved and lifted within this long after the hold fired, over a target, is a tap. */
+export const AIM_TAP_MS = 200;
+
+export type PressKind = 'tap' | 'aim' | 'hold' | 'drag';
+
+/**
+ * How a single-finger press ends (pure; tests/app/input.test.ts). `maxMovePx`: the farthest the finger got from where it
+ * went down; `durMs`: down to up; `holdMs`: HOLD_MS + the hold delay; `claimed`: onHoldStart took the hold (Overcharge);
+ * `overTarget`: an enemy or crate was under the finger. A short "aim" (the hold fired, the finger stayed put and lifted
+ * within AIM_TAP_MS) over a target is a tap, not a steer.
+ */
+export function classifyPress(maxMovePx: number, durMs: number, holdMs: number, slopPx: number, claimed: boolean, overTarget: boolean): PressKind {
+  const moved = maxMovePx > slopPx;
+  if (durMs < holdMs) return moved ? 'drag' : 'tap';
+  if (claimed) return 'hold';
+  if (!moved && overTarget && durMs <= holdMs + AIM_TAP_MS) return 'tap';
+  return 'aim';
+}
+
+/** The press-to-hold time for a hold-delay preference (clamped to the offered steps' range). */
+export function holdMsFor(delayMs: number): number {
+  return HOLD_MS + Math.max(0, Math.min(HOLD_DELAYS[HOLD_DELAYS.length - 1], Number.isFinite(delayMs) ? delayMs : 0));
+}
+
 export class Input {
   onTap: InputCallbacks['onTap'];
   onAimStart: InputCallbacks['onAimStart'];
@@ -78,6 +110,9 @@ export class Input {
   onZoom: InputCallbacks['onZoom'];
   onHoldStart: InputCallbacks['onHoldStart'];
   onHoldEnd: InputCallbacks['onHoldEnd'];
+  tapTarget: InputCallbacks['tapTarget'];
+  /** Phase 3: the player's extra hold delay (ms, Settings → Hold delay), read at every press. */
+  holdDelay: () => number = () => 0;
   enabled = true;
   holdMs: number;
   slopPx: number;
@@ -108,6 +143,10 @@ export class Input {
   private holding = false;
   private moved = false;
   private holdTimer = 0;
+  /** performance.now() of the single-finger press that is running. */
+  private downAt = 0;
+  /** holdMs + the hold delay for the running press. */
+  private pressHoldMs = HOLD_MS;
   private pinching = false;
   private lastPinchDist = 0;
   private lastPinchCx = 0;
@@ -133,8 +172,9 @@ export class Input {
     this.onZoom = callbacks.onZoom;
     this.onHoldStart = callbacks.onHoldStart;
     this.onHoldEnd = callbacks.onHoldEnd;
-    this.holdMs = opts.holdMs ?? 260;
-    this.slopPx = opts.slopPx ?? 10;
+    this.tapTarget = callbacks.tapTarget;
+    this.holdMs = opts.holdMs ?? HOLD_MS;
+    this.slopPx = opts.slopPx ?? SLOP_PX;
     this.aimOrigin = opts.aimOrigin ?? { x: 0, y: 0 };
 
     canvas.style.touchAction = 'none';
@@ -244,8 +284,12 @@ export class Input {
 
     if (this.active === 1) {
       this.moved = false;
+      this.downAt = performance.now();
       this.cancelHold();
-      this.holdTimer = window.setTimeout(this.handleHold, this.holdMs);
+      let extra = 0;
+      try { extra = this.holdDelay(); } catch { /* prefs unavailable */ }
+      this.pressHoldMs = this.holdMs + Math.max(0, Number.isFinite(extra) ? extra : 0);
+      this.holdTimer = window.setTimeout(this.handleHold, this.pressHoldMs);
     } else if (this.active === 2) {
       // second finger: pinch. Abort tap / aim.
       this.cancelHold();
@@ -317,7 +361,14 @@ export class Input {
     }
     this.cancelHold();
     if (wasHolding) { this.endHold(false); return; }
-    if (wasAiming) { this.endAim(); return; }
+    if (wasAiming) {
+      this.endAim();
+      // a short, unmoved aim over an enemy or crate was meant as a tap (Phase 3 tap intent)
+      const dur = performance.now() - this.downAt;
+      const over = !wasMoved && this.enabled && !!this.tapTarget?.(this.downWX[slot], this.downWY[slot]);
+      if (classifyPress(wasMoved ? Infinity : 0, dur, this.pressHoldMs, this.slopPx, false, over) === 'tap') this.onTap?.(this.downWX[slot], this.downWY[slot]);
+      return;
+    }
     // the world point under the finger when it went down (the frame the player aimed at)
     if (!wasMoved && this.enabled) this.onTap?.(this.downWX[slot], this.downWY[slot]);
   };

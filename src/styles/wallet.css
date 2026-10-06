@@ -23,9 +23,9 @@
 .wl-item.cores .wl-ico { color: var(--cores); }
 .wl-item.echoes .wl-ico { color: var(--echo); }
 .wl-item.stars .wl-ico { color: var(--star); }
-.wl-val { font-size: 17px; font-weight: 800; letter-spacing: -0.01em; color: var(--text); border-radius: 4px; }
-.wl-name { font-size: 14px; font-weight: 600; color: var(--text-dim); }
-.wl-bank { font-size: 14px; font-weight: 700; color: var(--text-dim); }
+.wl-val { font-size: 1.0625rem; font-weight: 800; letter-spacing: -0.01em; color: var(--text); border-radius: 4px; }
+.wl-name { font-size: 0.875rem; font-weight: 600; color: var(--text-dim); }
+.wl-bank { font-size: 0.875rem; font-weight: 700; color: var(--text-dim); }
 .wl-bank::before { content: '·'; margin-right: 6px; color: var(--text-faint); }
 @media (max-width: 359px) { .wallet-bar .wl-name { display: none; } }
 
@@ -37,8 +37,8 @@
 
 
 /* dialogs: "You have ◆ 12 Cores" under the title */
-.wallet-chip { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; margin: 2px 0 0; font-size: 14px; color: var(--text-dim); }
-.wallet-chip .wl-val { font-size: 15px; }
+.wallet-chip { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; margin: 2px 0 0; font-size: 0.875rem; color: var(--text-dim); }
+.wallet-chip .wl-val { font-size: 0.9375rem; }
 .wallet-chip .wl-name { color: var(--text-dim); }
 .wc-lead { font-weight: 600; }
 .wc-after { font-weight: 600; color: var(--text-dim); }

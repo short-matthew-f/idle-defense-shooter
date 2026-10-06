@@ -11,6 +11,8 @@ export interface UiCtx {
   state(): UiState | null;
   open(screen: ScreenId, arg?: unknown): void;
   toast(msg: string, kind?: ToastKind): void;
+  /** A toast with one action button; `end` runs once when it is gone. Returns a dismiss function. (Optional: tests omit it.) */
+  toastAction?(msg: string, kind: ToastKind, ms: number, action: { label: string; run: () => void }, end?: () => void): () => void;
   /** What the unlock ladder has revealed (src/ui/progression.ts), for the latest UiState. */
   features(): Features;
 }

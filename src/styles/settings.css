@@ -3,20 +3,20 @@
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); }
 .set-label { display: flex; flex-direction: column; min-width: 0; }
 .range-wrap { display: flex; align-items: center; gap: 8px; width: 55%; }
-.save-text { width: 100%; font: 14px/1.3 var(--mono); background: var(--bg-3); color: var(--text); border: 1px solid var(--line-2); border-radius: var(--radius-s); padding: 8px; margin: 6px 0; resize: vertical; user-select: text; -webkit-user-select: text; }
+.save-text { width: 100%; font: 0.875rem/1.3 var(--mono); background: var(--bg-3); color: var(--text); border: 1px solid var(--line-2); border-radius: var(--radius-s); padding: 8px; margin: 6px 0; resize: vertical; user-select: text; -webkit-user-select: text; }
 .keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 4px 0; align-items: center; }
-.keys dd { margin: 0; font-size: 14px; color: var(--text-dim); }
-kbd { display: inline-block; font: 14px var(--mono); padding: 1px 7px; border-radius: 5px; background: var(--bg-3); border: 1px solid var(--line-2); border-bottom-width: 2px; }
+.keys dd { margin: 0; font-size: 0.875rem; color: var(--text-dim); }
+kbd { display: inline-block; font: 0.875rem var(--mono); padding: 1px 7px; border-radius: 5px; background: var(--bg-3); border: 1px solid var(--line-2); border-bottom-width: 2px; }
 .set-row { min-height: 60px; }
 .set-row.stack { flex-direction: column; align-items: stretch; gap: 4px; }
 .set-row.stack .range-wrap { width: 100%; }
 .range-wrap .dim { min-width: 80px; text-align: right; }
 .help .keys { grid-template-columns: minmax(96px, auto) 1fr; row-gap: 10px; }
-.help .keys dt { font-size: 14px; font-weight: 600; }
+.help .keys dt { font-size: 0.875rem; font-weight: 600; }
 
-.diag { font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-all; background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--radius-s); padding: 8px; margin: 6px 0; user-select: text; -webkit-user-select: text; }
+.diag { font: 0.75rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-all; background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--radius-s); padding: 8px; margin: 6px 0; user-select: text; -webkit-user-select: text; }
 /* Help → Tips: the coach banners unlocked so far (coach.ts) */
-.tips { margin: 4px 0 8px; padding-left: 20px; font-size: 14px; line-height: 20px; color: var(--text); }
+.tips { margin: 4px 0 8px; padding-left: 20px; font-size: 0.875rem; line-height: 20px; color: var(--text); }
 .tips li { margin: 4px 0; }
 /* Help → What is… : term over its note, one column (a phone has no room for two) */
 .help .keys.gloss { grid-template-columns: 1fr; row-gap: 0; }

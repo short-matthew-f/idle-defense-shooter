@@ -2,7 +2,7 @@
 .coach-banner {
   display: flex; align-items: center; gap: 10px; width: min(420px, calc(100vw - 32px)); margin: 0 auto 8px; padding: 8px 8px 8px 12px;
   border-radius: 12px; background: var(--bg-1); border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line-2));
-  box-shadow: var(--shadow); color: var(--text); font-size: 14px; line-height: 19px; font-weight: 600; pointer-events: auto;
+  box-shadow: var(--shadow); color: var(--text); font-size: 0.875rem; line-height: 19px; font-weight: 600; pointer-events: auto;
 }
 .coach-banner.in { animation: coach-in 0.25s ease-out; }
 @keyframes coach-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }

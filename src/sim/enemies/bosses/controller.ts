@@ -17,7 +17,7 @@ import type { BossCtrl, BossState } from './state';
 import { MOVE_DASH, MOVE_HOLD, MOVE_NONE, MOVE_RETREAT, MAX_PHASE_ATTACKS, bossSrc } from './state';
 import { EnemyFlag, Ev, NO_ENTITY, ProjFlag, ProjKind, TICK_DT, TOWER_RADIUS } from '../../core/types';
 import { BOSS_LIST, bossDef } from '../../core/content';
-import { graftSources, tellAttack, TELL_COUNTERS } from '../../data/bosses';
+import { graftSources, tellAttack, tellWindowTicks, TELL_COUNTERS } from '../../data/bosses';
 import { atan2 } from '../../math/lut';
 import { ROLE_CLONE, ROLE_GEN, ROLE_NODE, ROLE_TURRET, K } from '../behaviors/kinds';
 import { ATTACKS, CADENCE, TELLS, attackCode, isTell } from './registry';
@@ -95,7 +95,7 @@ function startTell(w: World, b: number, c: BossCtrl): void {
   c.tellCounter = TELL_COUNTERS[t];
   c.tellEv = w.emit(Ev.BossTell, c.src, b, attackCode(t), e.x[b], e.y[b], c.lastPhaseEv);
   c.tellActive = true;
-  c.tellTicks = Math.max(1, Math.round(c.def.tell.windowSeconds * 60));
+  c.tellTicks = tellWindowTicks(c.def.tell.windowSeconds, w.meta.settings.tellAssist);   // Phase 3 assist: ×1.5
   c.tellSeq++;
   c.seg = false; c.wantIndex = NO_ENTITY; c.orderN = 0;
   TELLS[t].start(w, b, c);

@@ -5,7 +5,7 @@
  * sim uses (center within max(PICK_RADIUS, radius + 8)) and returns that enemy's drawn position,
  * which armed ability casts snap to.
  */
-import { INSTANCE_FLOATS, RETICLE_MARK, SALVAGE_MARK, Shape } from '@sim/core/types';
+import { INSTANCE_FLOATS, PICK_RANK_SCALE, RETICLE_MARK, SALVAGE_MARK, Shape } from '@sim/core/types';
 
 export const ENEMY_LAYER = 4;
 export const PICK_RADIUS = 24;
@@ -33,6 +33,59 @@ export function nearestEnemy(instances: Float32Array, count: number, x: number, 
     if (d <= Math.max(minReach, r + PICK_PAD) && (!best || d < best.dist)) best = { x: ex, y: ey, dist: d };
   }
   return best;
+}
+
+/** Phase 3 tap intent: a designated enemy within this many CSS px of the best candidate keeps the tap (no flicker). */
+export const STICKY_PX = 6;
+
+/** An enemy body's pick rank (0 other, 1 elite, 2 boss, 3 boss with its weak point open; core/types.ts PickRank). */
+export function pickRank(aux1: number): number {
+  return Math.floor(aux1 / PICK_RANK_SCALE) & 3;
+}
+
+export interface WeightedPick extends PickResult {
+  /** The picked enemy's rank (pickRank). */
+  rank: number;
+  /** The picked enemy is drawn with a designation reticle. */
+  marked: boolean;
+}
+
+/**
+ * Phase 3 weighted, sticky enemy pick (fixes A-05, A-06, C-14). Among the enemies within reach of (x, y) (the same reach
+ * as nearestEnemy), the highest rank wins (boss, weak point open first, then elite, then the rest), the nearest within
+ * a rank. Then stickiness: an enemy already designated (reticle drawn on it) keeps the tap when it is no more than
+ * `stickyWu` world units farther than that best candidate, so taps in a formation do not flick the designation around.
+ * Pure (tests/app/pick.test.ts); the sim still resolves `designate_at` by the position this returns.
+ */
+export function pickEnemy(instances: Float32Array, count: number, x: number, y: number, minReach = PICK_RADIUS, stickyWu = 0): WeightedPick | null {
+  const n = Math.min(count, Math.floor(instances.length / INSTANCE_FLOATS));
+  let best: WeightedPick | null = null;
+  let sticky: PickResult | null = null;
+  for (let i = 0; i < n; i++) {
+    const o = i * INSTANCE_FLOATS;
+    if (instances[o + 9] !== ENEMY_LAYER) continue;
+    const ex = instances[o], ey = instances[o + 1], r = instances[o + 2];
+    const d = Math.hypot(ex - x, ey - y);
+    if (d > Math.max(minReach, r + PICK_PAD)) continue;
+    const rank = pickRank(instances[o + 11]);
+    if (!best || rank > best.rank || (rank === best.rank && d < best.dist)) best = { x: ex, y: ey, dist: d, rank, marked: false };
+    if ((!sticky || d < sticky.dist) && reticleAt(instances, count, ex, ey)) sticky = { x: ex, y: ey, dist: d };
+  }
+  if (!best) return null;
+  if (sticky && sticky.dist <= best.dist + stickyWu) {
+    const so = findBody(instances, n, sticky.x, sticky.y);
+    return { ...sticky, rank: so >= 0 ? pickRank(instances[so + 11]) : 0, marked: true };
+  }
+  best.marked = reticleAt(instances, count, best.x, best.y);
+  return best;
+}
+
+function findBody(instances: Float32Array, n: number, x: number, y: number): number {
+  for (let i = 0; i < n; i++) {
+    const o = i * INSTANCE_FLOATS;
+    if (instances[o + 9] === ENEMY_LAYER && instances[o] === x && instances[o + 1] === y) return o;
+  }
+  return -1;
 }
 
 /** Active edge: minimum tap reach around a salvage crate in CSS px (forgiving: a crate drifts while the thumb moves). */

@@ -23,6 +23,7 @@ import { INSTANCE_FLOATS, FX_FLOATS, Shape, FxKind, Ev, EnemyFlag, ProjFlag, ARE
 import type { WorldImpl } from './world-impl';
 import { enemyDefByIndex, bossDefByIndex, bossIndex, kindIndex, enemyDef, bossDef } from './content';
 import { ROLE_CLONE } from '../enemies/behaviors/kinds';
+import { tellWindowTicks } from '../data/bosses';
 import { atan2, sin } from '../math/lut';
 import { STATUS_NAMES } from './events';
 import { EnemyView, writeEnemy, atan2Approx } from './snapshot-art';
@@ -237,7 +238,7 @@ function writeEnemies(w: WorldImpl, out: SnapshotWriter): void {
       v.shape = b.shape; v.cr = b.color[0]; v.cg = b.color[1]; v.cb = b.color[2];
       v.bossId = e.bossId[i]; v.bossDef = b; v.bossPhase = e.bossPhase[i];
       v.tell = tell.ability !== null && tell.bossIndex === i && tell.ticksLeft > 0
-        ? 1 - tell.ticksLeft / Math.max(1, Math.round(b.tell.windowSeconds * 60)) : -1;
+        ? 1 - tell.ticksLeft / tellWindowTicks(b.tell.windowSeconds, w.meta.settings.tellAssist) : -1;
     } else {
       const d = enemyDefByIndex(kind);
       v.shape = d.shape; v.cr = d.color[0]; v.cg = d.color[1]; v.cb = d.color[2];

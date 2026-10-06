@@ -1,35 +1,35 @@
 /* Quartermaster card (src/ui/quartermaster.ts): phone-first, 44px targets, text ≥ 14px. */
 .qm-card { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 6px; }
 .qm-head { display: flex; align-items: center; gap: 8px; min-height: var(--touch); }
-.qm-title { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; }
+.qm-title { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1rem; }
 .qm-card.locked .qm-master { display: none; }
-.qm-teaser { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 14px; color: var(--text-dim); }
+.qm-teaser { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 0.875rem; color: var(--text-dim); }
 .qm-body { display: flex; flex-direction: column; gap: 6px; }
-.qm-explain { margin: 0; font-size: 14px; line-height: 1.4; }
-.qm-label { font-size: 14px; font-weight: 600; color: var(--text-dim); }
-.qm-note { margin: 0; font-size: 14px; color: var(--text-dim); }
+.qm-explain { margin: 0; font-size: 0.875rem; line-height: 1.4; }
+.qm-label { font-size: 0.875rem; font-weight: 600; color: var(--text-dim); }
+.qm-note { margin: 0; font-size: 0.875rem; color: var(--text-dim); }
 .qm-seg { display: flex; gap: 2px; padding: 3px; background: var(--bg-3); border: 1px solid var(--line); border-radius: 12px; }
 .qm-seg-btn {
   flex: 1 1 0; min-width: 0; min-height: var(--touch); border: 0; border-radius: 9px; background: transparent; color: var(--text-dim);
-  font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; white-space: nowrap; touch-action: manipulation;
+  font: inherit; font-size: 0.9375rem; font-weight: 600; cursor: pointer; white-space: nowrap; touch-action: manipulation;
 }
 .qm-seg-btn.active { background: var(--bg-4); color: var(--text); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06); }
 .qm-seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .qm-trees { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; }
 .qm-tree { display: flex; align-items: center; gap: 8px; min-height: var(--touch); border-bottom: 1px solid var(--line); }
 .qm-tree:last-child { border-bottom: 0; }
-.qm-tree-name { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qm-tree-name { flex: 1; min-width: 0; font-size: 0.9375rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qm-tree.off .qm-tree-name { color: var(--text-dim); }
-.qm-count { font-size: 14px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.qm-count { font-size: 0.875rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .qm-card.off .qm-seg, .qm-card.off .qm-trees { opacity: 0.7; }
 /* Bank: the Quartermaster's own Scrap (it spends only this) */
 .qm-bank { display: flex; align-items: center; gap: 10px; min-height: var(--touch); padding: 6px 10px; background: var(--bg-3); border: 1px solid var(--line); border-radius: 12px; }
 .qm-bank-ico { width: 26px; height: 26px; flex: none; color: var(--scrap); }
 .qm-bank-stack { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
-.qm-bank-label { font-size: 14px; font-weight: 600; color: var(--text-dim); }
+.qm-bank-label { font-size: 0.875rem; font-weight: 600; color: var(--text-dim); }
 .qm-bank-line { display: flex; align-items: baseline; gap: 8px; }
-.qm-bank-val { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.qm-bank-rate { font-size: 14px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.qm-bank-val { font-size: 1.25rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.qm-bank-rate { font-size: 0.875rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .qm-bank-rate:empty { display: none; }
 .qm-card.off .qm-bank, .qm-card.idle .qm-bank { opacity: 0.7; }
 .qm-card.idle .qm-bank-note { color: var(--ok); font-weight: 600; }

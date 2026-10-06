@@ -36,6 +36,10 @@ export const LANE_GAP = 8;
 export const MIN_OFFER = 96;
 /** The death card shows whole (scrolling) only with room for its headline, the line under it and one suggestion. */
 export const MIN_DEATH = 140;
+/** A landscape phone's side lane reaches into the arena's left edge for about this much width (px). */
+export const SIDE_WANT = 260;
+/** A lane narrower than this (px) takes the one-column form of the boon offer and the death card. */
+export const NARROW = 300;
 
 export interface LaneSlot { id: string; room: number }
 /** `minH`: a scrollable card that fits with at least this much room (it is then capped at the room). */
@@ -155,8 +159,11 @@ export class OverlayLanes {
     return [this.src.layout(), this.src.battleVisible(), innerWidth, innerHeight, r(P.battle), a ? `${Math.round(a.cx)},${Math.round(a.cy)},${Math.round(a.r)}` : '-',
       P.offer.hidden ? '-' : P.offer.scrollHeight, P.coach.el.hidden ? '-' : `${P.coach.el.dataset.coach}|${P.coach.shrunk}|${P.coach.el.textContent?.length}`,
       P.death.el.hidden ? '-' : `${P.death.folded}|${P.death.wantFull}|${P.death.first}|${P.death.el.scrollHeight}`, P.feed.el.childElementCount,
-      r(P.row), r(P.starter), r(P.oc), r(P.armHint), ...[...P.arenaTop.children].map(r)].join(';');
+      r(P.row), (this.quickBuy() ? r(this.quickBuy()!) : '-'), r(P.starter), r(P.oc), r(P.armHint), ...[...P.arenaTop.children].map(r)].join(';');
   }
+
+  /** The dock's quick-buy chip (a sibling of the ability row), if any. */
+  private quickBuy(): Element | null { return this.p.row.parentElement?.querySelector('.quick-buy') ?? null; }
 
   private safe(): { top: number; right: number; bottom: number; left: number } {
     const s = getComputedStyle(this.probe);
@@ -170,7 +177,7 @@ export class OverlayLanes {
     for (const k of ['bottom']) styleVar(arenaTop, k, '');
     for (const el of [offer, coach.el, feed.el, armHint, this.p.death.el]) for (const k of ['top', 'bottom', 'left', 'right', 'width', 'max-width', 'max-height', 'position', 'transform']) styleVar(el, k, '');
     coach.el.classList.remove('lane-wait', 'compact');
-    this.p.death.el.classList.remove('lane-wait', 'lane-folded', 'dc-tight');
+    this.p.death.el.classList.remove('lane-wait', 'lane-folded', 'dc-tight', 'dc-narrow');
     offer.classList.remove('narrow', 'thin');
     feed.fit(FEED_MAX_SHOWN);
     this.plan = {};
@@ -206,6 +213,10 @@ export class OverlayLanes {
     const stAll = shown(P.starter) ? boxOf(P.starter) : null;
     const oc = shown(P.oc) ? boxOf(P.oc) : null;
     const hint = shown(P.armHint) ? boxOf(P.armHint) : null;
+    // the dock's quick-buy chip (abilities.ts): in the ability column on a landscape phone (wider than the buttons), above
+    // the slot row on a phone with three or four slots
+    const qbEl = this.quickBuy();
+    const qb = qbEl && shown(qbEl) ? boxOf(qbEl) : null;
     /** The lowest edge of the arena-top column's content (the boss bar, each run control) inside the x-range [l, r]. */
     const tops = kids.flatMap((c) => (c.classList.contains('arena-strip') ? [...c.querySelectorAll(':scope > *, .battle-controls > *')].filter((x) => !x.matches('.battle-controls') && shown(x)) : [c]));
     const topEdge = (l: number, r: number): number => {
@@ -216,16 +227,19 @@ export class OverlayLanes {
     const slots: Slot[] = [];
     if (L === 'rail') {
       const ax = hasArena ? a!.cx - a!.r - G : cl + (cr - cl) * 0.3;
+      // the side lane is the roomiest, but beside a centred arena it can be a sliver: it may reach into the arena's left
+      // edge (never nearer the tower than its hold zone) so a card gets about SIDE_WANT px
+      const reach = (l: number): number => (hasArena ? Math.max(ax, Math.min(a!.cx - a!.hold - G, l + SIDE_WANT)) : ax);
       let s: Box;
-      if (stAll) s = { l: cl, r: Math.max(ax, stAll.r), t: 0, b: stAll.t - G };          // above the Upgrade panel
-      else s = { l: row ? row.r + G : cl, r: ax, t: 0, b: cb };                         // beside the ability column
+      if (stAll) s = { l: cl, r: Math.max(reach(cl), stAll.r), t: 0, b: stAll.t - G };   // above the Upgrade panel
+      else { const l = row ? Math.max(row.r, qb?.r ?? 0) + G : cl; s = { l, r: reach(l), t: 0, b: cb }; }   // beside the ability column and its quick-buy chip
       s.t = topEdge(s.l, s.r);
       slots.push({ id: 'S', ...s, from: 'bottom' });
       const l2 = Math.max(cl, s.r + G);
       slots.push({ id: 'T', l: l2, r: cr, t: topEdge(l2, cr), b: holdT, from: 'top' });
       slots.push({ id: 'B', l: l2, r: oc ? Math.min(cr, oc.l - G) : cr, t: holdB, b: cb, from: 'bottom' });
     } else {
-      const dockTop = Math.min(cb + G, ...[row, st, hint, oc].filter((x): x is Box => !!x).map((x) => x.t));
+      const dockTop = Math.min(cb + G, ...[row, qb, st, hint, oc].filter((x): x is Box => !!x).map((x) => x.t));
       slots.push({ id: 'B', l: cl, r: cr, t: holdB, b: dockTop - G, from: 'bottom' });
       slots.push({ id: 'T', l: cl, r: cr, t: topEdge(cl, cr), b: holdT, from: 'top' });
     }
@@ -246,7 +260,7 @@ export class OverlayLanes {
       // a landscape phone's side lane is narrower than the usual wide card: the phone layout (foot under the cards), and
       // one card per row when it is very narrow
       P.offer.classList.toggle('narrow', L === 'rail' && width(s) < 560);
-      P.offer.classList.toggle('thin', width(s) < 300);
+      P.offer.classList.toggle('thin', width(s) < NARROW);
       if (L === 'rail') { styleVar(P.offer, 'width', px(Math.min(620, width(s)))); styleVar(P.offer, 'left', px(s.l - bb.left)); }
       else styleVar(P.offer, 'width', '');
       styleVar(P.offer, 'max-height', '');
@@ -284,8 +298,8 @@ export class OverlayLanes {
     if (deathOn) {
       de.classList.remove('lane-wait');
       const ids = (L === 'rail' ? ['T', 'S', 'B'] : ['B', 'T']).filter((id) => !(L === 'rail' && id === 'S' && offerOn) && slot(id));
-      const full = (id: string): number => { de.classList.remove('lane-folded'); styleVar(de, 'max-height', 'none'); styleVar(de, 'max-width', px(width(slot(id)!))); return de.scrollHeight + 2; };
-      const folded = (id: string): number => { styleVar(de, 'max-width', px(width(slot(id)!))); de.classList.add('lane-folded'); const v = de.offsetHeight; de.classList.remove('lane-folded'); return v; };
+      const full = (id: string): number => { de.classList.remove('lane-folded'); de.classList.toggle('dc-narrow', width(slot(id)!) < NARROW); styleVar(de, 'max-height', 'none'); styleVar(de, 'max-width', px(width(slot(id)!))); return de.scrollHeight + 2; };
+      const folded = (id: string): number => { de.classList.toggle('dc-narrow', width(slot(id)!) < NARROW); styleVar(de, 'max-width', px(width(slot(id)!))); de.classList.add('lane-folded'); const v = de.offsetHeight; de.classList.remove('lane-folded'); return v; };
       const opts: LaneOpt[] = [];
       if (D.folded) for (const id of ids) opts.push({ slot: id, h: folded(id), compact: true });
       else {
@@ -357,7 +371,7 @@ export class OverlayLanes {
       const d = plan.death;
       de.classList.toggle('lane-wait', !d);
       de.classList.toggle('lane-folded', !!d?.compact && !D.folded);
-      if (d) { styleVar(de, 'max-height', px(d.h)); place(de, d.slot, d.h, battleBox); }
+      if (d) { de.classList.toggle('dc-narrow', width(slot(d.slot)!) < NARROW); styleVar(de, 'max-height', px(d.h)); place(de, d.slot, d.h, battleBox); }
     }
     const t = plan.toasts;
     P.feed.fit(t ? t.count : 0);

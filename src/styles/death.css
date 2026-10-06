@@ -35,10 +35,20 @@
 .death-card.dc-tight > .dc-sub:not(.dc-stall) { display: none; }
 .death-card.dc-tight .dc-lead { margin-top: 0; }
 .death-card.dc-tight > .dc-lead { display: none; }
-.death-card.dc-tight .dc-list { flex-direction: row; gap: 6px; }
-.death-card.dc-tight .btn.dc-item { flex: 1 1 0; min-width: 0; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; padding: 6px 8px; font-size: 14px; line-height: 1.2; }
-.death-card.dc-tight .btn.dc-item .dc-name { flex: none; overflow-wrap: anywhere; }
-.death-card.dc-tight .btn.dc-item > .ico { display: none; }
+.death-card.dc-tight:not(.dc-narrow) .dc-list { flex-direction: row; gap: 6px; }
+.death-card.dc-tight:not(.dc-narrow) .btn.dc-item { flex: 1 1 0; min-width: 0; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; padding: 6px 8px; font-size: 14px; line-height: 1.2; }
+.death-card.dc-tight:not(.dc-narrow) .btn.dc-item .dc-name { flex: none; overflow-wrap: anywhere; }
+.death-card.dc-tight:not(.dc-narrow) .btn.dc-item > .ico { display: none; }
 .death-card.dc-tight .dc-more { display: none; }
 /* near the Frontier the Prestige line replaces the purchase suggestions (death.ts) */
 .death-card.at-frontier .dc-lead, .death-card.at-frontier .dc-list { display: none; }
+/* a lane narrower than ~300 px (a landscape phone's side lane): one column, the title wraps at word breaks, buys stay full rows */
+.death-card.dc-narrow { padding: 4px 6px 6px 10px; }
+.death-card.dc-narrow .dc-title { font-size: 0.9375rem; overflow-wrap: break-word; }
+.death-card.dc-narrow .dc-sub, .death-card.dc-narrow .dc-lead { margin: 1px 0 4px; }
+.death-card.dc-narrow .btn.dc-item { min-height: var(--touch); padding: 4px 8px; line-height: 1.2; }
+.death-card.dc-narrow .dc-head { flex-wrap: wrap; row-gap: 0; }
+.death-card.dc-narrow .dc-head > .ico { margin-right: auto; }
+.death-card.dc-narrow .dc-title { order: 3; flex: 1 1 100%; }
+.death-card.dc-narrow:is(.folded, .lane-folded) .dc-head > .ico { margin-right: 0; }
+.death-card.dc-narrow:is(.folded, .lane-folded) .dc-title { order: 0; flex: 1 1 0; }
