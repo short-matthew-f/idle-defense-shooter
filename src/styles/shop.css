@@ -33,7 +33,7 @@ body.tab-upgrades .screen-top > .status-strip { display: none; }   /* "Battle â€
 .crumb-sep { flex: none; color: var(--text-faint); font-size: 1rem; }
 .crumb-gap { flex: 1 1 0; min-width: 0; }
 .qm-crumb { flex: none; display: flex; align-items: center; gap: 2px; }
-.btn.crumb-qm { flex: none; padding: 0 6px; font-size: 0.875rem; font-weight: 700; color: var(--text-dim); letter-spacing: 0.04em; }
+.btn.crumb-qm { flex: none; min-width: var(--touch); justify-content: center; padding: 0 6px; font-size: 0.875rem; font-weight: 700; color: var(--text-dim); letter-spacing: 0.04em; }
 .qm-crumb .switch { flex: none; }
 @media (max-width: 360px) { .shop-head { padding-left: 6px; padding-right: 8px; } .btn.crumb { padding: 0 4px; gap: 3px; } .btn.crumb-qm { padding: 0 4px; } }
 /* a decision waits on a page / in a tree (an empty slot, an open fork) */
