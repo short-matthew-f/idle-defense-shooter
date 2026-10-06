@@ -879,7 +879,9 @@ async function overlays() {
     { id: '375-text130', viewport: { width: 375, height: 667 }, deviceScaleFactor: 2, safe: { top: 20, bottom: 0 }, textScale: 130 },
   ];
   const HARD = new Set(['cover', 'pair', 'clip', 'centre', 'deadtap']);
+  const only = (process.env.E2E_OV ?? '').split(',').filter(Boolean);   // debugging: E2E_OV=320,375-text130 runs only those viewports
   for (const vp of viewports) {
+    if (only.length && !only.includes(vp.id)) continue;
     const ctx = await browser.newContext({ viewport: vp.viewport, deviceScaleFactor: vp.deviceScaleFactor, hasTouch: true, isMobile: true });
     await ctx.route('**/favicon.ico', (r) => r.fulfill({ status: 204, body: '' }));
     // an iPhone's notch and home indicator (Chromium reports no safe-area insets): the CSS tokens every inset reads
@@ -928,7 +930,7 @@ async function overlays() {
         await page.screenshot({ path: `${OUT}/phone-overlays-${vp.id}-${c.id}-${label}.png` });
         const names = r.overlays.map((o) => o.name);
         check(`overlays ${vp.id} ${c.id} ${label}: nothing major is covered (tower, dock, HUD, tab bar, each other, safe area, dead taps)`, hard.length === 0 && names.length >= (label === 'death' ? 2 : 3),   // a fresh death holds the offer as its chip (attention.ts)
-          hard.length ? hard : { overlays: names, arena: r.arena });
+          hard.length ? hard : { overlays: names, arena: r.arena, ...(process.env.E2E_OV_DEBUG ? { boxes: r.overlays, plan: await page.evaluate(() => { const l = window.__citadel.game.ui.lanes; return { plan: l.plan, rooms: l.rooms, offerNat: document.querySelector(".boon-offer")?.scrollHeight }; }) } : {}) });
       }
     }
     check(`overlays ${vp.id}: zero console errors`, errors.length === 0, errors);

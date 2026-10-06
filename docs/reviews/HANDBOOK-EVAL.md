@@ -265,3 +265,25 @@ Feedback 3, Complexity 3, Engagement 3 (structure only), Accessibility 3 (Phase 
 | N-13 | S3 | Importing an old export credits offline time without saying so | Phase 4 |
 | N-14 | S3 | Constellation minor/bridge nodes have 31–33 px hit areas; 12 px names | Phase 3 |
 | N-15 | S3 | A death past a later Frontier has no why-line | hotfix |
+
+## 8. Phase 3 status (2026-10-06, branch `wip/phase3`)
+
+Evidence: static, unit and scripted (headless Chromium, software GL). No device or human testing; feel and performance not judged.
+
+| Item | What shipped | Evidence |
+| --- | --- | --- |
+| 1 Text size (A-01) | Settings → Accessibility: 100 / 115 / 130 % via root rem (every stylesheet's font sizes now rem). Below 340 px (and 130 % up to 380 px): icon-only tabs with dot badges, smaller slots, quick-buy above the row. `user-scalable=no` dropped for `touch-action: manipulation`; the arena keeps `touch-action: none`. Overlay audit now also runs at 320×568 and 375×667 @130 %. | scripted (overlay audit), screenshots |
+| 2 Reduced motion (A-02, C-20) | One control (Accessibility); `body.reduce-motion` mirrors every `prefers-reduced-motion` rule (src/styles/a11y.css). Overcharge glow pulses 5 s then holds. | scripted: running animations 5 → 0 with either the OS or the in-game setting |
+| 3 Tap intent (A-05, A-06, C-14) | A finger on an enemy picks it; otherwise within the assist reach: boss with weak point open > boss > elite > other; the designated enemy keeps the tap within 6 px. Slop 16 px; hold delay setting (+0 / 150 / 300 ms); a short aim over an enemy or crate is a tap; ripple on every tap; a missed `designate_at` is silent. | unit; scripted rolled-tap check |
+| 4 Dialogs (A-04) | Focus trap via `inert`, initial focus on the title (Cancel on confirms), focus returns to the opener. | scripted (Tab cycling, Esc, focus return) |
+| 5 Contrast (A-12) | Bar labels on a dark plate: ≥ 10.2:1 worst case (was 1.8–3.1:1). | static (computed from CSS) |
+| 6 Timing cues (A-13–15, C-21) | Overcharge band-entry tick + vibrate, PERFECT / WEAK floater, optional auto-release; optional ×1.5 boss tell windows (deterministic meta setting); optional vibration on tells and low HP (shown only where the browser vibrates; not on iPhone). | unit + simulator (determinism unchanged) |
+| 7 Accessibility group (A-17, A-20) | Top of Settings: text size, reduced motion, left-hand layout, screen-reader announcements (boss start, tells, death, Prestige recommended), then the assists. Canvas `role="img"` with a live label. | unit; screenshots |
+| 8 Landscape Decline (A-11) | Decline shows its word; on a landscape phone it waits 6 s behind an Undo toast. | scripted |
+| 9 Boon set-aside (C-08) | After setting an offer aside, later offers in that attempt arrive as the chip; resets on a new attempt or Prestige. When the offer lane is under 150 px the offer arrives as its chip. | unit; scripted |
+| N-04 | Landscape lanes know the quick-buy chip; draft Pick visible without scrolling at 852×393. | scripted overlay audit at 4 sizes |
+| N-07 | Upgrades first row at 375×667: 57 % → 47 % of the height (target was 45 %; the rest needs a row merged — owner's call). | scripted measure |
+| N-09 | Command journal: purchases and choices are journaled synchronously and replayed after a reload or kill; a replayed buy waits (up to 60 s of sim time) for the Scrap it needs. | unit; scripted reload-within-300 ms repro (failed before, passes after) |
+| N-14 | Constellation hit areas ≥ 44 px at every width, names ≥ 14 px, taps pick the nearest node. | scripted measure |
+
+Open after Phase 3: the remaining ~14 px on Upgrades at 375; the boss tell line and boss HP label ellipsise at 130 %; Active edge reads 41.7 % in `sim:accept --quick` both before and after Phase 3 (for the balance round).

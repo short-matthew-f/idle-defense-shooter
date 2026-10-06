@@ -34,6 +34,10 @@ import { attr, h, styleVar } from './dom';
 export const LANE_GAP = 8;
 /** The boon offer is never squeezed below this (it scrolls instead): it is the player's pending decision. */
 export const MIN_OFFER = 96;
+/** A portrait lane with less room than this (px) cannot show the boon offer usefully (its three cards are about 150-170 px tall): it waits as its chip. */
+export const OFFER_CARD_MIN = 150;
+/** The toast column's own gap between toasts (feed.css .feed gap). */
+export const FEED_GAP = 6;
 /** The death card shows whole (scrolling) only with room for its headline, the line under it and one suggestion. */
 export const MIN_DEATH = 140;
 /** A landscape phone's side lane reaches into the arena's left edge for about this much width (px). */
@@ -48,7 +52,7 @@ export type LaneItem =
   /** One box: the first option with room wins; with a `floor` it is always placed (in opts[0], capped, scrolling). */
   | { id: string; kind: 'card'; opts: LaneOpt[]; floor?: number }
   /** A list (toasts): as many as fit, in order, in the slot (of `slots`) that fits the most; ties go to the first. */
-  | { id: string; kind: 'stack'; slots: string[]; hs: Readonly<Record<string, readonly number[]>> };
+  | { id: string; kind: 'stack'; slots: string[]; hs: Readonly<Record<string, readonly number[]>>; /** the list's own gap (default: the lanes' gap) */ gap?: number };
 export interface LanePlacement { slot: string; h: number; compact: boolean; count: number }
 
 /** How many of `hs` (in order) stack into `room` with `gap` between them. */
@@ -87,8 +91,9 @@ export function planLanes(slots: readonly LaneSlot[], items: readonly LaneItem[]
       for (const s of it.slots) {
         if (!room.has(s)) continue;
         const hs = it.hs[s] ?? [];
-        const n = fitCount(hs, room.get(s) ?? 0, gap);
-        if (!best || n > best.n) best = { slot: s, n, used: hs.slice(0, n).reduce((a, b) => a + b, 0) + Math.max(0, n - 1) * gap };
+        const g = it.gap ?? gap;
+        const n = fitCount(hs, room.get(s) ?? 0, g);
+        if (!best || n > best.n) best = { slot: s, n, used: hs.slice(0, n).reduce((a, b) => a + b, 0) + Math.max(0, n - 1) * g };
       }
       if (!best) { out[it.id] = null; continue; }
       out[it.id] = { slot: best.slot, h: best.used, compact: false, count: best.n };
@@ -108,6 +113,8 @@ export interface LaneParts {
   arenaTop: HTMLElement;
   death: DeathCard;
   offer: HTMLElement;
+  /** The offer's own controller: the lanes ask it to show as its chip when the lane is too short for the card. */
+  offerCtl?: { readonly wantsCard: boolean; setTight(on: boolean): boolean };
   coach: CoachBanner;
   feed: Feed;
   starter: HTMLElement;
@@ -131,6 +138,8 @@ export class OverlayLanes {
   private readonly probe = h('div', { class: 'lane-probe', attrs: { 'aria-hidden': 'true' } });
   /** The last placement (tests and the e2e overlap check read it). */
   plan: Record<string, LanePlacement | null> = {};
+  /** The rooms (px) the last plan had to place into, per slot (debugging, the e2e's E2E_OV_DEBUG). */
+  rooms: Record<string, number> = {};
 
   constructor(private readonly p: LaneParts, private readonly src: LaneSources) {
     p.battle.appendChild(this.probe);
@@ -246,6 +255,12 @@ export class OverlayLanes {
     const slot = (id: string): Slot | undefined => slots.find((x) => x.id === id);
     const width = (x: Slot): number => Math.max(0, x.r - x.l);
 
+    // a portrait lane too short for the boon offer: it waits as its chip (the card would scroll under its own foot or reach the tower)
+    if (P.offerCtl) {
+      const sb = slot('B');
+      if (P.offerCtl.setTight(L !== 'rail' && !!sb && P.offerCtl.wantsCard && sb.b - sb.t < OFFER_CARD_MIN)) this.schedule();
+    }
+
     // 3. measure each overlay at the width of each slot it may take
     const measure = (el: HTMLElement, w: number, prep?: () => void): number => {
       styleVar(el, 'max-width', px(w));
@@ -321,7 +336,7 @@ export class OverlayLanes {
     const order = (L === 'rail' ? ['T', 'S', 'B'] : ['B', 'T']).filter((id) => !(L === 'rail' && id === 'S' && offerOn));
     const hs: Record<string, number[]> = {};
     for (const id of order) { styleVar(P.feed.el, 'max-width', px(width(slot(id)!))); hs[id] = P.feed.heights(); }
-    items.push({ id: 'toasts', kind: 'stack', slots: order, hs });
+    items.push({ id: 'toasts', kind: 'stack', slots: order, hs, gap: FEED_GAP });
 
     const rooms = slots.map((s) => ({ id: s.id, room: s.b - s.t }));
     if (deathOn && (D.first || D.wantFull)) {
@@ -329,11 +344,20 @@ export class OverlayLanes {
       const d = items.findIndex((x) => x.id === 'death'), c = items.findIndex((x) => x.id === 'coach');
       if (c >= 0 && d > c) { const [it] = items.splice(d, 1); items.splice(c, 0, it); }
     }
+    this.rooms = Object.fromEntries(rooms.map((r) => [r.id, Math.round(r.room)]));
     let plan = planLanes(rooms, items, G);
     if (deathOn && !plan.death) {
       // no room left for even the death card's headline: it goes before the coach banner (which can still shrink or wait)
       const d = items.findIndex((x) => x.id === 'death'), c = items.findIndex((x) => x.id === 'coach');
       if (c >= 0 && d > c) { const [it] = items.splice(d, 1); items.splice(c, 0, it); plan = planLanes(rooms, items, G); }
+    }
+    // toasts wait for room while the coach shows its whole sentence: the coach yields by shortening to one line (tap for the
+    // rest) when that lets more of them show
+    const queued = Math.max(0, ...order.map((id) => hs[id]?.length ?? 0));
+    if (coachOn && plan.coach && !plan.coach.compact && (plan.toasts?.count ?? 0) < queued) {
+      const short = items.map((it): LaneItem => (it.id === 'coach' && it.kind === 'card' ? { ...it, opts: it.opts.filter((o) => o.compact).sort((x, y) => Number(y.slot === 'T') - Number(x.slot === 'T')) } : it));
+      const alt = planLanes(rooms, short, G);
+      if (alt.coach && (alt.toasts?.count ?? 0) > (plan.toasts?.count ?? 0)) plan = alt;
     }
     this.plan = plan;
     this.lastSig = '';   // re-read after the writes below (they move what the signature measures)

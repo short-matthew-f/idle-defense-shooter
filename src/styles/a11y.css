@@ -61,6 +61,9 @@ body.left-hand.shell-rail .oc-wrap { left: auto; right: calc(12px + var(--safe-r
   body.shell-phone .btn.ability { width: 50px; height: 50px; min-width: 50px; }
   body.shell-phone .oc-wrap { right: calc(8px + var(--safe-right, 0px)); }
   body.shell-phone.left-hand .oc-wrap { right: auto; left: calc(8px + var(--safe-left, 0px)); }
+  /* no room left of the row for the quick-buy chip: it sits above the row's left end, as with three or four slots */
+  body.shell-phone .btn.quick-buy { right: auto; left: 0; bottom: calc(100% + 12px); }
+  body.shell-phone.left-hand .btn.quick-buy { left: auto; right: 0; }
 }
 @media (max-width: 380px) {
   body.shell-phone.text-130 .tab-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

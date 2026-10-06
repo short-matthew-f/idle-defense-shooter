@@ -235,6 +235,9 @@ export class BoonOffer {
   private selected: BoonId | null = null;
   private replace: BoonId | null = null;
   private collapsed = false;
+  /** The overlay lanes (lanes.ts) found too little room for the card: it shows as its chip, until the player opens the chip. */
+  private tight = false;
+  private tightOpen = false;
   /** C-08: the player set an offer aside in this attempt, so the next ones arrive as the chip (reset by a new attempt / Prestige / opening the chip). */
   private aside: AsideMemory = { key: '', aside: false };
   private asideKey = '';
@@ -258,12 +261,27 @@ export class BoonOffer {
       this.hold, this.cards, this.detail,
       h('div', { class: 'bo-foot' }, this.heading, this.take, this.reroll, this.decline, collapse));
     this.el.hidden = true;
-    this.chip = button([icon('boon', 'ico tiny'), 'Boon ready', this.chipQueue], () => { this.opened = true; this.held = false; this.aside = { key: '', aside: false }; this.setCollapsed(false); }, { class: 'btn ctl boon-chip', label: 'A boon offer is waiting: show it' });
+    this.chip = button([icon('boon', 'ico tiny'), 'Boon ready', this.chipQueue], () => { this.opened = true; this.held = false; if (this.tight) { this.tight = false; this.tightOpen = true; } this.aside = { key: '', aside: false }; this.setCollapsed(false); }, { class: 'btn ctl boon-chip', label: 'A boon offer is waiting: show it' });
     this.chip.hidden = true;
     if (typeof ResizeObserver !== 'undefined') {
       this.ro = new ResizeObserver(() => this.publishHeight());
       this.ro.observe(this.el);
     }
+  }
+
+  /** Would the card show (an offer is pending, not set aside, not held, not declined), whatever room the lane has? */
+  get wantsCard(): boolean { return this.offer.length > 0 && !this.collapsed && !this.held && !this.declining; }
+
+  /** The overlay lanes: the card has no room worth showing (it is the chip instead; a tap on the chip still opens it). Returns whether it changed. */
+  setTight(on: boolean): boolean {
+    if (!on) this.tightOpen = false;
+    const v = on && !this.tightOpen;
+    if (v === this.tight) return false;
+    this.tight = v;
+    this.key = '';
+    const ui = this.ctx.state();
+    if (ui) this.update(ui);
+    return true;
   }
 
   /** Is an offer pending (shown or set aside)? */
@@ -310,12 +328,12 @@ export class BoonOffer {
     const cost = r.boonRerollCost ?? 1;
     this.holding = (r.holdTicksLeft ?? 0) > 0;
     const f = this.ctx.features();
-    const key = JSON.stringify([offer, this.selected, this.collapsed, this.held, this.holding, f.cores, f.elements, f.hardpoints, f.cross, active, r.boonCap, r.cores >= cost, cost, r.boonQueueLength, r.boonOfferKind, this.replace, ui.build.hardpoints, ui.build.attunements, !!this.declining]);
+    const key = JSON.stringify([offer, this.selected, this.collapsed, this.held, this.tight, this.holding, f.cores, f.elements, f.hardpoints, f.cross, active, r.boonCap, r.cores >= cost, cost, r.boonQueueLength, r.boonOfferKind, this.replace, ui.build.hardpoints, ui.build.attunements, !!this.declining]);
     if (key === this.key) return;
     this.key = key;
     const has = offer.length > 0;
     // the chip opens a held card too (the player asked): only a chip tap clears `held` until the plan sets it again
-    const hidden = this.collapsed || this.held;
+    const hidden = this.collapsed || this.held || this.tight;
     const away = !!this.declining;   // declined, within the Undo window: neither the card nor the chip
     show(this.el, has && !hidden && !away);
     show(this.chip, has && hidden && !away);
