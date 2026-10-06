@@ -34,3 +34,10 @@
   .modal-card.overlay { width: 100%; height: 60dvh; margin-top: 0; border-radius: 14px 14px 0 0; border: 1px solid var(--line-2); border-bottom: 0; padding-top: 0; }
 }
 body.shell-rail .modal-wrap.overlay { padding-left: calc(var(--rail-w) + var(--safe-left)); }
+
+/* Popover (Upgrades breadcrumb menus): drops from its control, no dim; the title is for screen readers only */
+.modal-wrap.popover { display: block; padding: 0; }
+.modal-wrap.popover .modal-backdrop { background: transparent; }
+.modal-card.popover { position: absolute; border-radius: 12px; overflow: hidden; }
+.modal-card.popover .modal-head { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); padding: 0; border: 0; }
+.modal-card.popover .modal-body { padding: 6px; }

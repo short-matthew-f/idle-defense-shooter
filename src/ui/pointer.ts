@@ -113,6 +113,8 @@ const TARGETS = new Map<string, Resolver>([
   ['build-boon', '.screen.s-build .boon-waiting'],
   ['overcharge', '.oc-btn'],
   ['field', fieldSpot],
+  // Upgrades pages (hints.ts viaUpgrades): the page's row in the open "Page ▾" menu carries the key; else the crumb
+  ...(['chassis', 'elements', 'hardpoints', 'cross', 'cores'] as const).map((c): [string, Resolver] => [`cat-${c}`, '.screen.s-upgrades .crumb-page']),
 ]);
 
 /** Map a hint key to a selector or resolver (for controls whose module has no `data-hint`). */
@@ -375,14 +377,14 @@ export const QM_COACH = 'qm-on';
 registerHintTarget('qm-turn-on', `.coach-banner[data-coach="${QM_COACH}"] .coach-act`);
 /**
  * After the first Prestige, while the Quartermaster is off: its banner's "Turn on" on Battle, else the switch on its
- * card (top of Upgrades → Chassis or Hardpoints; quartermaster.ts tags its switch `data-hint="quartermaster-toggle"`). On the banner the ring
+ * switch on Upgrades (the breadcrumb line's "QM" switch, or the first-time card's; both carry `data-hint="quartermaster-toggle"`). On the banner the ring
  * carries no label: the button already reads "Turn on" and the banner has the sentence.
  */
 registerHint({
   id: 'quartermaster', prio: 80, coach: QM_COACH, feature: 'quartermaster', kind: 'event',
   when: (ui) => (ui.meta.prestigeCount | 0) >= 1 && !!ui.quartermaster?.unlocked && !ui.quartermaster.on,
   step: (_ui, c) => (c.nav.battle && c.coach.current === QM_COACH ? { target: 'qm-turn-on', final: true }
-    : c.nav.screen === 'upgrades' ? (c.shop.cat === 'chassis' || c.shop.cat === 'hardpoints' ? { target: 'quartermaster-toggle', text: 'Turn on the Quartermaster', final: true } : { target: 'cat-chassis', text: 'Tap here', final: false })
+    : c.nav.screen === 'upgrades' ? { target: 'quartermaster-toggle', text: 'Turn on the Quartermaster', final: true }
     : { target: 'tab-upgrades', text: 'Open Upgrades', final: false }),
 });
 /** Overcharge full (its banner is up, or read): the button. Salvage crates are drawn on the canvas: no DOM target (see report). */
@@ -501,7 +503,6 @@ export class HintDriver {
         ceReady: ui.tower.ce >= cost && cost > 0,
         boonChip: this.src.boonChip(),
         draftWaiting: this.src.draftWaiting(),
-        buyAll: !!resolveTarget('buy-all'),
         overchargeReady: !!ui.active?.overcharge.ready,
       },
     };

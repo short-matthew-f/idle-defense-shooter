@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { ShopEntry, SimEvent } from '../../src/sim/core/types';
 import { Ev } from '../../src/sim/core/types';
-import { buyLabel, buyLabelText, bulkToast, nextQty, parseQty, planBuyAll, qtyLabel, rowBuy, spendLabel, treeSpend } from '../../src/ui/bulk';
+import { buyLabel, buyLabelText, bulkToast, nextQty, parseQty, qtyLabel, rowBuy } from '../../src/ui/bulk';
 
 /** Entry with geometric-ish previews: prices `costs`, and the affordable prefix for `scrap`. */
 function entry(node: string, costs: number[], scrap: number, extra: Partial<ShopEntry> = {}): ShopEntry {
@@ -12,7 +12,6 @@ function entry(node: string, costs: number[], scrap: number, extra: Partial<Shop
     affordable: n > 0, kind: 'stat', tier: 0, nextCosts: costs.slice(0, 10), affordableRanks: n, affordableTotal: total, ...extra,
   };
 }
-const geo = (base: number, g: number, k = 10): number[] => Array.from({ length: k }, (_, i) => Math.ceil(base * g ** i));
 
 describe('quantity selector', () => {
   it('cycles ×1 → ×10 → Max → ×1 and parses stored values', () => {
@@ -71,62 +70,6 @@ describe('buy button label', () => {
   });
 });
 
-describe('Buy all planning', () => {
-  const a = [10, 12, 14, 17, 20, 24, 29, 35, 42, 50];
-  const b = [15, 18, 22, 26, 31, 37, 45, 54, 65, 78];
-  const c = [20, 24, 29, 35, 42, 50, 60, 72, 86, 100];
-
-  it('×1 buys one rank of each suggestion in order while the Scrap lasts', () => {
-    const p = planBuyAll([entry('a', a, 50), entry('b', b, 50), entry('c', c, 50)], 50, 1);
-    expect(p.cmds).toEqual([{ node: 'a', count: 1 }, { node: 'b', count: 1 }, { node: 'c', count: 1 }]);
-    expect(p.total).toBe(45);
-    const q = planBuyAll([entry('a', a, 30), entry('b', b, 30), entry('c', c, 30)], 30, 1);
-    expect(q.cmds).toEqual([{ node: 'a', count: 1 }, { node: 'b', count: 1 }]);
-    expect(q.total).toBe(25);
-  });
-
-  it('×10 buys up to ten of each, in order, from one budget', () => {
-    const scrap = 300;
-    const p = planBuyAll([entry('a', a, scrap), entry('b', b, scrap), entry('c', c, scrap)], scrap, 10);
-    expect(p.cmds[0]).toEqual({ node: 'a', count: 10 });       // 253
-    expect(p.cmds[1]).toEqual({ node: 'b', count: 2 });        // 15 + 18 = 33 → 286
-    expect(p.cmds.length).toBe(2);                             // 14 left < 20
-    expect(p.total).toBe(286);
-    expect(p.ranks).toBe(12);
-  });
-
-  it('Max takes the first entry\'s exact preview, then the rest', () => {
-    const first = entry('a', a, 100, { affordableRanks: 6, affordableTotal: 97 });
-    const p = planBuyAll([first, entry('b', b, 100), entry('c', c, 100)], 100, 0);
-    expect(p.cmds).toEqual([{ node: 'a', count: 6 }]);
-    expect(p.total).toBe(97);
-    // a later entry whose 10-price preview runs out is sent as Max (count 0) and ends the plan
-    const big = planBuyAll([entry('a', a, 1e6, { affordableRanks: 30, affordableTotal: 5000 }), entry('b', b, 1e6)], 1e6, 0);
-    expect(big.cmds).toEqual([{ node: 'a', count: 30 }, { node: 'b', count: 0 }]);
-    expect(big.open).toBe(true);
-    expect(p.open).toBe(false);
-  });
-
-  it('skips locked, maxed and Cores entries', () => {
-    const p = planBuyAll([entry('a', a, 100, { locked: 'Requires X' }), entry('b', [], 100, { rank: 30 }), entry('c', c, 100, { currency: 'cores' }), entry('d', b, 100)], 100, 1);
-    expect(p.cmds).toEqual([{ node: 'd', count: 1 }]);
-  });
-});
-
-describe('Spend here', () => {
-  it('plans cheapest-first at ×1 / ×10 and uses shopTreeTotals for Max', () => {
-    const list = [entry('a', geo(10, 1.5), 100), entry('b', geo(12, 1.2), 100)];
-    expect(treeSpend(list, 100, 1)).toEqual({ ranks: 1, total: 10 });
-    const ten = treeSpend(list, 100, 10);
-    expect(ten.ranks).toBeGreaterThan(3);
-    expect(ten.total).toBeLessThanOrEqual(100);
-    expect(treeSpend(list, 100, 0, { affordableRanks: 7, affordableTotal: 99 })).toEqual({ ranks: 7, total: 99 });
-    expect(spendLabel({ ranks: 7, total: 99 }, 0)).toBe('Max ×7 · ♦99');
-    expect(spendLabel({ ranks: 10, total: 1234 }, 10)).toBe('×10 · ♦1.2K');
-    expect(spendLabel({ ranks: 1, total: 12 }, 1)).toBe('♦12');
-    expect(spendLabel({ ranks: 0, total: 0 }, 0)).toBe('Nothing affordable');
-  });
-});
 
 describe('bulk toast', () => {
   const ev = (src: string, cost: number): SimEvent => ({ id: 0, tick: 0, type: Ev.Purchase, cause: -1, src, a: 1, b: cost, x: 0, y: 0 } as SimEvent);

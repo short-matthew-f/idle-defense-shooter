@@ -31,7 +31,7 @@ Best wave = `max(meta.deepestEver, run.deepestCleared)`. A first Prestige reveal
 | 2 | 6 | Upgrades → Elements (first attunement) |
 | 3 | 10 | Build tab; Upgrades → Hardpoints (first hardpoint slot); More tab; **Doctrine forks** (`doctrines` rung, `DOCTRINES_REVEAL_WAVE`: the fork heading, cards, decision row and dot stay hidden below it) |
 | 4 | 12 | Ability bar, Command Energy; Overcharge |
-| 5 | 15 | Boons and Anomalies on Build (offers and drafts always show); the Suggested line, Buy all, the ×1 → ×10 → Max chip, Spend here |
+| 5 | 15 | Boons and Anomalies on Build (offers and drafts always show); the ★ Suggested tags on Upgrades rows, the ×1 → ×10 → Max chip |
 | 6 | 20 | Prestige tab and Forecast; Upgrades → Cross (Fusions, Linkages, Infusions), shown once the first Cross node can be bought or one is owned; Inspector; Codex |
 | 7 | 25, or the first Prestige | Cores; Build → Frame |
 | 7 | 30, or the first Prestige | Exotics (the Core-priced upgrades in Upgrades → Cores) |
@@ -70,11 +70,11 @@ early Prestige, and everything is offered from Prestige 4.
 - **Where the pool applies:**
   - the attune and mount pickers (the Upgrades empty-slot rows, Build → Attune / Mount);
   - Refit;
-  - the open-slot decisions (the category tab's dot, the empty-slot row's dot and the death-card shortcut show only
+  - the open-slot decisions (the page's "New" dot in the Page ▾ menu and on the crumb, the empty-slot row's dot and the death-card shortcut show only
     when the pool has something to put in it);
   - Prestige → Blueprint (a Blueprint naming a system the next Prestige does not offer is listed but disabled);
   - Automation → Directives (the "Targeting" action's system list);
-  - the Suggested line, Buy all and the death card's purchases;
+  - the ★ Suggested tags and the death card's purchases;
   - Upgrades → Cross.
 - **Fusions, Linkages, Infusions** (`poolAllows`): a Fusion or Triad shows only when **both** (all) of its elements
   are in the pool. A Linkage needs its hardpoints, and an Infusion needs its hardpoint and element. An entry with a
@@ -145,26 +145,35 @@ rest is one tap away.
 
 - **One top row** (`shell.ts`, `.screen-top`): the wallet on the left (the balances this screen spends, with the
   Quartermaster's bank under the Scrap figure), on Upgrades the buy-quantity chip (×1 → ×10 → Max, one tap each; Q), and
-  a compact **Battle ›** button with the tower's HP as a thin bar (red and pulsing when low). It sits outside every
-  scroller. With no wallet (More) the strip shows wave, HP and Scrap in full.
-- **Upgrades** pins only the category tabs below it. The list scrolls as one: the **Suggested** line ("Suggested 3 ·
-  Buy all ◆53", collapsed by default; its chevron opens the chips, remembered in `prefs.suggestExpanded`; the
-  "Cheapest upgrades…" sentence shows only for the first three purchases, `prefs.buyCoach`), the **decision rows** (an
-  empty attunement / hardpoint slot of this category, which opens its picker in place; this tree's open Doctrine fork,
-  which scrolls to it), the tree chips (only with two or more trees; Cross and Cores are one stacked view), then the
-  rows. A row shows its name, rank and headline effect (`format.ts splitDesc`, two lines at most); tapping the row
-  body unfolds the full description (the Buy button keeps hold-to-buy). Locked and maxed rows fold into "N locked" /
-  "N maxed" lines at the end (open per session).
+  a compact **Battle ›** button with the tower's HP as a thin bar (red and pulsing when low; not on Upgrades, where the
+  tab bar and swipe back already go to Battle). It sits outside every scroller. With no wallet (More) the strip shows
+  wave, HP and Scrap in full.
+- **Upgrades** pins one breadcrumb line below it: **Page ▾ › Tree ▾ … QM [switch]** (`shop.ts`). "Page ▾" opens a
+  menu of the revealed pages (Chassis, Elements, Hardpoints, Cross, Cores); "Tree ▾" (pages with two or more trees or
+  slots) lists the page's trees with their affordable counts, "+ Empty slot" rows and, under the current tree, jump
+  links to its sections. Cross and Cores are stacked pages: their sections are listed under the page in "Page ▾".
+  Menus are popovers (`modal.ts` variant `popover`: Esc, Back, a tap outside or a choice closes them; focus returns to
+  the crumb). A **swipe left / right** on the list (≥ 50 px, mostly sideways, not from the left 24 px edge, which stays
+  the system's swipe back) or **← / →** steps along one order of every revealed tree and page. The list scrolls as one:
+  the **decision rows** (an empty attunement / hardpoint slot of this page, which opens its picker in place; this tree's
+  open Doctrine fork, which scrolls to it), then the rows; each section's light header sticks under the breadcrumb.
+  Up to three rows carry **★ Suggested** (the cheapest affordable buys; a hint, nothing buys on its own), with a
+  one-sentence explainer for the first three purchases (`prefs.buyCoach`). A row shows its name, rank and headline
+  effect (`format.ts splitDesc`, two lines at most); tapping the row body unfolds the full description (the Buy button
+  keeps hold-to-buy). Locked and maxed rows fold into "N locked" / "N maxed" lines at the end (open per session). The
+  Quartermaster shows its full card at the top of the list the first time (`prefs.qmSeen`); after that it is "QM
+  [switch]" on the breadcrumb line, and "QM" opens the card as a sheet.
 - **Dots mean a decision is waiting** (an empty slot with something to put in it, an open Doctrine fork; `--warn`), on
-  the category tab, the tree chip and the decision row. Affordability is the tab bar's count; a tree chip's count is
-  its affordable nodes in a quiet neutral badge. The bright accent is kept for the primary action (Buy all, the
-  starter Upgrade, Attune / Mount / Choose) and the selected state.
+  the page in the Page ▾ menu ("New"), on the Page crumb when another page has one, on the tree in the Tree ▾ menu and
+  on the decision row. Affordability is the tab bar's count; a tree's count is its affordable nodes in a quiet neutral
+  style. The bright accent is kept for the primary action (the starter Upgrade, Attune / Mount / Choose) and the
+  selected state.
 - **Build** and **Prestige → Upgrades** follow suit: section notes say only what the title does not; Build folds its
   locked slots into one row, the trees without a Doctrine into one line and the empty Anomaly sockets into one card;
   a Prestige layer not yet open is one line ("9 upgrades · open at deepest wave 60"), and an open layer folds its
   maxed rows (the guided first-Echo picks never fold).
 - `tests/e2e/e2e.mjs` "phone calm" (skip with `E2E_SKIP_UX=1`) measures it at 393×852 and 375×667: pinned chrome ≤ 25%
-  of the height, at most two pinned rows beyond the category tabs, list ≥ 55%, no sideways overflow, 44 px targets,
+  of the height, at most two pinned rows beyond the breadcrumb line, list ≥ 55%, no sideways overflow, 44 px targets,
   14 px text, AA contrast.
 
 ## Unlock everything

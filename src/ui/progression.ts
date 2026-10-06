@@ -76,7 +76,7 @@ export const UNLOCKS: Readonly<Record<FeatureId, Unlock>> = {
   overcharge: W(12, 'Overcharge (wired by another system)'),
   boons: W(15, 'Boons on the Build tab and the boon explainer (offers themselves always show)'),
   anomalies: W(15, 'Anomalies on the Build tab and the draft explainer (drafts themselves always show)'),
-  bulk: W(15, 'Suggested card, Buy all, ×1 · ×10 · Max, Spend here'),
+  bulk: W(15, '★ Suggested tags on Upgrades rows, ×1 · ×10 · Max'),
   prestigeTab: W(20, 'Prestige tab (teaser, Forecast)'),
   forecast: W(20, 'Forecast'),
   cross: W(20, 'Upgrades → Cross (Fusions, Linkages, Infusions): from wave 20, once the first Cross node can be bought (or one is owned)'),
@@ -87,7 +87,7 @@ export const UNLOCKS: Readonly<Record<FeatureId, Unlock>> = {
   exotics: W(STAGE7_WAVE + 5, 'Exotics (the Core-priced upgrades in Upgrades → Cores)'),
   automation: W(null, 'More → Automation (Directives, Autocast, Blueprints)'),
   trials: W(null, 'More → Trials'),
-  quartermaster: W(null, 'Quartermaster card at the top of Upgrades (Chassis, Hardpoints); a coach line offers to turn it on'),
+  quartermaster: W(null, 'Quartermaster: its card at the top of Upgrades the first time, then "QM" and its switch in the breadcrumb line; a coach line offers to turn it on'),
 };
 
 /** The three stage-0 stats (the most basic of Ballistics and Bastion), with first-contact names. */

@@ -35,7 +35,7 @@ export const COACH: readonly CoachMsg[] = [
   { id: 'abilities', feature: 'abilities', icon: 'target', text: 'Abilities: tap one to spend Command Energy (CE), then tap the field.' },
   { id: 'boons', feature: 'boons', icon: 'boon', text: 'Boons help until the tower falls. Pick one, or decline.' },
   { id: 'anomalies', feature: 'anomalies', icon: 'info', text: 'Anomaly drafts follow bosses: each card bends the rules until you Prestige.' },
-  { id: 'bulk', feature: 'bulk', icon: 'upgrade', text: 'Upgrades now suggests buys: Buy all, or ×10 and Max per tap.' },
+  { id: 'bulk', feature: 'bulk', icon: 'upgrade', text: 'Upgrades now marks ★ Suggested buys, and buys ×10 or Max per tap.' },
   { id: 'prestige', feature: 'prestigeTab', icon: 'prestige', text: 'The Prestige tab is open: its Forecast shows when a fresh start pays off.' },
   { id: 'cross', feature: 'cross', icon: 'bolt', text: 'Your parts can combine now: Upgrades → Cross has your first link.' },
   { id: 'inspector', feature: 'inspector', icon: 'inspector', text: 'Pause opens the Kill-Chain Inspector, which traces why things died. The Codex in More records what you find.' },

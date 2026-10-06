@@ -95,8 +95,8 @@ export async function value({ browser, BASE, OUT, check, attachLogs }) {
 
     // ---- Upgrades → Chassis: before → after on a stat row, matching UiState
     await tapTab('upgrades');
-    await page.locator('.screen.s-upgrades .cat-tabs .tab:has-text("Chassis")').first().tap().catch(() => {});
-    await page.waitForTimeout(400);
+    await crumbTo(page, 'Chassis');
+    await page.waitForTimeout(100);
     const rows = await page.evaluate(() => {
       const ui = window.__citadel.game.ui.ctx.state();
       const by = new Map(ui.shop.map((e) => [e.node, e]));
@@ -113,17 +113,27 @@ export async function value({ browser, BASE, OUT, check, attachLogs }) {
     };
     check(`value ${vp.id}: Chassis stat rows show "a → b" matching the UiState entry`, rows.length >= 3 && rows.every(okRow) && rows.some((r) => r.node === 'ballistics.damage'), rows.slice(0, 6));
 
-    // ---- the Quartermaster, seen before: one row with an inline switch
+    // ---- the Quartermaster, seen before: "QM [switch]" in the breadcrumb line (no card in the list); "QM" opens the card as a sheet
     const qm = await page.evaluate(() => {
-      const row = document.querySelector('.screen.s-upgrades .qm-row');
-      const sw = document.querySelector('.screen.s-upgrades .qm-inline[data-hint="quartermaster-toggle"]');
-      const card = document.querySelector('.screen.s-upgrades .qm-card');
-      const r = row?.getBoundingClientRect();
-      return { row: !!row && r.height > 0, h: r?.height ?? 0, sw: !!sw && !sw.hidden && sw.getBoundingClientRect().height >= 44, cardHidden: !card || card.hidden };
+      const crumbs = document.querySelector('.screen.s-upgrades .crumbs');
+      const line = document.querySelector('.screen.s-upgrades .qm-crumb');
+      const sw = document.querySelector('.screen.s-upgrades .qm-crumb .qm-inline[data-hint="quartermaster-toggle"]');
+      const qmBtn = document.querySelector('.screen.s-upgrades .crumb-qm');
+      const card = document.querySelector('.screen.s-upgrades .shop-list .qm-card');
+      const r = line?.getBoundingClientRect(), c = crumbs?.getBoundingClientRect();
+      return { line: !!line && !line.hidden && r.height > 0, inCrumbs: !!c && r.top >= c.top - 0.5 && r.bottom <= c.bottom + 0.5 && r.right <= innerWidth, crumbsH: c?.height ?? 0,
+        sw: !!sw && sw.getBoundingClientRect().height > 0, btnH: qmBtn?.getBoundingClientRect().height ?? 0, cardInList: !!card && !card.hidden };
     });
-    await page.evaluate(() => { const b = document.querySelector('.screen.s-upgrades .shop-body'); if (b) b.scrollTop = 0; });
-    await page.screenshot({ path: `${OUT}/value-${vp.id}-qm-folded.png` });
-    check(`value ${vp.id}: the Quartermaster, seen before, is one row (≤ 60 px) with an inline switch`, qm.row && qm.sw && qm.cardHidden && qm.h <= 60, qm);
+    await page.screenshot({ path: `${OUT}/value-${vp.id}-qm-crumb.png` });
+    await page.locator('.screen.s-upgrades .crumb-qm').tap().catch(() => {});
+    await page.waitForTimeout(400);
+    qm.sheet = await page.evaluate(() => { const c = document.querySelector('.modal-card.sheet .qm-card'); return !!c && c.getBoundingClientRect().height > 0; });
+    await page.screenshot({ path: `${OUT}/value-${vp.id}-qm-sheet.png` });
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(250);
+    qm.closed = await page.evaluate(() => !document.querySelector('.modal-card.sheet') && document.activeElement?.classList.contains('crumb-qm'));
+    check(`value ${vp.id}: the Quartermaster, seen before, is "QM [switch]" on the breadcrumb line (one line, no card in the list); "QM" opens its card as a sheet`,
+      qm.line && qm.inCrumbs && qm.crumbsH <= 52 && qm.sw && qm.btnH >= 44 && !qm.cardInList && qm.sheet && qm.closed, qm);
 
     // ---- late game: every Chassis Scrap row maxed and 38.8M Scrap → the bottleneck line
     // two passes: max the chassis rows and choose a Doctrine per chassis tree, then max the Doctrine rows that appear
@@ -142,8 +152,8 @@ export async function value({ browser, BASE, OUT, check, attachLogs }) {
       await load(late, prefs);
     }
     await tapTab('upgrades');
-    await page.locator('.screen.s-upgrades .cat-tabs .tab:has-text("Chassis")').first().tap().catch(() => {});
-    await page.waitForTimeout(500);
+    await crumbTo(page, 'Chassis');
+    await page.waitForTimeout(200);
     const bn = await page.evaluate(() => {
       const b = document.querySelector('.screen.s-upgrades .bottleneck');
       const btn = b?.querySelector('button');
@@ -160,4 +170,23 @@ export async function value({ browser, BASE, OUT, check, attachLogs }) {
     check(`value ${vp.id}: no page errors`, errors.length === 0, errors.slice(0, 3));
     await ctx.close();
   }
+}
+
+/** Upgrades breadcrumb: "Page ▾" → `page`, then (optionally) "Tree ▾" → `tree` (no-ops when already on show). */
+async function crumbTo(page, name, tree) {
+  const S = '.screen.s-upgrades';
+  const cur = ((await page.locator(`${S} .crumb-page .crumb-label`).textContent().catch(() => '')) ?? '').trim();
+  if (cur !== name) {
+    await page.locator(`${S} .crumb-page`).tap().catch(() => {});
+    await page.waitForTimeout(250);
+    await page.locator('.modal-card.popover .cm-row:not(.sub)', { hasText: name }).first().tap().catch(() => {});
+    await page.waitForTimeout(300);
+  }
+  if (!tree) return;
+  const tc = page.locator(`${S} .crumb-tree`);
+  if (!(await tc.isVisible().catch(() => false)) || ((await tc.locator('.crumb-label').textContent()) ?? '').trim() === tree) return;
+  await tc.tap();
+  await page.waitForTimeout(250);
+  await page.locator('.modal-card.popover .cm-row:not(.sub)', { hasText: tree }).first().tap().catch(() => {});
+  await page.waitForTimeout(300);
 }

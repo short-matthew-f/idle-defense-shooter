@@ -56,6 +56,7 @@ function commandTypes(): string[] {
  * Commands no player control sends, and why. Everything else must have a sender.
  */
 const INTERNAL: Record<string, string> = {
+  buy_cheapest: 'No UI sender since the Upgrades breadcrumb redesign removed "Spend here"; kept in the sim (replays, saves, Directives tooling)',
   designate: 'Issued by Directives (viaDirective) and by the sim itself for designate_at; a player tap sends designate_at, which picks the slot, fills, replaces or clears',
 };
 

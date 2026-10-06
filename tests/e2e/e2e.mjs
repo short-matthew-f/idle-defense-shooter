@@ -5,8 +5,8 @@
 //                     IndexedDB save, import the export back (reload restores the run)
 //   phone 390×844     (touch) the five tabs, badges, status strip → Battle, browser Back → Battle,
 //                     More → sub-screen → Back → More → Back → Battle, render pause off Battle, arena share,
-//                     nothing under the tab bar, quick buy by tap on the Upgrades screen, bulk buy
-//                     (quantity Max + Ballistics "Spend here"), Boons: restart → the start-of-attempt offer card,
+//                     nothing under the tab bar, a "★ Suggested" row buys by tap, bulk buy (quantity Max + a
+//                     Ballistics row), the breadcrumb menus (Esc / outside / Back), swipe and ← / → between trees, Boons: restart → the start-of-attempt offer card,
 //                     select a card + Take → the boon is active (row under the top bar) and the offer is gone
 //   phone reach       (Reachability, docs/reviews/REACHABILITY.md) a save with Spare Barrel, Second Opinion and the Third
 //                     Tactical Slot: choose a second Ballistics Doctrine on the fork, the third ability slot appears,
@@ -130,11 +130,50 @@ const attachLogs = (page, errors) => {
 };
 const skipOnboarding = async (page) => { const s = page.getByRole('button', { name: 'Skip' }); if (await s.count()) await s.first().click(); };
 const tab = async (page, id) => { await page.locator(`.tabbar .tab-btn[data-tab="${id}"]`).click(); await page.waitForTimeout(350); };
-/** Open the Upgrades Suggested line to its chips (it is one collapsed line by default). */
-const expandSuggested = async (page, touch) => {
-  const t = page.locator('.screen.s-upgrades .sg-toggle');
-  if (await t.count() && await t.isVisible() && (await t.getAttribute('aria-expanded')) === 'false') { if (touch) await t.tap(); else await t.click(); await page.waitForTimeout(200); }
+/** Upgrades breadcrumb: "Page ▾" → that page (a no-op when it is on show). */
+const pickPage = async (page, name, touch = true) => {
+  const cur = ((await page.locator('.screen.s-upgrades .crumb-page .crumb-label').textContent()) ?? '').trim();
+  if (cur === name) return true;
+  const crumb = page.locator('.screen.s-upgrades .crumb-page');
+  if (touch) await crumb.tap(); else await crumb.click();
+  await page.waitForTimeout(250);
+  const row = page.locator('.modal-card.popover .cm-row:not(.sub)', { hasText: name }).first();
+  if (!(await row.count())) { await page.keyboard.press('Escape'); return false; }
+  if (touch) await row.tap(); else await row.click();
+  await page.waitForTimeout(300);
+  return true;
 };
+/** Upgrades breadcrumb: "Tree ▾" → that tree (a no-op when it is on show or the page has one tree). */
+const pickTree = async (page, name, touch = true) => {
+  const crumb = page.locator('.screen.s-upgrades .crumb-tree');
+  if (!(await crumb.isVisible())) return false;
+  if (((await crumb.locator('.crumb-label').textContent()) ?? '').trim() === name) return true;
+  if (touch) await crumb.tap(); else await crumb.click();
+  await page.waitForTimeout(250);
+  const row = page.locator('.modal-card.popover .cm-row:not(.sub)', { hasText: name }).first();
+  if (!(await row.count())) { await page.keyboard.press('Escape'); return false; }
+  if (touch) await row.tap(); else await row.click();
+  await page.waitForTimeout(300);
+  return true;
+};
+/** The Buy button of the first "★ Suggested" row (else the first affordable row) on Upgrades. */
+const topBuy = async (page) => {
+  const sug = page.locator('.screen.s-upgrades .node.suggested .btn.buy:not(:disabled)').first();
+  return (await sug.count()) ? sug : page.locator('.screen.s-upgrades .node.affordable .btn.buy:not(:disabled)').first();
+};
+/** A one-finger swipe by CDP touch events (Playwright has no touch-move API). */
+const touchSwipe = async (page, x0, y0, x1, y1, steps = 8) => {
+  const c = await page.context().newCDPSession(page);
+  await c.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y: y0, id: 1 }] });
+  for (let i = 1; i <= steps; i++) await c.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x0 + ((x1 - x0) * i) / steps, y: y0 + ((y1 - y0) * i) / steps, id: 1 }] });
+  await c.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await c.detach();
+  await page.waitForTimeout(400);
+};
+const crumbState = (page) => page.evaluate(() => {
+  const q = (s) => document.querySelector(`.screen.s-upgrades ${s}`);
+  return { page: q('.crumb-page .crumb-label').textContent, tree: q('.crumb-tree').hidden ? null : q('.crumb-tree .crumb-label').textContent, pages: q('.crumb-page').dataset.pages };
+});
 /** Cycle the top row's quantity chip (×1 → ×10 → Max) to `label`. */
 const setQty = async (page, label) => {
   for (let k = 0; k < 3 && ((await page.locator('.screen-top .qty-chip .qty-val').textContent()) ?? '').trim() !== label; k++) { await page.locator('.screen-top .qty-chip').tap(); await page.waitForTimeout(150); }
@@ -184,16 +223,15 @@ async function desktop() {
   const before = await uiOf(page);
   const ranksBefore = Object.values(before.ranks).reduce((a, b) => a + b, 0);
   const bought = [];
-  await expandSuggested(page, false);
   for (let k = 0; k < 3; k++) {
-    const chip = page.locator('.quick-row .btn.chip.quick').first();
-    if (!(await chip.count())) break;
-    bought.push((await chip.textContent())?.trim());
-    await chip.click();
+    const b = await topBuy(page);
+    if (!(await b.count())) break;
+    bought.push((await b.locator('xpath=..').locator('.node-name').textContent())?.trim());
+    await b.click();
     await page.waitForTimeout(700);
   }
   const after = await uiOf(page);
-  check('bought three cheapest nodes', Object.values(after.ranks).reduce((a, b) => a + b, 0) - ranksBefore >= 3, { bought });
+  check('bought three suggested (cheapest) nodes from their rows', Object.values(after.ranks).reduce((a, b) => a + b, 0) - ranksBefore >= 3, { bought });
 
   await waitUi(page, (u) => u.phase === 'combat', 60000, 'combat for tap');
   let e = null; for (let k = 0; k < 40 && !e; k++) { e = await enemyScreen(page); if (!e) await page.waitForTimeout(250); }
@@ -376,32 +414,82 @@ async function phone() {
   const s1 = await state();
   check('phone: Upgrades is a full screen; render paused; history entry pushed', s1.body.includes('tab-upgrades') && s1.visible.some((c) => c.includes('s-upgrades')) && s1.renderPaused === true && s1.hist?.tab === 'upgrades', s1);
   const r0 = await uiOf(page);
-  await expandSuggested(page, true);
-  const chip = page.locator('.screen.s-upgrades .quick-row .btn.chip.quick').first();
-  if (await chip.count()) { await chip.tap(); await page.waitForTimeout(700); }
+  const stars = await page.evaluate(() => [...document.querySelectorAll('.screen.s-upgrades .node.suggested')].map((n) => ({ tag: !n.querySelector('.star-tag').hidden, affordable: n.classList.contains('affordable'), locked: n.classList.contains('locked') })));
+  check('phone: at most 3 rows carry "★ Suggested", each affordable and unlocked', stars.length <= 3 && stars.every((x) => x.tag && x.affordable && !x.locked), stars);
+  const quick = await topBuy(page);
+  const hadBuy = await quick.count() > 0;
+  if (hadBuy) { await quick.tap(); await page.waitForTimeout(700); }
   const r1 = await uiOf(page);
   const sum = (u) => Object.values(u.ranks).reduce((a, b) => a + b, 0);
-  check('phone: quick chip buys by tap', !(await chip.count()) || sum(r1) > sum(r0), { before: sum(r0), after: sum(r1) });
+  check('phone: a suggested row\'s Buy button buys by tap', !hadBuy || sum(r1) > sum(r0), { before: sum(r0), after: sum(r1) });
   await page.screenshot({ path: `${OUT}/phone-upgrades.png` });
 
-  // bulk buying: quantity Max, then "Spend here" on Ballistics buys the cheapest ranks there until the Scrap runs out
+  // bulk buying: quantity Max, then a Ballistics row's Buy button buys every rank the Scrap covers ("Max ×N")
   await setQty(page, 'Max');
-  await page.locator('.screen.s-upgrades .tree-chip', { hasText: 'Ballistics' }).tap();
-  await page.waitForTimeout(300);
-  const spend = page.locator('.screen.s-upgrades .spend-btn').first();
+  await pickPage(page, 'Chassis');
+  await pickTree(page, 'Ballistics');
+  const maxBtn = page.locator('.screen.s-upgrades .node:not(.k-exotic) .btn.buy.bulk:not(:disabled)').first();
   await page.evaluate(() => window.__citadel.game.setFast(8));
-  for (let k = 0; k < 120 && await spend.isDisabled(); k++) await page.waitForTimeout(250);
+  for (let k = 0; k < 120 && !(await page.locator('.screen.s-upgrades .node:not(.k-exotic) .btn.buy.bulk:not(:disabled) .buy-count', { hasText: /Max ×([2-9]|\d\d)/ }).count()); k++) await page.waitForTimeout(250);
   await page.evaluate(() => window.__citadel.game.setFast(1));
   await page.waitForTimeout(300);
-  const spendLabel = ((await spend.textContent()) ?? '').trim();
+  const maxRow = page.locator('.screen.s-upgrades .node:not(.k-exotic)', { has: page.locator('.btn.buy.bulk:not(:disabled) .buy-count', { hasText: /Max ×([2-9]|\d\d)/ }) }).first();
+  const maxLabel = ((await maxRow.locator('.btn.buy').textContent().catch(() => '')) ?? '').trim();
   const b0 = await uiOf(page);
   const bal = (u) => Object.entries(u.ranks).filter(([k]) => k.startsWith('ballistics.')).reduce((a, [, v]) => a + v, 0);
-  await spend.tap();
+  if (await maxRow.count()) await maxRow.locator('.btn.buy').tap();
   await page.waitForTimeout(900);
   const b1 = await uiOf(page);
-  await page.screenshot({ path: `${OUT}/phone-upgrades-spend-max.png` });
-  check('phone: Max + Spend here (Ballistics) spends Scrap and raises ranks', /Max ×\d+/.test(spendLabel) && b1.scrap < b0.scrap && bal(b1) > bal(b0), { spendLabel, scrap: [b0.scrap, b1.scrap], ranks: [bal(b0), bal(b1)] });
+  await page.screenshot({ path: `${OUT}/phone-upgrades-buy-max.png` });
+  check('phone: Max + a Ballistics row\'s Buy spends Scrap and raises several ranks', /Max ×\d+/.test(maxLabel) && b1.scrap < b0.scrap && bal(b1) - bal(b0) >= 2, { maxLabel, scrap: [b0.scrap, b1.scrap], ranks: [bal(b0), bal(b1)], btn: await maxBtn.count() });
   await setQty(page, '×1');   // back to ×1
+
+  // the breadcrumb menus: tap → popover of 48 px rows; Esc, a tap outside and Back close it, focus returns to the crumb
+  await page.locator('.screen.s-upgrades .crumb-page').tap();
+  await page.waitForTimeout(250);
+  const m0 = await page.evaluate(() => { const c = document.querySelector('.modal-card.popover'); if (!c) return null; const b = c.getBoundingClientRect(); return { rows: [...c.querySelectorAll('.cm-row')].map((r) => Math.round(r.getBoundingClientRect().height)), left: b.left, right: b.right, vw: innerWidth, focusIn: c.contains(document.activeElement) }; });
+  await page.screenshot({ path: `${OUT}/phone-upgrades-page-menu.png` });
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  const m1 = await page.evaluate(() => ({ open: !!document.querySelector('.modal-card.popover'), focus: document.activeElement?.classList.contains('crumb-page') ?? false, upgrades: document.body.classList.contains('tab-upgrades') }));
+  await page.locator('.screen.s-upgrades .crumb-tree').tap();
+  await page.waitForTimeout(250);
+  const t0 = await page.evaluate(() => [...document.querySelectorAll('.modal-card.popover .cm-row')].map((r) => (r.classList.contains('sub') ? '  ' : '') + r.textContent.replace(/\d+/g, '').replace('★', '').trim()));
+  await page.touchscreen.tap(12, (await page.evaluate(() => innerHeight)) * 0.75);   // outside the popover (the left gutter, low on the list)
+  await page.waitForTimeout(250);
+  const t1 = await page.evaluate(() => ({ open: !!document.querySelector('.modal-card.popover'), focus: document.activeElement?.classList.contains('crumb-tree') ?? false }));
+  await page.locator('.screen.s-upgrades .crumb-page').tap();
+  await page.waitForTimeout(250);
+  await page.goBack();
+  await page.waitForTimeout(500);
+  const b2 = await page.evaluate(() => ({ open: !!document.querySelector('.modal-card.popover'), upgrades: document.body.classList.contains('tab-upgrades'), focus: document.activeElement?.classList.contains('crumb-page') ?? false }));
+  check('phone: breadcrumb menus open as 48 px rows on screen; Esc, a tap outside and Back close them, focus returns to the crumb',
+    !!m0 && m0.rows.length >= 2 && m0.rows.every((h) => h >= 48) && m0.left >= 0 && m0.right <= m0.vw && m0.focusIn && !m1.open && m1.focus && m1.upgrades
+      && t0.includes('Ballistics') && t0.includes('Bastion') && t0.includes('Reactor') && t0.some((r) => r.startsWith('  ')) && !t1.open && !b2.open && b2.upgrades, { m0, m1, t0, t1, b2 });
+
+  // swipe: 100 px sideways on the list → the next tree; a vertical scroll never; a swipe from the left edge is left to the system (back)
+  await pickPage(page, 'Chassis');
+  await pickTree(page, 'Ballistics');
+  const lb = await page.locator('.screen.s-upgrades .shop-body').boundingBox();
+  const sw0 = await crumbState(page);
+  await touchSwipe(page, lb.x + lb.width * 0.5, lb.y + 160, lb.x + lb.width * 0.5 - 100, lb.y + 166);
+  const sw1 = await crumbState(page);
+  await page.screenshot({ path: `${OUT}/phone-upgrades-swiped.png` });
+  await touchSwipe(page, lb.x + lb.width * 0.5, lb.y + 300, lb.x + lb.width * 0.5 + 20, lb.y + 120);
+  const sw2 = await crumbState(page);
+  await touchSwipe(page, 8, lb.y + 160, 140, lb.y + 164);
+  const sw3 = await crumbState(page);
+  await touchSwipe(page, lb.x + lb.width * 0.5 - 60, lb.y + 160, lb.x + lb.width * 0.5 + 60, lb.y + 166);
+  const sw4 = await crumbState(page);
+  check('phone: a 100 px swipe on the list steps to the next tree (and back); a vertical scroll or a left-edge swipe does not',
+    sw0.tree === 'Ballistics' && sw1.tree === 'Bastion' && sw2.tree === 'Bastion' && sw3.tree === 'Bastion' && sw4.tree === 'Ballistics', { sw0, sw1, sw2, sw3, sw4 });
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(200);
+  const k1 = await crumbState(page);
+  await page.keyboard.press('ArrowLeft');
+  await page.waitForTimeout(200);
+  const k2 = await crumbState(page);
+  check('phone: ← / → step through the trees on Upgrades', k1.tree === 'Bastion' && k2.tree === 'Ballistics', { k1, k2 });
 
   for (const id of ['build', 'prestige', 'more']) {
     await tab(page, id);
@@ -534,8 +622,8 @@ async function reach() {
   // 1. second Doctrine: the Ballistics fork offers "Choose as 2nd · 50%" (Spare Barrel); choose it
   const r0 = await rs();
   await tab(page, 'upgrades');
-  await page.locator('.screen.s-upgrades .cat-tabs .tab', { hasText: 'Chassis' }).tap();
-  await page.locator('.screen.s-upgrades .tree-chip', { hasText: 'Ballistics' }).tap();
+  await pickPage(page, 'Chassis');
+  await pickTree(page, 'Ballistics');
   await page.waitForTimeout(300);
   const second = page.locator('.screen.s-upgrades .doctrine button[data-action="second"]');
   const label = ((await second.first().textContent()) ?? '').trim();
@@ -713,14 +801,20 @@ async function onboard() {
   if (v1.coach) { await page.locator('.coach-banner .coach-ok').tap(); await page.waitForTimeout(200); }   // the boon explainer (a start-of-attempt offer is up)
   const opened = await tapTab('upgrades');
   const shop1 = await page.evaluate(() => ({
-    cats: [...document.querySelectorAll('.screen.s-upgrades .cat-tabs .tab')].filter((b) => !b.hidden).map((b) => b.textContent.replace(/\d+/g, '').trim()),
-    catRow: !document.querySelector('.screen.s-upgrades .cat-tabs').hidden,
-    suggested: !document.querySelector('.screen.s-upgrades .quick').hidden,
+    cats: document.querySelector('.screen.s-upgrades .crumb-page').dataset.pages,
+    pageMenu: !document.querySelector('.screen.s-upgrades .crumb-page').classList.contains('static'),
+    suggested: document.querySelectorAll('.screen.s-upgrades .star-tag:not([hidden])').length,
     qty: !document.querySelector('.screen-top .qty-chip').hidden,
-    trees: [...document.querySelectorAll('.screen.s-upgrades .tree-chip')].map((b) => b.textContent.replace(/\d+/g, '').trim()),
+    battleBtn: (() => { const b = document.querySelector('.screen-top .status-strip'); return !!b && b.getBoundingClientRect().height > 0; })(),
   }));
+  await page.locator('.screen.s-upgrades .crumb-tree').tap();
+  await page.waitForTimeout(250);
+  shop1.trees = await page.evaluate(() => [...document.querySelectorAll('.modal-card.popover .cm-row:not(.sub)')].map((b) => b.querySelector('.cm-label').textContent.trim()).join());
+  await page.screenshot({ path: `${OUT}/phone-onboard-stage1-tree-menu.png` });
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
   await page.screenshot({ path: `${OUT}/phone-onboard-stage1-upgrades.png` });
-  check('onboard: stage 1 Upgrades is the whole Chassis, no Suggested / Buy all / quantity yet', opened && shop1.cats.join() === 'Chassis' && !shop1.catRow && !shop1.suggested && !shop1.qty && shop1.trees.join() === 'Ballistics,Bastion,Reactor', shop1);
+  check('onboard: stage 1 Upgrades is the whole Chassis (one page, no page menu; its trees in the tree menu), no ★ Suggested / quantity / Battle button yet', opened && shop1.cats === 'chassis' && !shop1.pageMenu && shop1.suggested === 0 && !shop1.qty && !shop1.battleBtn && shop1.trees === 'Ballistics,Bastion,Reactor', shop1);
   const v1b = await view();
   check('onboard: opening Upgrades retires its "New" badge', v1b.badges.upgrades !== 'New', v1b.badges);
   await page.keyboard.press('q');
@@ -730,8 +824,8 @@ async function onboard() {
   await withSave('s.run.deepestCleared = 6; s.meta.deepestEver = 6; s.run.wave = 7;');
   const v2 = await view();   // coach lines show on Battle (phones)
   await tapTab('upgrades');
-  const cats2 = await page.evaluate(() => [...document.querySelectorAll('.screen.s-upgrades .cat-tabs .tab')].filter((b) => !b.hidden).map((b) => b.textContent.replace(/\d+/g, '').trim()));
-  check('onboard: wave 6 reveals Elements (with its coach line); still no Build tab', cats2.join() === 'Chassis,Elements' && v2.tabs.join() === 'battle,upgrades' && /element/.test(v2.coach ?? ''), { cats2, tabs: v2.tabs, coach: v2.coach });
+  const cats2 = await page.evaluate(() => document.querySelector('.screen.s-upgrades .crumb-page').dataset.pages);
+  check('onboard: wave 6 reveals Elements (with its coach line); still no Build tab', cats2 === 'chassis,elements' && v2.tabs.join() === 'battle,upgrades' && /element/.test(v2.coach ?? ''), { cats2, tabs: v2.tabs, coach: v2.coach });
   await withSave('s.run.deepestCleared = 10; s.meta.deepestEver = 10; s.run.checkpoint = 10; s.run.wave = 11;');
   const v3 = await view();
   await page.screenshot({ path: `${OUT}/phone-onboard-stage3.png` });
@@ -1132,14 +1226,15 @@ async function wallet() {
       return { scrolled: el.scrollTop, room: el.scrollHeight - el.clientHeight, top: r.top, bottom: r.bottom, rowTop: tr.top, rowBottom: tr.bottom, scrollerTop: scr.top, inScroller: el.contains(w), vh: innerHeight, visible: !w.hidden && r.height > 0, items };
     }, scroller);
     const views = [
-      { id: 'upgrades-chassis', tab: 'upgrades', pick: '.screen.s-upgrades .cat-tabs .tab:has-text("Chassis")', scroller: '.screen.s-upgrades .shop-body', want: ['scrap', 'cores'] },
-      { id: 'upgrades-cores', tab: 'upgrades', pick: '.screen.s-upgrades .cat-tabs .tab:has-text("Cores")', scroller: '.screen.s-upgrades .shop-body', want: ['scrap', 'cores'] },
+      { id: 'upgrades-chassis', tab: 'upgrades', page: 'Chassis', scroller: '.screen.s-upgrades .shop-body', want: ['scrap', 'cores'] },
+      { id: 'upgrades-cores', tab: 'upgrades', page: 'Cores', scroller: '.screen.s-upgrades .shop-body', want: ['scrap', 'cores'] },
       { id: 'prestige-layers', tab: 'prestige', pick: '.screen.s-prestige .seg-btn:has-text("Echo tiers")', scroller: '.screen.s-prestige', want: ['echoes'] },
       { id: 'prestige-ascension', tab: 'prestige', pick: '.screen.s-prestige .seg-btn:has-text("Ascension")', scroller: '.screen.s-prestige', want: ['echoes', 'stars'] },
       { id: 'build', tab: 'build', pick: null, scroller: '.screen.s-build', want: ['cores'] },
     ];
     for (const v of views) {
       await tapTab(v.tab);
+      if (v.page) await pickPage(page, v.page);
       if (v.pick) { await page.locator(v.pick).first().tap(); await page.waitForTimeout(300); }
       const m = await probe(v.scroller);
       await page.waitForTimeout(250);
@@ -1151,8 +1246,7 @@ async function wallet() {
 
     // a purchase updates the figure at once (and flashes it): tap the cheapest suggested buy
     await tapTab('upgrades');
-    await page.locator('.screen.s-upgrades .cat-tabs .tab:has-text("Chassis")').first().tap();
-    await page.waitForTimeout(300);
+    await pickPage(page, 'Chassis');
     await page.evaluate(() => {
       window.__walletFlash = [];
       const val = document.querySelector('.wallet-bar .wl-item.scrap .wl-val');
@@ -1160,8 +1254,7 @@ async function wallet() {
     });
     const before = await probe('.screen.s-upgrades .shop-body');
     await page.evaluate(() => { document.querySelector('.screen.s-upgrades .shop-body').scrollTop = 0; });
-    await expandSuggested(page, true);
-    await page.locator('.screen.s-upgrades .quick-row .btn.chip.quick').first().tap();
+    await (await topBuy(page)).tap();
     await page.waitForTimeout(700);
     const after = await probe('.screen.s-upgrades .shop-body');
     const flashed = await page.evaluate(() => window.__walletFlash.length > 0);
@@ -1203,12 +1296,12 @@ function calmAudit(scrollerSel) {
     const r = el.getBoundingClientRect();
     const sticky = el.closest('.seg-ctl') && getComputedStyle(el.closest('.seg-ctl')).position === 'sticky';
     if ((sc.contains(el) && !sticky) || r.bottom > listTop + 1 || r.height < 16) continue;
-    if (el.closest('.cat-tabs')) { tabs = 1; continue; }
+    if (el.closest('.crumbs')) { tabs = 1; continue; }   // the breadcrumb line (Page ▾ › Tree ▾ … QM)
     const mid = (r.top + r.bottom) / 2;
     if (!bands.some((b) => Math.abs(b - mid) < 20)) bands.push(mid);
   }
   const inView = (r) => r.bottom > Math.max(0, sr.top) && r.top < Math.min(vh, sr.bottom);
-  const overflow = document.documentElement.scrollWidth > vw + 0.5 || [...document.querySelectorAll('.screens *')].some((el) => vis(el) && el.getBoundingClientRect().right > vw + 0.5 && !el.closest('.chips, .tabs, .sg-body, .quick-row'));
+  const overflow = document.documentElement.scrollWidth > vw + 0.5 || [...document.querySelectorAll('.screens *')].some((el) => vis(el) && el.getBoundingClientRect().right > vw + 0.5 && !el.closest('.chips, .tabs'));
   const targets = [...document.querySelectorAll('.screens button, .screens [role="button"], .tabbar button')].filter((el) => vis(el) && (el.closest('.tabbar') || !sc.contains(el) || inView(el.getBoundingClientRect())))
     .filter((el) => { const r = el.getBoundingClientRect(); return r.height < 43.5 || r.width < 43.5; }).map((el) => `${el.className}:${Math.round(el.getBoundingClientRect().width)}x${Math.round(el.getBoundingClientRect().height)}`);
   const small = new Set();
@@ -1224,7 +1317,7 @@ function calmAudit(scrollerSel) {
   const bgOf = (el) => { const layers = []; for (let p = el; p; p = p.parentElement) { const c = rgb(getComputedStyle(p).backgroundColor); if (c && c[3] > 0) { layers.push(c); if (c[3] >= 1) break; } } let out = [11, 13, 18]; for (const c of layers.reverse()) out = out.map((v, i) => v * (1 - c[3]) + c[i] * c[3]); return out; };
   const ratio = (el) => { const c = rgb(getComputedStyle(el).color), b = bgOf(el); const op = (() => { let o = 1; for (let p = el; p; p = p.parentElement) o *= +getComputedStyle(p).opacity; return o; })(); const fg = c.slice(0, 3).map((v, i) => v * c[3] * op + b[i] * (1 - c[3] * op)); const [L1, L2] = [lum(fg), lum(b)].sort((x, y) => y - x); return +((L1 + 0.05) / (L2 + 0.05)).toFixed(2); };
   const contrast = {};
-  for (const sel of ['.node-desc', '.node-rank', '.sec-title', '.sec-sub', '.tree-chip .count', '.qty-k', '.fold-btn', '.dr-sub', '.sg-count', '.wl-bank', '.bs-sub', '.cat-tabs .tab:not(.active)', '.node.affordable .btn.buy:not(:disabled) .price']) {
+  for (const sel of ['.node-desc', '.node-rank', '.sec-title', '.sec-sub', '.crumb-count', '.crumb-qm', '.star-tag', '.qty-k', '.fold-btn', '.dr-sub', '.wl-bank', '.bs-sub', '.crumb-caret', '.node.affordable .btn.buy:not(:disabled) .price']) {
     const el = [...document.querySelectorAll(`.screens ${sel}`)].find((e) => vis(e) && (!sc.contains(e) || inView(e.getBoundingClientRect())));
     if (el) contrast[sel] = ratio(el);
   }
@@ -1276,14 +1369,15 @@ async function calm() {
     const tapTab = async (id) => { await page.locator(`.tabbar .tab-btn[data-tab="${id}"]`).tap(); await page.waitForTimeout(400); };
     const tapIf = async (sel) => { const l = page.locator(sel).first(); if (await l.count() && await l.isVisible()) { await l.tap(); await page.waitForTimeout(300); } };
     const views = [
-      { id: 'upgrades-chassis', tab: 'upgrades', pick: '.screen.s-upgrades .cat-tabs .tab:has-text("Chassis")', sc: '.screen.s-upgrades .shop-body' },
-      { id: 'upgrades-elements', tab: 'upgrades', pick: '.screen.s-upgrades .cat-tabs .tab:has-text("Elements")', sc: '.screen.s-upgrades .shop-body' },
-      { id: 'upgrades-cores', tab: 'upgrades', pick: '.screen.s-upgrades .cat-tabs .tab:has-text("Cores")', sc: '.screen.s-upgrades .shop-body' },
+      { id: 'upgrades-chassis', tab: 'upgrades', page: 'Chassis', sc: '.screen.s-upgrades .shop-body' },
+      { id: 'upgrades-elements', tab: 'upgrades', page: 'Elements', sc: '.screen.s-upgrades .shop-body' },
+      { id: 'upgrades-cores', tab: 'upgrades', page: 'Cores', sc: '.screen.s-upgrades .shop-body' },
       { id: 'build', tab: 'build', pick: null, sc: '.screen.s-build' },
       { id: 'prestige-layers', tab: 'prestige', pick: '.screen.s-prestige .seg-btn:has-text("Echo tiers")', sc: '.screen.s-prestige' },
     ];
     for (const v of views) {
       await tapTab(v.tab);
+      if (v.page) await pickPage(page, v.page);
       if (v.pick) await tapIf(v.pick);
       await page.evaluate((s) => { document.querySelector(s).scrollTop = 0; }, v.sc);
       await page.waitForTimeout(250);
@@ -1291,17 +1385,24 @@ async function calm() {
       await page.screenshot({ path: `${OUT}/phone-calm-${vp.id}-${v.id}.png` });
       const lowContrast = Object.entries(m.contrast).filter(([, r]) => r < 4.5);
       const upgrades = v.tab === 'upgrades';
-      check(`calm ${vp.id} ${v.id}: pinned ≤ 25% (${m.pinnedPct}%), ≤ 2 pinned rows beyond the tabs (${m.rows}), list ≥ 55% (${m.listPct}%), no sideways overflow`,
+      check(`calm ${vp.id} ${v.id}: pinned ≤ 25% (${m.pinnedPct}%), ≤ 2 pinned rows beyond the breadcrumb (${m.rows}), list ≥ 55% (${m.listPct}%), no sideways overflow`,
         m.pinnedPct <= 25 && m.rows <= 2 && m.listPct >= 55 && !m.overflow && (!upgrades || m.tabs === 1), m);
       check(`calm ${vp.id} ${v.id}: tap targets ≥ 44 px, text ≥ 14 px (badges aside), quiet styles keep AA contrast`, m.targets.length === 0 && m.small.length === 0 && lowContrast.length === 0, { targets: m.targets, small: m.small, contrast: m.contrast });
     }
 
     // dots mean decisions: Elements (an empty slot with something to attune) and Chassis (the open Ballistics fork); Cross none
     await tapTab('upgrades');
-    const dots = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('.screen.s-upgrades .cat-tabs .tab')].filter((b) => !b.hidden).map((b) => [b.textContent.trim(), !b.querySelector('.cat-dot').hidden])));
-    check(`calm ${vp.id}: category dots only where a decision waits (an empty slot, an open fork)`, dots.Elements === true && dots.Chassis === true && dots.Cross === false && dots.Cores === false, dots);
+    await pickPage(page, 'Cross');
+    const crumbDot = await page.evaluate(() => !document.querySelector('.screen.s-upgrades .crumb-page .cat-dot').hidden);
+    await page.locator('.screen.s-upgrades .crumb-page').tap();
+    await page.waitForTimeout(250);
+    const dots = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('.modal-card.popover .cm-row:not(.sub)')].map((b) => [b.querySelector('.cm-label').textContent.trim(), !!b.querySelector('.cm-new')])));
+    await page.screenshot({ path: `${OUT}/phone-calm-${vp.id}-page-menu.png` });
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(200);
+    check(`calm ${vp.id}: "New" dots in the page menu only where a decision waits (an empty slot, an open fork), and on the Page crumb`, dots.Elements === true && dots.Chassis === true && dots.Cross === false && dots.Cores === false && crumbDot, { dots, crumbDot });
     // the empty slot is a row at the top of Elements (pointer-hint target "slot-chip"); it opens the picker ("slot-picker") in place, and folds back
-    await tapIf('.screen.s-upgrades .cat-tabs .tab:has-text("Elements")');
+    await pickPage(page, 'Elements');
     const row = page.locator('.screen.s-upgrades .slot-row[data-hint="slot-chip"]');
     const rowShown = await row.count() > 0 && await row.first().isVisible();
     if (rowShown) await row.first().tap();
@@ -1313,7 +1414,7 @@ async function calm() {
     const back = await page.evaluate(() => !document.querySelector('.screen.s-upgrades [data-hint="slot-picker"]') && document.querySelectorAll('.screen.s-upgrades .shop-list .node').length > 0);
     check(`calm ${vp.id}: the empty-slot row (hint target) opens the attune picker in place and folds back to the tree`, rowShown && picker > 0 && back, { rowShown, picker, back });
     // the quantity chip cycles in one tap and every Buy button follows it; a row body unfolds its description (no purchase)
-    await tapIf('.screen.s-upgrades .cat-tabs .tab:has-text("Chassis")');
+    await pickPage(page, 'Chassis');
     const q0 = await page.evaluate(() => document.querySelector('.screen-top .qty-chip .qty-val').textContent);
     await page.locator('.screen-top .qty-chip').tap();
     await page.waitForTimeout(250);

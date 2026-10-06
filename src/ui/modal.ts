@@ -15,7 +15,11 @@ export interface ModalOptions {
   className?: string;
   dismissable?: boolean;
   /** 'center' (default), 'wide', 'overlay' (translucent side sheet that keeps the field readable) or 'sheet' (bottom sheet: info.ts). */
-  variant?: 'center' | 'wide' | 'overlay' | 'sheet';
+  variant?: 'center' | 'wide' | 'overlay' | 'sheet' | 'popover';
+  /** 'popover': the control it drops from (the card sits under it, kept on screen). */
+  anchor?: HTMLElement;
+  /** Where focus returns on close (default: the element focused when it opened). */
+  returnFocus?: HTMLElement;
   onClose?: () => void;
   /** A balance line under the title for a dialog that spends ("You have ◆ 12 Cores": wallet.ts walletChip). */
   wallet?: HTMLElement;
@@ -143,11 +147,31 @@ export function openModal(opts: ModalOptions): ModalHandle {
   const prevTop = stack[stack.length - 1];
   // a dialog opened from another one returns focus to its control; one opened from inert app content to the element
   // that had focus before (the opener)
-  stack.push({ handle, opts, opener: prevTop && !prevTop.handle.el.contains(document.activeElement) ? prevTop.handle.el.querySelector('.modal-title') : document.activeElement, wrap });
+  if (opts.anchor) placePopover(card, opts.anchor);
+  stack.push({ handle, opts, opener: opts.returnFocus ?? (prevTop && !prevTop.handle.el.contains(document.activeElement) ? prevTop.handle.el.querySelector('.modal-title') : document.activeElement), wrap });
   syncInert();
   modalHooks.opened?.();
   titleEl.focus({ preventScroll: true });
   return handle;
+}
+
+/** Popover placement (pure): under the anchor, left-aligned with it, clamped into the viewport (8 px margin). */
+export function popoverBox(a: { left: number; bottom: number }, width: number, vw: number, vh: number, margin = 8): { left: number; top: number; maxHeight: number } {
+  const w = Math.min(width, vw - 2 * margin);
+  const left = Math.max(margin, Math.min(a.left, vw - w - margin));
+  const top = Math.max(margin, a.bottom + 4);
+  return { left, top, maxHeight: Math.max(120, vh - top - margin) };
+}
+
+function placePopover(card: HTMLElement, anchor: HTMLElement): void {
+  const a = anchor.getBoundingClientRect();
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const w = Math.min(320, vw - 16);
+  const b = popoverBox(a, w, vw, vh);
+  card.style.width = `${Math.min(w, vw - 16)}px`;
+  card.style.left = `${b.left}px`;
+  card.style.top = `${b.top}px`;
+  card.style.maxHeight = `${b.maxHeight}px`;
 }
 
 /** Yes/no confirmation; resolves false on dismiss. */

@@ -9,7 +9,8 @@
  *     (for its first BANNER_HOLD_MS) and some hint belongs to it, only that hint may point, so the sentence and the ring
  *     agree. A hidden banner (a phone tab covers Battle), an old one, or an info-only one (no hint of its own) holds
  *     nothing back. "Got it" snoozes the banner's own ring; it returns until the hint really completes;
- *   - when the control sits on another screen the hint CHAINS: tab button → category chip → the control, one step per
+ *   - when the control sits on another screen the hint CHAINS: tab button → "Page ▾" crumb → the page in its menu →
+ *     the control, one step per
  *     navigation (`final` marks the last step: tapping it retires the hint);
  *   - nothing points while a modal, draft or death card is open, or while an ability is armed (except the one-time
  *     "tap the field" nudge, which exists for exactly that moment);
@@ -51,7 +52,7 @@ export interface HintCtx {
   snoozed?: ReadonlySet<string>;
   /** The screen on show (null: none) and whether the Battle arena is visible (always on desktop). */
   nav: { screen: HintScreen | null; battle: boolean };
-  /** The Upgrades screen's category and tree chip (slot chips are `slot:<i>`). */
+  /** The Upgrades screen's page (category) and tree (empty slots are `slot:<i>`). */
   shop: { cat: string; tree: string };
   /** A modal, draft or death card is open (or the touch test runs). */
   blocked: boolean;
@@ -68,8 +69,6 @@ export interface HintCtx {
     boonChip: boolean;
     /** An Anomaly draft was set aside with "Later". */
     draftWaiting: boolean;
-    /** Upgrades: the Suggested card's "Buy all" shows. */
-    buyAll?: boolean;
     /** Anything else a registered hint wants (e.g. `overchargeReady`). */
     [k: string]: boolean | number | undefined;
   };
@@ -111,7 +110,8 @@ const emptySlot = (list: readonly (string | null)[], open: number): number => {
 export const ELEMENTS_SEEN = 'elements-seen';
 
 /**
- * Upgrades → category → control. The tab-level ring shows only on Battle (or Upgrades): a ring that follows the player
+ * Upgrades → page → control. The page step targets `cat-<id>`: that page's row in the open "Page ▾" menu, else the
+ * "Page ▾" crumb itself (pointer.ts), so the ring walks crumb → menu row → control. The tab-level ring shows only on Battle (or Upgrades): a ring that follows the player
  * onto every other screen is a nag, so from Build / Prestige / More the hint waits (null) until they are back on Battle.
  */
 function viaUpgrades(c: HintCtx, cat: string | null, last: HintStep): HintStep | null {
@@ -193,10 +193,10 @@ export const HINTS: readonly HintDef[] = [
       : viaBuild(c, { target: 'build-boon', text: 'Your boon waits here', final: true })),
   },
   {
-    // only on Upgrades (a ring on the tab for this would nag): Buy all when it shows, else the quantity selector
+    // only on Upgrades (a ring on the tab for this would nag): the quantity selector (★ Suggested tags explain themselves)
     id: 'bulk', prio: 60, coach: 'bulk', feature: 'bulk', kind: 'reveal',
     when: (_ui, c) => c.f.bulk,
-    step: (_ui, c) => (c.nav.screen === 'upgrades' ? { target: c.live.buyAll ? 'buy-all' : 'qty', text: c.live.buyAll ? 'Buy every suggestion' : '×10 or Max per tap', final: true } : null),
+    step: (_ui, c) => (c.nav.screen === 'upgrades' ? { target: 'qty', text: '×10 or Max per tap', final: true } : null),
   },
   {
     id: 'prestige', prio: 70, feature: 'forecast', kind: 'event',

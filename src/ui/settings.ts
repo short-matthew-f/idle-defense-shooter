@@ -29,6 +29,7 @@ export const SHORTCUTS: [string, string][] = [
   ['B', 'Upgrades (phone) · show or hide the side panel (desktop)'],
   ['F', 'Prestige Forecast'],
   ['Q', 'Buy quantity: ×1 → ×10 → Max (Upgrades)'],
+  ['← / →', 'Previous / next upgrade tree (Upgrades)'],
 ];
 
 export const GESTURES: [string, string][] = [
@@ -37,7 +38,8 @@ export const GESTURES: [string, string][] = [
   ['Tap an ability', 'Arm it, then tap the field (or an enemy) to cast'],
   ['Hold an ability', 'Change what is in that slot'],
   ['Tap a price', 'Buy one rank; hold to keep buying'],
-  ['Swipe back', 'Return to Battle from any screen'],
+  ['Swipe back', 'Return to Battle from any screen (from the left edge)'],
+  ['Swipe left / right', 'Upgrades: next / previous tree'],
 ];
 
 function row(label: string, control: HTMLElement, hint?: string, stack = false): HTMLElement {

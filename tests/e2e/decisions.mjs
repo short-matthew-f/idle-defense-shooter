@@ -135,9 +135,8 @@ export async function decisions({ browser, BASE, OUT, check, attachLogs }) {
     check(`decide ${vp.id}: a decision-sourced tab holds the run until Battle (own tabs stay live)`, own === false && held.paused && held.mark && /paused for your decision/.test(held.label ?? '') && !back.paused && !back.mark, { own, held, back });
     await page.locator('.tabbar .tab-btn[data-tab="upgrades"]').first().tap();
     await page.waitForTimeout(300);
-    await page.locator('.screen.s-upgrades .cat-tabs .tab', { hasText: 'Chassis' }).first().tap().catch(() => {});
-    await page.locator('.screen.s-upgrades .tree-chip', { hasText: 'Ballistics' }).first().tap().catch(() => {});
-    await page.waitForTimeout(400);
+    await crumbTo(page, 'Chassis', 'Ballistics');
+    await page.waitForTimeout(200);
     const btn = page.locator('.screen.s-upgrades .doctrine button[data-action="change1"]').first();
     const label = ((await btn.textContent().catch(() => '')) ?? '').trim();
     await btn.scrollIntoViewIfNeeded().catch(() => {});
@@ -208,4 +207,23 @@ export async function decisions({ browser, BASE, OUT, check, attachLogs }) {
     check(`decide ${vp.id}: no console errors`, errors.length === 0, errors.slice(0, 5));
     await ctx.close();
   }
+}
+
+/** Upgrades breadcrumb: "Page ▾" → `page`, then (optionally) "Tree ▾" → `tree` (no-ops when already on show). */
+async function crumbTo(page, name, tree) {
+  const S = '.screen.s-upgrades';
+  const cur = ((await page.locator(`${S} .crumb-page .crumb-label`).textContent().catch(() => '')) ?? '').trim();
+  if (cur !== name) {
+    await page.locator(`${S} .crumb-page`).tap().catch(() => {});
+    await page.waitForTimeout(250);
+    await page.locator('.modal-card.popover .cm-row:not(.sub)', { hasText: name }).first().tap().catch(() => {});
+    await page.waitForTimeout(300);
+  }
+  if (!tree) return;
+  const tc = page.locator(`${S} .crumb-tree`);
+  if (!(await tc.isVisible().catch(() => false)) || ((await tc.locator('.crumb-label').textContent()) ?? '').trim() === tree) return;
+  await tc.tap();
+  await page.waitForTimeout(250);
+  await page.locator('.modal-card.popover .cm-row:not(.sub)', { hasText: tree }).first().tap().catch(() => {});
+  await page.waitForTimeout(300);
 }

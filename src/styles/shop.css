@@ -1,7 +1,7 @@
 /*
- * Upgrades screen: only the category tabs are pinned (the shell's top row above them holds the wallet, the quantity
- * chip and the Battle button); the Suggested line, decision rows, tree chips and the rows scroll as one list.
- * One accent: the primary action (Buy all) and the selected state. Dots mean "a decision is waiting" (--warn).
+ * Upgrades screen: pinned, one breadcrumb line ("Page ▾ › Tree ▾ … QM [switch]") under the shell's top row (wallet and
+ * quantity chip); the decision rows and the rows scroll as one list, each section's light header sticking under the
+ * breadcrumb. Dots mean "a decision is waiting" (--warn); ★ Suggested is amber (--scrap).
  */
 
 /* the buy-quantity chip (shell top row, Upgrades only): one tap cycles ×1 → ×10 → Max */
@@ -14,77 +14,69 @@ body:not(.tab-upgrades) .btn.qty-chip { display: none; }
 /* a narrow phone: "×10" alone (its label says "Buy quantity"), so the wallet keeps one line */
 @media (max-width: 385px) { .qty-k { display: none; } .btn.qty-chip { padding: 0 10px; min-width: 52px; } }
 
-/* Suggested: one line ("Suggested 3 · Buy all ◆53"); the chevron opens the chips (and, for the first purchases, a sentence) */
-.quick.suggest {
-  margin: 4px 0 2px; padding: 0 2px; min-width: 0;
-  background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px;
-}
-.sg-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
-.btn.sg-toggle { flex: 1 1 auto; min-width: 0; justify-content: flex-start; gap: 8px; padding: 0 10px; font-size: 0.9375rem; font-weight: 700; color: var(--text); white-space: nowrap; }
-/* collapsed: always one line ("Suggested 3 · Buy all ◆53"), even at 320 px (N-07) */
-.suggest.collapsed .sg-head { flex-wrap: nowrap; }
-@media (max-width: 360px) { .btn.sg-toggle { padding: 0 6px; gap: 6px; } .btn.sg-buyall { padding: 0 10px; gap: 4px; } }
-.btn.sg-toggle:hover:not(:disabled) { background: transparent; }
-.sg-chev { flex: none; color: var(--text-dim); transition: transform 0.15s; }
-.suggest.collapsed .sg-chev { transform: rotate(-90deg); }
-.sg-count { font-size: 0.875rem; font-weight: 600; color: var(--text-dim); }
-.btn.sg-buyall { flex: none; margin-left: auto; max-width: 100%; min-height: var(--touch); padding: 0 14px; font-size: 0.9375rem; gap: 6px; }
-.btn.sg-buyall .price { font-weight: 800; }
-.btn.sg-buyall .price .ico { color: currentColor; }
-.sg-none { flex: 1; padding: 0 10px; font-size: 0.875rem; color: var(--text-dim); line-height: var(--touch); }
-.sg-head > .next-chip { flex: 1 1 auto; min-width: 0; justify-content: flex-start; border-color: transparent; background: transparent; }
-.sg-explain { margin: 2px 10px 8px; font-size: 0.875rem; line-height: 1.35; color: var(--text-dim); }
-.suggest.collapsed .sg-explain, .suggest.collapsed .sg-body, .suggest.empty .sg-body { display: none; }
-.sg-body {
-  display: flex; align-items: center; gap: 8px; padding: 2px 36px 4px 6px; min-width: 0;
-  overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
-  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
-  mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
-}
-.sg-body::-webkit-scrollbar { display: none; }
-.quick-row { display: flex; gap: 8px; flex: none; }
-.chip.quick { gap: 6px; padding: 0 14px; }
-.chip.quick .price { color: var(--text); font-weight: 700; }
-.qc-name { max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
-.qc-rank { font-size: 0.875rem; font-weight: 500; color: var(--text-dim); font-variant-numeric: tabular-nums; }
-.qc-rank:empty { display: none; }
-.qc-count { font-size: 0.875rem; font-weight: 700; color: var(--text-dim); }
-/* first-run hint: a calm accent outline on the cheapest chip (no pulsing) */
-.quick-row.coach .chip.quick:first-child { border-color: var(--accent); }
-.btn.chip.next-chip { color: var(--text-dim); font-weight: 600; }
-.next-chip .qc-next { font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); }
-.next-chip .qc-name { color: var(--text); }
-.next-chip .qc-eta { font-size: 0.875rem; color: var(--text-dim); font-weight: 400; }
-.next-chip .qc-eta:empty { display: none; }
-
 .shop { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-/* the pinned part: the five categories as a segmented control (widths follow the labels so "Hardpoints" fits at 360 px) */
-.shop-head { flex: none; padding: 3px var(--gutter) 4px; }
-.cat-tabs { display: flex; gap: 2px; padding: 2px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; }
-.cat-tabs .tab {
-  position: relative; flex: 1 1 auto; justify-content: center; min-height: var(--touch); padding: 0 4px; border: 0; border-radius: 10px;
-  font-size: 0.875rem; letter-spacing: -0.02em; color: var(--text-dim);
+/* the pinned part: the breadcrumb line */
+.shop-head { flex: none; padding: 0 var(--gutter); }
+body.tab-upgrades .screen-top > .status-strip { display: none; }   /* "Battle ›": the tab bar and swipe back do that here */
+.crumbs { display: flex; align-items: center; gap: 2px; min-width: 0; min-height: var(--touch); }
+.btn.crumb {
+  flex: 0 1 auto; min-width: 0; min-height: var(--touch); gap: 4px; padding: 0 6px; border: 0; background: transparent;
+  font-size: 1rem; font-weight: 800; color: var(--text); white-space: nowrap;
 }
-@media (max-width: 380px) { .shop-head { padding-left: 8px; padding-right: 8px; } .cat-tabs .tab { padding: 0 2px; } }
-.cat-tabs .tab.active { background: var(--bg-4); color: var(--text); border: 0; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06); }
-/* a decision waits in this category (an empty slot, an open fork) */
+.btn.crumb:hover:not(:disabled) { background: var(--bg-2); }
+.btn.crumb-page { flex-shrink: 0; max-width: 48%; }   /* the page name stays whole; a long tree name ellipsises */
+.crumb-page.static { pointer-events: none; }
+.crumb-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.crumb-caret { flex: none; font-size: 0.875rem; color: var(--text-dim); }
+.crumb-count { flex: none; font-weight: 700; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.crumb-count:empty { display: none; }
+.crumb-sep { flex: none; color: var(--text-faint); font-size: 1rem; }
+.crumb-gap { flex: 1 1 0; min-width: 0; }
+.qm-crumb { flex: none; display: flex; align-items: center; gap: 2px; }
+.btn.crumb-qm { flex: none; padding: 0 6px; font-size: 0.875rem; font-weight: 700; color: var(--text-dim); letter-spacing: 0.04em; }
+.qm-crumb .switch { flex: none; }
+@media (max-width: 360px) { .shop-head { padding-left: 6px; padding-right: 8px; } .btn.crumb { padding: 0 4px; gap: 3px; } .btn.crumb-qm { padding: 0 4px; } }
+/* a decision waits on a page / in a tree (an empty slot, an open fork) */
 .cat-dot, .chip-dot, .dr-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
-.cat-dot { position: absolute; top: 7px; right: 4px; }
+.crumb .cat-dot, .crumb .chip-dot { align-self: flex-start; margin-top: 10px; }
+
+/* the breadcrumb menus (modal.ts variant 'popover'): 48 px rows */
+.crumb-menu-list { display: flex; flex-direction: column; gap: 2px; }
+.btn.cm-row {
+  justify-content: flex-start; gap: 8px; min-height: 48px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent;
+  font-size: 1rem; font-weight: 700; color: var(--text); text-align: left;
+}
+.btn.cm-row.current { background: var(--bg-3); color: var(--accent); }
+.btn.cm-row.sub { min-height: 48px; padding-left: 30px; font-size: 0.9375rem; font-weight: 500; color: var(--text-dim); }
+.btn.cm-row.empty { color: var(--text-dim); font-weight: 600; }
+.cm-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-count { flex: none; font-weight: 700; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.cm-star { flex: none; color: var(--scrap); }
+.cm-new { flex: none; display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.875rem; font-weight: 700; color: var(--warn); }
 
 .shop-body {
   position: relative; flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--gutter) 28px; border-top: 1px solid var(--line);
   overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
 }
-/* landscape phone: Suggested, decisions and tree chips in a left column, the rows beside them (one scroller) */
-body.shell-rail .cat-tabs .tab { padding: 0 8px; }
-body.shell-rail .shop-body { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); column-gap: 16px; align-content: start; align-items: start; }
-body.shell-rail .shop-body > :is(.quick, .shop-decisions, .shop-sub) { grid-column: 1; }
+/* landscape phone: the decision rows (and explainer, bottleneck) in a left column, the rows beside them (one scroller) */
+body.shell-rail .shop-body:has(> :is(.bottleneck, .star-explain, .shop-decisions):not([hidden])) { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); column-gap: 16px; align-content: start; align-items: start; }
+body.shell-rail .shop-body > :is(.bottleneck, .star-explain, .shop-decisions) { grid-column: 1; }
 body.shell-rail .shop-body > .shop-list { grid-column: 2; grid-row: 1 / span 4; }
-body.shell-rail .tree-chips { flex-wrap: wrap; }
-body.shell-rail .tree-chips.more { -webkit-mask-image: none; mask-image: none; padding-right: 0; }
+
+/* swipe / ← → between trees: a short slide (none with reduced motion) */
+@keyframes shop-in-next { from { transform: translateX(28px); opacity: 0.2; } to { transform: none; opacity: 1; } }
+@keyframes shop-in-prev { from { transform: translateX(-28px); opacity: 0.2; } to { transform: none; opacity: 1; } }
+.shop-list.slide-next { animation: shop-in-next 0.2s ease-out; }
+.shop-list.slide-prev { animation: shop-in-prev 0.2s ease-out; }
+body.reduce-motion .shop-list.slide-next, body.reduce-motion .shop-list.slide-prev { animation: none; }
+@media (prefers-reduced-motion: reduce) { .shop-list.slide-next, .shop-list.slide-prev { animation: none; } }
+.shop-body { touch-action: pan-y; }
+
+/* first purchases: one sentence on the ★ tags */
+.star-explain { margin: 8px 0 0; font-size: 0.875rem; line-height: 1.35; color: var(--text-dim); }
 
 /* decision rows: an empty slot of this category, this tree's open Doctrine fork */
-.shop-decisions { display: flex; flex-direction: column; gap: 8px; margin: 0 0 10px; }
+.shop-decisions { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 10px; }
 .btn.decision-row {
   width: 100%; justify-content: flex-start; gap: 12px; min-height: 56px; padding: 6px 12px; text-align: left; white-space: normal; font-weight: 400;
   background: var(--bg-2); border: 1px dashed var(--line-2); border-radius: 12px;
@@ -96,30 +88,15 @@ body.shell-rail .tree-chips.more { -webkit-mask-image: none; mask-image: none; p
 .dr-sub { font-size: 0.875rem; color: var(--text-dim); line-height: 1.3; }
 .decision-row .chev { color: var(--text-faint); }
 
-/* tree chips and the sort toggle: the head of the list (it scrolls with it) */
-.shop-sub { display: flex; align-items: center; gap: 8px; margin: 0; }
-.tree-chips { flex: 1; min-width: 0; }
-.tree-chips.more {
-  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
-  mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); padding-right: 24px;
+/* section heads: a quiet label that sticks under the breadcrumb while its section scrolls (no buttons) */
+.sec-head {
+  position: sticky; top: 0; z-index: 2; margin: 0 calc(-1 * var(--gutter)); padding: 0 var(--gutter);
+  background: var(--bg-0); border-bottom: 1px solid transparent;
 }
-.sort-btn { flex: none; color: var(--text-dim); }
-.sort-btn.on { color: var(--text); }
-.tree-chip .count { background: var(--bg-4); color: var(--text-dim); font-weight: 700; }
-.chip.tree-chip.active .count { background: var(--bg-0); color: var(--text); }
+.sec-head .sec-title { margin: 10px 0 0; padding: 4px 0 2px; }
+.shop-list > .shop-section:first-child .sec-head .sec-title { margin-top: 2px; }
+.shop-section > .sec-sub { margin: 0 0 6px; }
 
-/* section heads: a quiet label, with the per-tree "Spend here" (and, without tree chips, the sort toggle) on the right */
-.sec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.sec-head .sec-title { flex: 1 1 auto; min-width: 0; }
-.sec-head > .sort-btn { margin-top: 0; }
-.btn.spend-btn {
-  flex: none; flex-direction: row; align-items: center; justify-content: center; gap: 6px; min-height: var(--touch); max-width: 210px;
-  margin: 0; padding: 0 12px; line-height: 1.2;   /* one line (N-07): "Spend here ◆12" */
-}
-.spend-title { font-size: 0.875rem; font-weight: 700; }
-.spend-line { font-size: 0.875rem; font-weight: 600; color: var(--text-dim); font-variant-numeric: tabular-nums; }
-.btn.spend-btn:not(:disabled) .spend-line { color: var(--scrap); }
-.shop-section:first-child .sec-title { margin-top: 0; margin-bottom: 0; }
 /* the Quartermaster card under a one-line summary (open while it is off; folded once on) */
 .qm-fold { display: flex; flex-direction: column; gap: 8px; margin: 2px 0 0; }
 .qm-fold-btn .ico:first-child { color: var(--scrap); }
@@ -145,6 +122,8 @@ body.shell-rail .tree-chips.more { -webkit-mask-image: none; mask-image: none; p
 .node-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .node-name { font-weight: 700; font-size: 0.9375rem; }
 .node-rank { font-size: 0.875rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+/* ★ Suggested: a hint only (nothing buys on its own); one unit, it moves under the name rather than break it */
+.star-tag { flex: none; white-space: nowrap; font-size: 0.875rem; font-weight: 700; color: var(--scrap); }
 .node-chev { align-self: center; color: var(--text-faint); transition: transform 0.15s; }
 .node.open .node-chev { transform: rotate(180deg); }
 .node-desc { margin: 3px 0 0; font-size: 0.875rem; color: var(--text-dim); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -196,3 +175,5 @@ body.shell-rail .tree-chips.more { -webkit-mask-image: none; mask-image: none; p
 .pick-card.poison { border-left: 4px solid #7ddc5a; }
 .pick-card.frost { border-left: 4px solid #8fdcff; }
 .refit-one { margin: 14px 0; }
+/* a narrow phone with large text: the tree name keeps the room (its count is in the menu; the separator goes) */
+@media (max-width: 360px) { body:is(.text-115, .text-130) :is(.crumb-count, .crumb-sep) { display: none; } }

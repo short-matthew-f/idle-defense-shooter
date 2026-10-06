@@ -1,33 +1,32 @@
 /**
- * Upgrade shop. Pinned: the category tabs (the shell's top row above them holds the wallet, the buy-quantity chip and
- * the Battle button). Everything else scrolls in one list:
- *   Suggested (one line: "Suggested 3 · Buy all ◆53"; its chevron opens the 3 cheapest affordable buys, remembered)
+ * Upgrade shop. Pinned: one breadcrumb line (the shell's top row above it holds the wallet and the buy-quantity chip):
+ *   "Page ▾ › Tree ▾ … QM [switch]". Page ▾ lists the revealed pages (Chassis, Elements, Hardpoints, Cross, Cores);
+ *   Tree ▾ (pages with two or more trees or slots) lists the page's trees, its empty slots ("+ Empty slot") and, under
+ *   the current tree, jump links to its sections. Stacked pages (Cross, Cores) list their sections under the page.
+ *   Menus are popovers (modal.ts variant 'popover': Esc, Back, a tap outside and a choice close them).
+ * Everything else scrolls in one list:
  *   decision rows (an empty attunement / hardpoint slot of this category, the open Doctrine fork of this tree)
- *   tree chips (only when the category has two or more trees) · the tree view (sort on its first heading):
- *   shared nodes · Doctrine fork (2–4 cards) · doctrine nodes + capstone · Exotic (Cores) · "N locked" · "N maxed"
- * Elements / Hardpoints list attuned / mounted trees; an empty slot is a row at the top that opens its picker
- * (attune / mount_hardpoint). Cross (Fusions, Linkages, Infusions) and Cores (Exotics, Refit, Doctrine change) are one
- * stacked view each, no chips. A node row shows its name, rank and headline effect; tapping the row body unfolds the
- * full description (the Buy button keeps hold-to-buy). Locked and maxed rows fold into one line each at the end.
- * Prices and affordability update in place from `ui.shop`; rows are rebuilt only when the set of visible nodes
- * changes. The quantity chip (×1 → ×10 → Max, Q) drives every Buy button, the suggestion chips, Buy all and each
- * tree's "Spend here" (bulk.ts has the pure planning).
+ *   the tree view: shared nodes · Doctrine fork (2–4 cards) · doctrine nodes + capstone · Exotic · "N locked" · "N maxed"
+ * Each section's light header sticks under the breadcrumb while it scrolls. A swipe left / right on the list (or ← / →)
+ * steps along one flattened order of every revealed tree and page (navStops); a swipe from the left edge stays the
+ * system's swipe back to Battle.
+ * A node row shows its name, rank and headline effect; tapping the row body unfolds the full description (the Buy
+ * button keeps hold-to-buy). Up to three rows carry "★ Suggested" (suggestedNodes: the cheapest affordable buys; a hint
+ * only, nothing auto-buys). The quantity chip (×1 → ×10 → Max, Q) drives every Buy button (bulk.ts).
  * Attention dots mean a decision is waiting (an empty slot, an open fork), never "something is affordable" (the tab
- * bar's count says that); a tree chip's count is its affordable nodes, in a quiet neutral style.
- * Progressive reveal (progression.ts, setFeatures): categories appear as they are earned; the Suggested line,
- * quantity chip and "Spend here" wait for 'bulk' (until then every Buy is ×1 and Q does nothing).
+ * bar's count says that); a tree's count is its affordable nodes, in a quiet neutral style.
+ * Progressive reveal (progression.ts, setFeatures): pages appear as they are earned; ★ Suggested and the quantity chip
+ * wait for 'bulk' (until then every Buy is ×1 and Q does nothing).
  */
 import '../styles/shop.css';
 import type { DoctrineId, ElementId, HardpointId, TreeId } from '@sim/core/ids';
 import { Ev, type ShopEntry, type SimEvent, type UiState } from '@sim/core/types';
-import { inBulkTree } from '@sim/economy/bulk';
-import { button, h, holdRepeat, text, disable, show, attr, Keyed, clear } from './dom';
-import { buyLabel, buyLabelText, bulkToast, nextQty, parseQty, planBuyAll, qtyLabel, rowBuy, spendLabel, treeSpend, type BuyLabel, type BuyQty } from './bulk';
+import { button, h, holdRepeat, text, disable, show, attr } from './dom';
+import { buyLabel, buyLabelText, bulkToast, nextQty, parseQty, qtyLabel, rowBuy, type BuyLabel, type BuyQty } from './bulk';
 import { icon } from './icons';
-import { fmtDuration, fmtNum, fmtStatChange, splitDesc, substituteDesc, titleCase } from './format';
-import { nextPurchase } from './advice';
+import { fmtNum, fmtStatChange, splitDesc, substituteDesc, titleCase } from './format';
 import { CHASSIS, ELEMENTS, ELEMENT_BLURB, HARDPOINTS, HARDPOINT_BLURB, NODE_BY_ID, TREE_BY_ID, TREE_LABEL } from './content';
-import { confirmDialog, openModal } from './modal';
+import { confirmDialog, openModal, type ModalHandle } from './modal';
 import { doctrineFork, doctrinesShown, forkKey, freeDoctrineTrees } from './doctrine';
 import { prefs, setPref } from './prefs';
 import { POOL_COMPLETE_AT, STARTER_IDS, contentPool, newInPool, poolShop, type ContentPool, type Features } from './progression';
@@ -129,6 +128,8 @@ class NodeRow {
   private readonly name = h('span', { class: 'node-name' });
   private readonly rank = h('span', { class: 'node-rank' });
   private readonly chev = icon('down', 'ico tiny node-chev');
+  /** "★ Suggested" (a hint only: nothing buys on its own). */
+  private readonly star = h('span', { class: 'star-tag', text: '★ Suggested' });
   private readonly desc = h('p', { class: 'node-desc' });
   /** Before → after of the headline stat at the buy quantity (stat rows). */
   private readonly stat = h('p', { class: 'node-stat' });
@@ -146,9 +147,15 @@ class NodeRow {
     this.btn = h('button', { type: 'button', class: 'btn buy' }, this.bcount, this.price);
     // hold-to-repeat only at ×1; a ×10 / Max press buys once
     holdRepeat(this.btn, () => { const l = buyLabel(this.entry, this.qty()); if (l.send !== null) send(this.entry, l.send); }, () => this.qty() === 1);
-    this.main = h('div', { class: 'node-main' }, h('div', { class: 'node-head' }, this.name, this.rank, this.chev), this.stat, this.desc, this.lock);
+    this.main = h('div', { class: 'node-main' }, h('div', { class: 'node-head' }, this.name, this.rank, this.chev, this.star), this.stat, this.desc, this.lock);
     this.el = h('div', { class: 'node', data: { node: entry.node } }, this.main, this.btn);
+    this.star.hidden = true;
     this.update(entry);
+  }
+  setSuggested(on: boolean): void {
+    if (this.star.hidden !== on) return;
+    this.star.hidden = !on;
+    this.el.classList.toggle('suggested', on);
   }
   private get open(): boolean { return this.opened.has(this.entry.node); }
   private paintDesc(): void {
@@ -207,7 +214,7 @@ class NodeRow {
 }
 
 type Item =
-  | { t: 'head'; text: string; sub?: string; /** bulk-tree key for a "Spend here" button */ spend?: string; /** stacked views: the group id (setTree scrolls to it) */ sec?: string }
+  | { t: 'head'; text: string; sub?: string; /** stacked views: the group id (setTree scrolls to it) */ sec?: string }
   | { t: 'node'; e: ShopEntry }
   | { t: 'note'; text: string }
   | { t: 'fork'; tree: TreeId }
@@ -217,58 +224,87 @@ type Item =
 /** An open slot (index into the build's list) and whether the content pool has something to put in it. */
 interface SlotDecision { slot: number; offer: boolean }
 
+/** A section of the list on show (a jump link in the breadcrumb menus). */
+interface Section { sec: string; label: string }
+
+/** Minimum horizontal travel (px) for a swipe on the list, and how much more horizontal than vertical it must be. */
+export const SWIPE_MIN_DX = 50;
+export const SWIPE_RATIO = 1.5;
+/** Touches that start this close to the left edge belong to the system's swipe-back (→ Battle). */
+export const SWIPE_EDGE = 24;
+
+/** Is a touch from (x0, y0) to (x1, y1) a list swipe? -1 / +1 (previous / next) or 0. Pure. */
+export function swipeDir(x0: number, y0: number, x1: number, y1: number): -1 | 0 | 1 {
+  if (x0 < SWIPE_EDGE) return 0;
+  const dx = x1 - x0, dy = y1 - y0;
+  if (Math.abs(dx) < SWIPE_MIN_DX || Math.abs(dx) <= SWIPE_RATIO * Math.abs(dy)) return 0;
+  return dx < 0 ? 1 : -1;
+}
+
+/** One stop of the swipe order: a tree of a page, or a whole page (stacked pages, pages with no tree yet). */
+export interface NavStop { cat: Category; tree: string }
+
+/** The flattened swipe order: every revealed page's trees in order (a page without trees is one stop). Pure. */
+export function navStops(pages: readonly { cat: Category; trees: readonly string[] }[]): NavStop[] {
+  const out: NavStop[] = [];
+  for (const p of pages) {
+    if (STACKED.has(p.cat) || !p.trees.length) out.push({ cat: p.cat, tree: '' });
+    else for (const t of p.trees) out.push({ cat: p.cat, tree: t });
+  }
+  return out;
+}
+
+/** The stop `dir` steps from (cat, tree), or null at either end (no wrap). Pure. */
+export function stepStop(stops: readonly NavStop[], cat: Category, tree: string, dir: -1 | 1): NavStop | null {
+  let i = stops.findIndex((s) => s.cat === cat && (s.tree === '' || s.tree === tree));
+  if (i < 0) i = stops.findIndex((s) => s.cat === cat);
+  if (i < 0) return stops[0] ?? null;
+  return stops[i + dir] ?? null;
+}
+
+/** How many rows carry a "★ Suggested" tag (across the whole Upgrades screen). */
+export const SUGGEST_MAX = 3;
+/** The rows marked "★ Suggested": today's Suggested pick (the cheapest affordable, unlocked Scrap buys). A hint only. Pure. */
+export function suggestedNodes(shop: readonly ShopEntry[], n = SUGGEST_MAX): Set<string> {
+  return new Set(cheapestAffordable(shop.filter((e) => e.rank < e.maxRank), n).map((e) => e.node));
+}
+
 export class Shop {
   readonly el: HTMLElement;
-  private readonly sgTitle = h('span', { class: 'sg-title', text: 'Suggested' });
-  /** The Suggested line (top of the list). */
-  readonly quick: HTMLElement;
   /** Buy quantity: one chip cycling ×1 → ×10 → Max (Q); GameUi puts it in the shell's top row. */
   readonly qtyChip: HTMLButtonElement;
   private readonly qtyVal = h('span', { class: 'qty-val' });
-  private readonly catRow = h('div', { class: 'tabs cat-tabs', attrs: { role: 'tablist', 'aria-label': 'Upgrade trees' } });
-  private readonly head = h('div', { class: 'shop-head' }, this.catRow);
-  private readonly treeRow = h('div', { class: 'chips tree-chips', attrs: { role: 'tablist', 'aria-label': 'Tree' } });
-  /** Tree chips: the head of the list (it scrolls with it). */
-  private readonly listHead = h('div', { class: 'shop-sub' }, this.treeRow);
+  // ---- the breadcrumb line: Page ▾ › Tree ▾ … QM [switch]
+  private readonly pageLabel = h('span', { class: 'crumb-label' });
+  private readonly pageDot = h('span', { class: 'cat-dot', attrs: { 'aria-hidden': 'true' } });
+  private readonly pageCaret = h('span', { class: 'crumb-caret', text: '▾', attrs: { 'aria-hidden': 'true' } });
+  private readonly pageBtn: HTMLButtonElement;
+  private readonly sep = h('span', { class: 'crumb-sep', text: '›', attrs: { 'aria-hidden': 'true' } });
+  private readonly treeLabel = h('span', { class: 'crumb-label' });
+  private readonly treeCount = h('span', { class: 'crumb-count', attrs: { 'aria-hidden': 'true' } });
+  private readonly treeDot = h('span', { class: 'chip-dot', attrs: { 'aria-hidden': 'true' } });
+  private readonly treeBtn: HTMLButtonElement;
+  private readonly qmBtn: HTMLButtonElement;
+  private readonly crumbs: HTMLElement;
+  private readonly head: HTMLElement;
+  /** First-purchase explainer (retires after COACH_BUYS purchases). */
+  private readonly coach = h('p', { class: 'quick-coach star-explain', text: '★ marks the cheapest upgrades your Scrap buys right now. Tap a price to buy.' });
   /** Decision rows: an empty slot of this category, this tree's open Doctrine fork. */
   private readonly decisions = h('div', { class: 'shop-decisions' });
   private decisionKey = '';
   private readonly list = h('div', { class: 'shop-list' });
   private readonly body: HTMLElement;
-  private readonly quickRow = h('div', { class: 'quick-row' });
-  /** When nothing is affordable: the next buy, its price and ETA at the current income. */
-  private readonly nextChip: HTMLButtonElement;
-  private readonly nextLabel = h('span', { class: 'qc-name' });
-  private readonly nextPrice = h('span', { class: 'price scrap' });
-  private readonly nextEta = h('span', { class: 'qc-eta' });
-  private nextTree = '';
-  private readonly doneChip: HTMLButtonElement;
-  private readonly noneText = h('span', { class: 'sg-none', text: 'Nothing affordable yet' });
-  /** First-run explainer (the old "Tap to buy" coach; retires after COACH_BUYS purchases). */
-  private readonly coach = h('p', { class: 'quick-coach sg-explain', text: 'Cheapest upgrades your Scrap buys right now. Tap one to buy it.' });
-  private readonly sgToggle: HTMLButtonElement;
-  private readonly sgCount = h('span', { class: 'sg-count' });
-  private readonly buyAll: HTMLButtonElement;
-  private readonly buyAllText = h('span', { class: 'sg-buyall-text' });
-  private readonly buyAllPrice = h('span', { class: 'price scrap' });
-  /** Every "Spend here" button on show (rebuilt with the view, relabelled every update). */
-  private spends: { tree: string; name: string; btn: HTMLButtonElement; line: HTMLSpanElement; key: string }[] = [];
   /** A bulk buy in flight: its Purchase events are summed into one toast. */
   private pendingBulk: { where: string | null; until: number; events: SimEvent[]; timer: number } | null = null;
   /** Bring the Upgrades screen forward when a chip, the death card or the Build screen jumps to a tree (GameUi wires it). */
   onReveal: (() => void) | null = null;
   /** The category on show changed (GameUi: the wallet bar follows it). */
   onViewChange: (() => void) | null = null;
-  private readonly sortBtn: HTMLButtonElement;
-  private readonly catBtns = new Map<Category, { b: HTMLButtonElement; dot: HTMLSpanElement }>();
-  private treeBtns = new Map<string, { b: HTMLButtonElement; n: HTMLSpanElement; dot: HTMLSpanElement }>();
   private readonly rows = new Map<string, NodeRow>();
-  private readonly quickList: Keyed<ShopEntry, { el: HTMLButtonElement; label: HTMLSpanElement; rank: HTMLSpanElement; count: HTMLSpanElement; price: HTMLSpanElement; entry: ShopEntry; key: string }>;
   private cat: Category;
   private tree: string;
   /** The tree to go back to when an open slot's picker is folded away. */
   private lastTree = '';
-  private chipKey = '';
   private viewKey = '';
   private ui: UiState | null = null;
   private revealKey = '';
@@ -277,10 +313,19 @@ export class Shop {
   private readonly descOpen = new Set<string>();
   /** A stacked view's group to scroll to once rendered. */
   private pendingSec: string | null = null;
+  /** The sections of the list on show (jump links in the menus). */
+  private sections: Section[] = [];
+  /** Rows marked "★ Suggested" (suggestedNodes over the pooled shop; only once 'bulk' is revealed). */
+  private suggested = new Set<string>();
+  /** The breadcrumb menu open now (closed by Esc, Back, a tap outside or a choice). */
+  private menu: ModalHandle | null = null;
+  /** Slide direction for the next render (a swipe or ← / →). */
+  private slide: -1 | 0 | 1 = 0;
   /**
-   * Quartermaster card (quartermaster.ts), at the top of every Scrap category's list once 'quartermaster' is revealed.
-   * Phase 2: the full card shows the first time it is unlocked (prefs.qmSeen); after that it folds to one row with an
-   * inline on/off switch (data-hint quartermaster-toggle), and a tap on the row opens the card.
+   * Quartermaster (quartermaster.ts), once 'quartermaster' is revealed. Before it unlocks: its one-line teaser at the
+   * top of the list. The first time it is unlocked (prefs.qmSeen) the full card shows there, under a one-row summary
+   * that folds it away; after that it lives in the breadcrumb line: "QM [switch]", and a tap on "QM" opens the card
+   * as a sheet.
    */
   private readonly qm: QuartermasterPanel;
   private readonly qmState = h('span', { class: 'qmf-state' });
@@ -294,6 +339,8 @@ export class Shop {
   private readonly qmFirst = !prefs().qmSeen;
   private readonly qmSwitch = h('input', { attrs: { type: 'checkbox', 'aria-label': 'Quartermaster on' } }) as HTMLInputElement;
   private readonly qmSwitchWrap = h('label', { class: 'switch qm-inline', data: { hint: 'quartermaster-toggle' } }, this.qmSwitch, h('span', { class: 'slider' }));
+  private readonly qmCrumb: HTMLElement;
+  private qmSheet: ModalHandle | null = null;
   /** Late game (Phase 2): "Scrap can't buy anything new here" + a Forecast button, at the top of the list. */
   private readonly bneckText = h('span', { class: 'bn-text' });
   private readonly bneck: HTMLElement;
@@ -302,110 +349,94 @@ export class Shop {
     const p = prefs();
     this.cat = (CATEGORIES.some((c) => c.id === p.shopCategory) ? p.shopCategory : 'chassis') as Category;
     this.tree = p.shopTree;
-    for (const c of CATEGORIES) {
-      const dot = h('span', { class: 'cat-dot', attrs: { 'aria-hidden': 'true' } });
-      const b = button([c.label, dot], () => this.setCategory(c.id), { class: 'tab' });
-      b.dataset.hint = `cat-${c.id}`;   // pointer hints (hints.ts)
-      dot.hidden = true;
-      b.setAttribute('role', 'tab');
-      this.catBtns.set(c.id, { b, dot });
-      this.catRow.appendChild(b);
-    }
-    this.sortBtn = button(icon('sort'), () => {
-      setPref('affordableFirst', !prefs().affordableFirst);
-      this.syncSort();
-      this.viewKey = '';
-      if (this.ui) this.update(this.ui);
-    }, { class: 'btn icon-btn ghost toggle sort-btn', title: 'Affordable first: sort what you can buy to the top', label: 'Sort affordable upgrades first' });
-    this.syncSort();
-    this.quickList = new Keyed(this.quickRow, (e) => {
-      const label = h('span', { class: 'qc-name' });
-      const rank = h('span', { class: 'qc-rank' });
-      const count = h('span', { class: 'qc-count' });
-      const price = h('span', { class: 'price scrap' });
-      const row = { el: h('button', { type: 'button', class: 'btn chip quick' }, label, rank, count, price), label, rank, count, price, entry: e, key: '' };
-      holdRepeat(row.el, () => { const l = buyLabel(row.entry, this.qty); if (l.send !== null) this.sendBuy(row.entry, l.send); }, () => this.qty === 1);
-      return row;
-    }, (r, e) => {
-      r.entry = e;
-      const key = `${e.rank}|${e.cost}|${this.qty}|${e.affordableRanks}|${e.affordableTotal}`;
-      if (key === r.key) return;
-      r.key = key;
-      const l = buyLabel(e, this.qty);
-      text(r.label, e.name);
-      text(r.rank, e.maxRank > 1 ? `rank ${e.rank + 1}` : '');
-      paintBuy(r.count, r.price, l, 'scrap');
-      attr(r.el, 'aria-label', `Buy ${l.count ? `${l.count.replace('×', '')} ranks of ` : ''}${e.name}${e.maxRank > 1 ? ` (rank ${e.rank + 1} of ${e.maxRank})` : ''} for ${fmtNum(l.price)} Scrap`);
-    });
-    this.nextChip = button([h('span', { class: 'qc-next', text: 'Next' }), this.nextLabel, this.nextPrice, this.nextEta], () => this.jumpTo(this.nextTree), { class: 'btn chip next-chip' });
-    this.doneChip = button([icon('forecast', 'ico tiny'), 'All owned: see the Forecast'], () => this.ctx.open('forecast'), { class: 'btn chip next-chip done-chip' });
-    this.doneChip.hidden = true;
-    // the Suggested line: chevron + title + count (expands to the chips, remembered) and Buy all on the right
-    this.sgToggle = button([icon('down', 'ico tiny sg-chev'), this.sgTitle, this.sgCount], () => {
-      setPref('suggestExpanded', !prefs().suggestExpanded);
-      this.syncSuggest();
-    }, { class: 'btn ghost sg-toggle' });
-    this.buyAll = button([this.buyAllText, this.buyAllPrice], () => this.doBuyAll(), { class: 'btn primary sg-buyall' });
-    this.buyAll.dataset.hint = 'buy-all';
-    this.quick = h('div', { class: 'quick suggest' },
-      h('div', { class: 'sg-head' }, this.sgToggle, this.noneText, this.nextChip, this.doneChip, this.buyAll),
-      this.coach,
-      h('div', { class: 'sg-body' }, this.quickRow));
-    this.syncSuggest();
+    this.pageBtn = button([this.pageLabel, this.pageDot, this.pageCaret], () => this.openPageMenu(), { class: 'btn ghost crumb crumb-page' });
+    this.pageBtn.dataset.hint = 'page-menu';
+    attr(this.pageBtn, 'aria-haspopup', 'menu');
+    this.treeBtn = button([this.treeLabel, this.treeCount, this.treeDot, h('span', { class: 'crumb-caret', text: '▾', attrs: { 'aria-hidden': 'true' } })], () => this.openTreeMenu(), { class: 'btn ghost crumb crumb-tree' });
+    this.treeBtn.dataset.hint = 'tree-menu';
+    attr(this.treeBtn, 'aria-haspopup', 'menu');
+    this.qmBtn = button('QM', () => this.openQmSheet(), { class: 'btn ghost crumb crumb-qm', label: 'Quartermaster settings' });
+    this.qmCrumb = h('div', { class: 'qm-crumb' }, this.qmBtn, this.qmSwitchWrap);
+    this.qmCrumb.hidden = true;
+    this.crumbs = h('nav', { class: 'crumbs', attrs: { 'aria-label': 'Upgrades: page and tree' } }, this.pageBtn, this.sep, this.treeBtn, h('span', { class: 'crumb-gap' }), this.qmCrumb);
+    this.head = h('div', { class: 'shop-head' }, this.crumbs);
     this.qtyChip = button([h('span', { class: 'qty-k', text: 'Buy' }), this.qtyVal], () => this.cycleQty(), { class: 'btn qty-chip', title: 'Ranks per Buy tap: ×1 → ×10 → Max (Q)' });
     this.qtyChip.dataset.hint = 'qty';
     this.syncQty();
-    this.body = h('div', { class: 'shop-body' }, this.quick, this.decisions, this.listHead, this.list);
-    // only the category tabs stay pinned (the wallet and the quantity chip are in the shell's top row); the rest scrolls
+    this.body = h('div', { class: 'shop-body' }, this.coach, this.decisions, this.list);
+    // pinned: the breadcrumb line (the wallet and the quantity chip are in the shell's top row); the rest scrolls
     this.el = h('section', { class: 'shop', attrs: { 'aria-label': 'Upgrades' } }, this.head, this.body);
     this.qm = new QuartermasterPanel(ctx);
     this.qmSummary = button([icon('bank', 'ico tiny'), h('span', { class: 'fold-label', text: 'Quartermaster' }), this.qmState, this.qmAct, this.qmChev], () => {
-      this.qmOpen = this.qm.el.hidden;
-      if (this.ui) this.syncQm(this.ui);
+      this.qmOpen = this.qm.el.hidden || !this.qmWrap.contains(this.qm.el);
+      this.viewKey = '';
+      if (this.ui) this.update(this.ui);
     }, { class: 'btn fold-btn qm-fold-btn' });
     this.qmSwitch.addEventListener('change', () => this.ctx.host.send({ type: 'set_quartermaster', on: this.qmSwitch.checked }));
-    this.qmWrap = h('div', { class: 'qm-fold' }, h('div', { class: 'qm-row' }, this.qmSummary, this.qmSwitchWrap), this.qm.el);
+    this.qmWrap = h('div', { class: 'qm-fold' }, h('div', { class: 'qm-row' }, this.qmSummary), this.qm.el);
     this.bneck = h('div', { class: 'bottleneck', attrs: { role: 'status' } }, icon('forecast', 'ico bn-ico'), this.bneckText,
       button('Forecast', () => this.ctx.open('forecast'), { class: 'btn small bn-btn', label: 'Open the Forecast' }));
     this.bneck.hidden = true;
     this.body.insertBefore(this.bneck, this.body.firstChild);
+    this.wireSwipe();
   }
 
-  /** The Quartermaster summary line and whether its card shows. */
+  // ---------------------------------------------------------------- Quartermaster
+  /** Where the Quartermaster shows: nowhere, its teaser / first-time card at the top of the list, or the breadcrumb line. */
+  private qmPlace(ui: UiState): 'none' | 'list' | 'crumb' {
+    if (!this.f.quartermaster) return 'none';
+    const q = ui.quartermaster;
+    if (!q?.unlocked) return this.cat === 'cores' ? 'none' : 'list';   // the teaser, as before
+    return (this.qmOpen ?? this.qmFirst) && this.cat !== 'cores' ? 'list' : 'crumb';
+  }
+
+  /** The Quartermaster summary line, the card and the breadcrumb switch. */
   private syncQm(ui: UiState): void {
     const q = ui.quartermaster;
-    // before it unlocks the card is already a one-line teaser: no summary over it
     const locked = !q?.unlocked;
-    const open = locked || (this.qmOpen ?? this.qmFirst);
-    this.qm.el.hidden = !open;
-    if (!locked && open && !prefs().qmSeen) setPref('qmSeen', true);
-    show(this.qmSummary, !locked);
-    // the card carries its own switch while open
-    show(this.qmSwitchWrap, !locked && !open);
+    const place = this.qmPlace(ui);
+    if (place === 'list' && !locked && !prefs().qmSeen) setPref('qmSeen', true);
+    const inList = place === 'list';
+    if (inList && !this.qmSheet && this.qm.el.parentElement !== this.qmWrap) this.qmWrap.appendChild(this.qm.el);
+    this.qm.el.hidden = !(inList || this.qmSheet);
+    show(this.qmSummary, inList && !locked);
+    show(this.qmCrumb, place === 'crumb');
     if (q && this.qmSwitch.checked !== q.on) this.qmSwitch.checked = q.on;
     this.qmSwitch.disabled = locked;
     const bank = qmBank(ui);
-    text(this.qmState, !q ? '' : q.on ? `On${bank !== null ? ` · bank ${fmtExactish(bank)}` : ''}` : 'Off');
-    if (this.qmChev.dataset.open !== String(open)) {
-      this.qmChev.dataset.open = String(open);
-      text(this.qmAct, open ? 'Hide' : 'Show');
-      this.qmChev.replaceChildren(icon(open ? 'up' : 'down', 'ico tiny chev'));
-      attr(this.qmSummary, 'aria-expanded', open ? 'true' : 'false');
+    const state = !q ? '' : q.on ? `On${bank !== null ? ` · bank ${fmtExactish(bank)}` : ''}` : 'Off';
+    text(this.qmState, state);
+    attr(this.qmBtn, 'aria-label', `Quartermaster settings${state ? ` (${state})` : ''}`);
+    if (this.qmChev.dataset.open !== 'true') {
+      this.qmChev.dataset.open = 'true';
+      text(this.qmAct, 'Hide');
+      this.qmChev.replaceChildren(icon('up', 'ico tiny chev'));
+      attr(this.qmSummary, 'aria-expanded', 'true');
+      attr(this.qmSummary, 'aria-label', 'Quartermaster: fold the card into the top line');
     }
     this.qm.update(ui);
+  }
+
+  /** "QM" in the breadcrumb line: the full Quartermaster card as a sheet. */
+  private openQmSheet(): void {
+    if (this.qmSheet || !this.ui) return;
+    this.closeMenu();
+    this.qm.el.hidden = false;
+    this.qmSheet = openModal({ title: 'Quartermaster', body: this.qm.el, variant: 'sheet', className: 'qm-sheet', returnFocus: this.qmBtn,
+      onClose: () => { this.qmSheet = null; this.qm.el.remove(); if (this.ui) this.syncQm(this.ui); } });
+    this.qm.update(this.ui);
   }
 
   /** What this Prestige offers (progression.ts content pool; Unlock everything offers all). */
   private pool(ui: UiState): ContentPool { return contentPool(ui, { unlockAll: this.f.unlockAll }); }
   /** The sim's shop without cross-system entries whose parts the pool does not offer yet. */
   private pooled(ui: UiState): ShopEntry[] { return poolShop(ui.shop, this.pool(ui)); }
-  private qmHere(): boolean { return this.f.quartermaster && this.cat !== 'cores'; }
 
   /** The open category's Scrap entries (pooled), for the bottleneck line. */
-  private catEntries(ui: UiState): ShopEntry[] {
+  private catEntries(ui: UiState, c: Category = this.cat): ShopEntry[] {
     const pooled = this.pooled(ui);
     const inCat = (t: string): boolean => {
-      switch (this.cat) {
+      switch (c) {
         case 'chassis': return (CHASSIS as string[]).includes(t) || t === 'ability';
         case 'elements': return (ELEMENTS as string[]).includes(t);
         case 'hardpoints': return (HARDPOINTS as string[]).includes(t);
@@ -425,26 +456,23 @@ export class Shop {
   }
 
   private get f(): Features { return this.ctx.features(); }
-  /** The category and tree chip on show (pointer hints chain through them). */
+  /** The category and tree on show (pointer hints chain through them). */
   view(): { cat: string; tree: string } { return { cat: this.cat, tree: this.tree }; }
 
-  /** Progressive reveal: categories, the Suggested line and the quantity chip (GameUi, every UiState). */
+  /** Progressive reveal: categories and the quantity chip (GameUi, every UiState). */
   setFeatures(f: Features): void {
     const key = `${f.elements}${f.hardpoints}${f.cross}${f.cores}${f.bulk}${f.chassisAll}${f.quartermaster}`;
     if (key === this.revealKey) return;
     this.revealKey = key;
     const cats = this.shownCats(f);
-    for (const [id, x] of this.catBtns) x.b.hidden = !cats.includes(id);
-    this.catRow.hidden = cats.length < 2;   // one category: its tree chips say enough
-    this.head.hidden = cats.length < 2;
     this.qtyChip.hidden = !f.bulk;
     this.el.classList.toggle('no-bulk', !f.bulk);
     if (!cats.includes(this.cat)) this.setCategory('chassis');
     this.syncQty();
-    this.chipKey = ''; this.viewKey = ''; this.decisionKey = '';
+    this.viewKey = ''; this.decisionKey = '';
   }
 
-  private shownCats(f: Features): Category[] {
+  private shownCats(f: Features = this.f): Category[] {
     return CATEGORIES.map((c) => c.id).filter((c) => c === 'chassis' || f[c]);
   }
 
@@ -469,31 +497,10 @@ export class Shop {
     this.el?.classList.toggle('qty-bulk', q !== 1);
   }
 
-  private syncSuggest(): void {
-    const open = prefs().suggestExpanded;
-    this.quick.classList.toggle('collapsed', !open);
-    attr(this.sgToggle, 'aria-expanded', open ? 'true' : 'false');
-    attr(this.sgToggle, 'aria-label', open ? 'Suggested purchases (collapse)' : 'Suggested purchases (expand)');
-  }
-
   /** Send one `buy` (count 1 = a single rank, the old command shape; 10; 0 = Max). */
   private sendBuy(e: ShopEntry, count: number): void {
     if (count !== 1) this.expectBulk(`of ${e.name}`);
     this.ctx.host.send(count === 1 ? { type: 'buy', node: e.node } : { type: 'buy', node: e.node, count });
-  }
-
-  private doBuyAll(): void {
-    const ui = this.ui;
-    if (!ui) return;
-    const plan = planBuyAll(cheapestAffordable(this.pooled(ui)), ui.run.scrap, this.qty);
-    if (!plan.cmds.length) return;
-    this.expectBulk(null);
-    for (const c of plan.cmds) this.ctx.host.send(c.count === 1 ? { type: 'buy', node: c.node } : { type: 'buy', node: c.node, count: c.count });
-  }
-
-  private doSpend(tree: string, name: string): void {
-    this.expectBulk(`in ${name}`);
-    this.ctx.host.send({ type: 'buy_cheapest', tree: tree as ShopEntry['tree'], count: this.qty });
   }
 
   /** The next Purchase events (within ~3 s) belong to a bulk buy: toast one summary. */
@@ -510,7 +517,6 @@ export class Shop {
     let any = false;
     for (const e of events) if (e.type === Ev.Purchase && e.data?.via !== 'quartermaster') { p.events.push(e); any = true; }   // automatic buys are not the player's
     if (!any || p.timer) return;
-    // Buy all sends up to three commands; give them a moment to land in the same summary
     p.timer = window.setTimeout(() => {
       if (this.pendingBulk === p) this.pendingBulk = null;
       const msg = bulkToast(p.events, p.where);
@@ -518,17 +524,11 @@ export class Shop {
     }, 350);
   }
 
-  private syncSort(): void {
-    const on = prefs().affordableFirst;
-    this.sortBtn.classList.toggle('on', on);
-    attr(this.sortBtn, 'aria-pressed', on ? 'true' : 'false');
-  }
-
   setCategory(c: Category): void {
     if (c === this.cat) return;
     this.cat = c; this.tree = '';
     setPref('shopCategory', c);
-    this.chipKey = ''; this.viewKey = ''; this.decisionKey = '';
+    this.viewKey = ''; this.decisionKey = '';
     if (this.ui) this.update(this.ui);
     this.body.scrollTop = 0;
     this.onViewChange?.();
@@ -541,27 +541,172 @@ export class Shop {
     if (STACKED.has(this.cat)) { this.scrollToSec(t); return; }   // one stacked view: scroll to the group
     this.viewKey = ''; this.decisionKey = '';
     if (this.ui) this.update(this.ui);
-    // keep the tree chips (or the decision rows) at the top of the view, never further down than where they sit
-    const top = this.decisions.offsetTop;
-    if (this.body.scrollTop > top) this.body.scrollTop = top;
+    this.body.scrollTop = 0;
   }
 
-  /** Stacked views (Cross, Cores): bring a group's section to the top once it is laid out. */
+  /** Bring a section (data-sec) to the top of the list once it is laid out (its header sticks under the breadcrumb). */
   private scrollToSec(sec: string): void {
     this.pendingSec = sec;
     requestAnimationFrame(() => {
       const s = this.pendingSec;
       this.pendingSec = null;
-      const el = s ? this.list.querySelector<HTMLElement>(`[data-sec="${s}"]`) : null;
-      if (el) this.body.scrollTop = Math.max(0, el.offsetTop - 4);
+      const el = s ? this.list.querySelector<HTMLElement>(`[data-sec="${CSS.escape(s)}"]`) : null;
+      if (el) this.body.scrollTop = Math.max(0, el.offsetTop - 2);
     });
   }
 
+  // ---------------------------------------------------------------- navigation: swipe, ← / →
+  /** Every revealed page with its trees (filled ones; stacked pages none), for the swipe order. */
+  private stops(ui: UiState): NavStop[] {
+    return navStops(this.shownCats().map((cat) => ({ cat, trees: STACKED.has(cat) ? [] : this.chips(ui, cat).filter((c) => !c.empty).map((c) => c.id) })));
+  }
+
+  /** Next (+1) / previous (-1) tree along the one flattened order (swipe on the list, ← / →). False at either end. */
+  step(dir: -1 | 1): boolean {
+    const ui = this.ui;
+    if (!ui) return false;
+    const next = stepStop(this.stops(ui), this.cat, this.tree, dir);
+    if (!next) return false;
+    this.closeMenu();
+    this.slide = dir;
+    if (next.cat !== this.cat) { this.cat = next.cat; this.tree = next.tree; setPref('shopCategory', next.cat); this.viewKey = ''; this.decisionKey = ''; if (next.tree) setPref('shopTree', next.tree); this.update(ui); this.body.scrollTop = 0; this.onViewChange?.(); }
+    else this.setTree(next.tree);
+    return true;
+  }
+
+  /** Horizontal swipes on the list (not from the left edge: that is the system's swipe back to Battle). */
+  private wireSwipe(): void {
+    let s: { x: number; y: number; id: number } | null = null;
+    let swallowUntil = 0;
+    this.body.addEventListener('touchstart', (e) => {
+      const t = e.touches[0];
+      const tgt = e.target as Element | null;
+      // one finger, on the list, not on a control that is pressed and held (a Buy button, a switch, a picker card)
+      s = e.touches.length === 1 && t && !tgt?.closest('button, input, label, select, .pick-card, .fork-cards') ? { x: t.clientX, y: t.clientY, id: t.identifier } : null;
+    }, { passive: true });
+    this.body.addEventListener('touchend', (e) => {
+      const st = s;
+      s = null;
+      if (!st) return;
+      const t = [...e.changedTouches].find((x) => x.identifier === st.id);
+      if (!t) return;
+      const d = swipeDir(st.x, st.y, t.clientX, t.clientY);
+      if (d && this.step(d)) swallowUntil = performance.now() + 400;
+    }, { passive: true });
+    this.body.addEventListener('touchcancel', () => { s = null; }, { passive: true });
+    // the tap that ended a swipe never also unfolds a row
+    this.body.addEventListener('click', (e) => { if (performance.now() < swallowUntil) { e.stopPropagation(); e.preventDefault(); } }, true);
+  }
+
+  // ---------------------------------------------------------------- breadcrumb menus
+  private closeMenu(): void { const m = this.menu; this.menu = null; m?.close(); }
+
+  private openMenu(anchor: HTMLButtonElement, title: string, rows: HTMLElement[], cls: string): void {
+    this.closeMenu();
+    const body = h('div', { class: `crumb-menu-list ${cls}`, attrs: { role: 'menu', 'aria-label': title } }, ...rows);
+    attr(anchor, 'aria-expanded', 'true');
+    const m = openModal({ title, body, variant: 'popover', className: 'crumb-menu', anchor, returnFocus: anchor,
+      onClose: () => { attr(anchor, 'aria-expanded', 'false'); if (this.menu === m) this.menu = null; } });
+    this.menu = m;
+    (body.querySelector<HTMLElement>('[aria-current="true"]') ?? body.querySelector<HTMLElement>('button'))?.focus({ preventScroll: true });
+  }
+
+  /** One menu row: label, a quiet count, ★ (holds a suggested buy), a dot + "New" (a decision waits). */
+  private menuRow(o: { label: string; sub?: boolean; current?: boolean; count?: number; star?: boolean; dot?: string | null; hint?: string; empty?: boolean; onPick: () => void }): HTMLButtonElement {
+    const parts: (HTMLElement | string)[] = [h('span', { class: 'cm-label', text: o.label })];
+    if (o.count) parts.push(h('span', { class: 'cm-count', text: String(o.count), attrs: { 'aria-hidden': 'true' } }));
+    if (o.star) parts.push(h('span', { class: 'cm-star', text: '★', attrs: { 'aria-hidden': 'true' } }));
+    if (o.dot) parts.push(h('span', { class: 'cm-new' }, h('span', { class: 'cat-dot', attrs: { 'aria-hidden': 'true' } }), h('span', { text: 'New' })));
+    const b = button(parts, () => { this.closeMenu(); o.onPick(); }, { class: `btn ghost cm-row${o.sub ? ' sub' : ''}${o.current ? ' current' : ''}${o.empty ? ' empty' : ''}` });
+    b.setAttribute('role', 'menuitem');
+    if (o.current) attr(b, 'aria-current', 'true');
+    if (o.hint) b.dataset.hint = o.hint;
+    attr(b, 'aria-label', `${o.label}${o.count ? `, ${o.count} affordable` : ''}${o.star ? ', has a suggested upgrade' : ''}${o.dot ? ` (${o.dot})` : ''}`);
+    return b;
+  }
+
+  /** Jump links to the sections of the list on show (indented under the current page or tree). */
+  private sectionRows(): HTMLElement[] {
+    return this.sections.map((s) => this.menuRow({ label: s.label, sub: true, onPick: () => this.scrollToSec(s.sec) }));
+  }
+
+  /** "Page ▾": the revealed pages in order; a stacked page on show lists its sections under it. */
+  private openPageMenu(): void {
+    const ui = this.ui;
+    if (!ui) return;
+    const cats = this.shownCats();
+    if (cats.length < 2 && !STACKED.has(this.cat)) return;
+    const rows: HTMLElement[] = [];
+    for (const c of CATEGORIES) {
+      if (!cats.includes(c.id)) continue;
+      const cur = c.id === this.cat;
+      rows.push(this.menuRow({ label: c.label, current: cur, star: this.starIn(ui, c.id), dot: this.decisionIn(ui, c.id), hint: `cat-${c.id}`,
+        onPick: () => { if (cur) this.body.scrollTop = 0; else this.setCategory(c.id); } }));
+      if (cur && STACKED.has(c.id)) rows.push(...this.sectionRows());
+    }
+    this.openMenu(this.pageBtn, 'Upgrade pages', rows, 'page-menu');
+  }
+
+  /** "Tree ▾": the page's trees (and empty slots); the current tree lists its sections under it. */
+  private openTreeMenu(): void {
+    const ui = this.ui;
+    if (!ui || STACKED.has(this.cat)) return;
+    const forks = new Set(this.forksOf(ui, this.cat));
+    const rows: HTMLElement[] = [];
+    for (const c of this.chips(ui, this.cat)) {
+      const cur = c.id === this.tree;
+      if (c.empty) {
+        rows.push(this.menuRow({ label: '+ Empty slot', empty: true, current: cur, hint: 'slot-menu', onPick: () => this.setTree(c.id) }));
+        continue;
+      }
+      rows.push(this.menuRow({ label: c.label, current: cur, count: this.affordableCount(ui, c.id), star: this.starInTree(ui, c.id), dot: forks.has(c.id) ? 'Doctrine fork open' : null,
+        onPick: () => { if (cur) this.body.scrollTop = 0; else this.setTree(c.id); } }));
+      if (cur) rows.push(...this.sectionRows());
+    }
+    this.openMenu(this.treeBtn, `${CATEGORIES.find((c) => c.id === this.cat)?.label ?? ''} trees`, rows, 'tree-menu');
+  }
+
+  /** Does `cat` hold a ★ Suggested row? */
+  private starIn(ui: UiState, cat: Category): boolean {
+    if (!this.suggested.size || cat === 'cores') return false;
+    return this.catEntries(ui, cat).some((e) => this.suggested.has(e.node));
+  }
+  private starInTree(ui: UiState, tree: string): boolean {
+    return this.suggested.size > 0 && this.entriesFor(ui, tree).some((e) => this.suggested.has(e.node));
+  }
+
+  /** The breadcrumb line: page, tree (pages with two or more trees or slots), dots, counts. */
+  private updateCrumbs(ui: UiState, all: Chip[], chipsOn: boolean, forks: Set<string>): void {
+    const cats = this.shownCats();
+    const label = CATEGORIES.find((c) => c.id === this.cat)?.label ?? '';
+    text(this.pageLabel, label);
+    const menuable = cats.length > 1 || STACKED.has(this.cat);
+    this.pageBtn.classList.toggle('static', !menuable);
+    this.pageBtn.dataset.pages = cats.join(',');   // the revealed pages (tests, and the menu's source)
+    show(this.pageCaret, menuable);
+    const others = cats.filter((c) => c !== this.cat).map((c) => this.decisionIn(ui, c)).filter(Boolean);
+    show(this.pageDot, others.length > 0);
+    attr(this.pageBtn, 'aria-label', `Page: ${label}${menuable ? '. Choose a page' : ''}${others.length ? ` (${others[0]} on another page)` : ''}`);
+    this.pageBtn.tabIndex = menuable ? 0 : -1;
+    show(this.treeBtn, chipsOn);
+    show(this.sep, chipsOn);
+    if (chipsOn) {
+      const cur = all.find((c) => c.id === this.tree);
+      const name = cur?.empty ? 'Empty slot' : cur?.label ?? '';
+      text(this.treeLabel, name);
+      const n = cur && !cur.empty ? this.affordableCount(ui, cur.id) : 0;
+      text(this.treeCount, n > 0 ? String(n) : '');
+      const otherFork = [...forks].some((t) => t !== this.tree);
+      show(this.treeDot, otherFork);
+      attr(this.treeBtn, 'aria-label', `Tree: ${name}${n > 0 ? `, ${n} affordable` : ''}. Choose a tree${otherFork ? ' (Doctrine fork open in another tree)' : ''}`);
+    }
+  }
+
   // ---------------------------------------------------------------- chips
-  /** The trees of the category (open slots of Elements / Hardpoints are `slot:<i>`; stacked views list their groups). */
-  private chips(ui: UiState): Chip[] {
+  /** The trees of a category (open slots of Elements / Hardpoints are `slot:<i>`; stacked views list their groups). */
+  private chips(ui: UiState, cat: Category = this.cat): Chip[] {
     const b = ui.build, r = ui.run;
-    switch (this.cat) {
+    switch (cat) {
       case 'chassis': return CHASSIS.map((id) => ({ id, label: TREE_LABEL[id] }));
       case 'elements': {
         const n = Math.max(r.attunementSlotsOpen, b.attunements.length);
@@ -621,7 +766,7 @@ export class Shop {
     return null;
   }
 
-  /** Show a category / tree (death card, "Next" chip, Build screen) and bring Upgrades forward. */
+  /** Show a category / tree (death card, Build screen) and bring Upgrades forward. */
   open(cat: Category, tree?: string): void {
     this.setCategory(cat);
     if (tree) this.setTree(tree);
@@ -644,113 +789,42 @@ export class Shop {
   }
 
   // ---------------------------------------------------------------- update
-  update(ui: UiState, scrapRate = 0): void {
+  update(ui: UiState, _scrapRate = 0): void {
     this.syncQty();
     this.ui = ui;
-    this.updateSuggest(ui, scrapRate);
     this.updateBottleneck(ui);
-    if (this.qmHere()) this.syncQm(ui);
-    this.updateSpend(ui);
-
-    for (const c of CATEGORIES) {
-      const cb = this.catBtns.get(c.id)!;
-      if (cb.b.hidden) continue;
-      const why = this.decisionIn(ui, c.id);
-      show(cb.dot, !!why);
-      attr(cb.b, 'aria-label', why ? `${c.label} (${why})` : c.label);
-      cb.b.title = why ? `${why[0].toUpperCase()}${why.slice(1)}` : '';
-      cb.b.classList.toggle('active', c.id === this.cat);
-      attr(cb.b, 'aria-selected', c.id === this.cat ? 'true' : 'false');
-    }
+    this.updateSuggest(ui);
 
     const all = this.chips(ui);
     if (!all.some((c) => c.id === this.tree)) this.tree = all.find((c) => !c.empty)?.id ?? all[0]?.id ?? '';
     const stacked = STACKED.has(this.cat);
-    const trees = stacked ? [] : all.filter((c) => !c.empty);
-    const chipsOn = trees.length >= 2;
-    const ck = this.cat + '|' + trees.map((c) => c.id + c.label).join(',');
-    if (ck !== this.chipKey) {
-      this.chipKey = ck;
-      this.treeBtns = new Map();
-      clear(this.treeRow);
-      for (const c of trees) {
-        const n = h('span', { class: 'count', attrs: { 'aria-hidden': 'true' } });
-        const dot = h('span', { class: 'chip-dot', attrs: { 'aria-hidden': 'true' } });
-        const b = button([c.label, n, dot], () => this.setTree(c.id), { class: 'chip tree-chip' });
-        b.setAttribute('role', 'tab');
-        this.treeBtns.set(c.id, { b, n, dot });
-        this.treeRow.appendChild(b);
-      }
-    }
-    show(this.treeRow, chipsOn);
+    // the tree crumb: a page with two or more trees (empty slots count: the menu opens their picker)
+    const chipsOn = !stacked && all.length >= 2;
     const forks = new Set(this.forksOf(ui, this.cat));
-    for (const [id, tb] of this.treeBtns) {
-      tb.b.classList.toggle('active', id === this.tree);
-      attr(tb.b, 'aria-selected', id === this.tree ? 'true' : 'false');
-      const n = this.affordableCount(ui, id);
-      text(tb.n, n > 0 ? String(n) : '');
-      show(tb.dot, forks.has(id));
-      attr(tb.b, 'aria-label', `${TREE_LABEL[id as TreeId] ?? id}${n > 0 ? `, ${n} affordable` : ''}${forks.has(id) ? ', Doctrine fork open' : ''}`);
-    }
+    this.updateCrumbs(ui, all, chipsOn, forks);
     this.updateDecisions(ui, all, forks);
+    this.syncQm(ui);
 
     const items = this.fold(this.plan(ui, chipsOn), stacked);
-    const sortKey = prefs().affordableFirst ? items.map((i) => (i.t === 'node' ? (i.e.affordable ? 1 : 0) : '')).join('') : '';
-    const key = `${this.cat}|${stacked ? '' : this.tree}|${chipsOn}|${sortKey}|` + items.map((i) => i.t === 'node' ? i.e.node : i.t === 'fork' ? `fork:${forkKey(ui, i.tree)}`
+    const key = `${this.cat}|${stacked ? '' : this.tree}|${chipsOn}|${this.qmPlace(ui)}|` + items.map((i) => i.t === 'node' ? i.e.node : i.t === 'fork' ? `fork:${forkKey(ui, i.tree)}`
       : i.t === 'el' ? `el:${i.key}` : i.t === 'fold' ? `fold:${i.key}:${this.foldsOpen.has(i.key)}:${i.list.map((e) => e.node).join('+')}` : `${i.t}:${i.text}`).join(',');
     if (key !== this.viewKey) {
       this.viewKey = key;
-      this.render(ui, items, chipsOn);
-      this.updateSpend(ui);
+      this.render(ui, items);
     } else {
       for (const it of items) {
         if (it.t === 'node') this.rows.get(it.e.node)?.update(it.e);
         else if (it.t === 'fold' && this.foldsOpen.has(it.key)) for (const e of it.list) this.rows.get(e.node)?.update(e);
       }
     }
+    for (const [id, r] of this.rows) r.setSuggested(this.suggested.has(id));
   }
 
-  /** The Suggested line: chips + Buy all, else the next buy and its ETA, else "All owned". */
-  private updateSuggest(ui: UiState, scrapRate: number): void {
-    const sugg = cheapestAffordable(this.pooled(ui));
-    this.quickList.sync(sugg, (e) => e.node);
-    show(this.quick, this.f.bulk);
-    const empty = this.quickList.rows.size === 0;
-    const plan = planBuyAll(sugg, ui.run.scrap, this.qty);
-    show(this.buyAll, plan.cmds.length > 0);
-    show(this.sgToggle, !empty);
-    text(this.sgCount, sugg.length ? String(sugg.length) : '');
-    // the late-game bottleneck line is up for this category while every Suggested buy lives in another one: say so
-    const catNodes = new Set(this.catEntries(ui).map((e) => e.node));
-    const bn = this.f.forecast && this.f.prestigeTab && !this.decisionIn(ui, this.cat) && scrapBottleneck(this.catEntries(ui), ui.run.scrap);
-    text(this.sgTitle, bn && sugg.length && sugg.every((e) => !catNodes.has(e.node)) ? 'Suggested elsewhere' : 'Suggested');
-    if (plan.cmds.length) {
-      const plus = plan.open ? '+' : '';
-      text(this.buyAllText, 'Buy all');   // the rank counts live on the chips; keeps the line short in a 300 px column
-      const pk = `${plan.total}${plus}`;
-      if (this.buyAllPrice.dataset.v !== pk) { this.buyAllPrice.dataset.v = pk; this.buyAllPrice.replaceChildren(icon('scrap', 'ico tiny'), fmtNum(plan.total) + plus); }
-      this.buyAll.title = `${plan.ranks}${plus} rank${plan.ranks === 1 ? '' : 's'}`;
-      attr(this.buyAll, 'aria-label', `Buy all suggested: ${plan.open ? 'at least ' : ''}${plan.ranks} rank${plan.ranks === 1 ? '' : 's'} for ${plan.open ? 'at least ' : ''}${fmtNum(plan.total)} Scrap`);
-    }
-    const next = empty ? nextPurchase(ui.shop, ui.run.scrap, scrapRate) : null;
-    // Everything owned (the Prestige Wall): say so and point at the Forecast instead of "nothing affordable yet".
-    const allOwned = empty && !next && !ui.shop.some((e) => e.currency === 'scrap' && e.rank < e.maxRank);
-    show(this.doneChip, allOwned);
-    show(this.noneText, empty && !next && !allOwned);
-    show(this.nextChip, !!next);
-    this.quick.classList.toggle('empty', empty);
-    if (next) {
-      this.nextTree = next.entry.tree;
-      const e = next.entry;
-      text(this.nextLabel, e.rank > 0 && e.maxRank > 1 ? `${e.name} ${e.rank + 1}` : e.name);
-      if (this.nextPrice.dataset.v !== String(e.cost)) { this.nextPrice.dataset.v = String(e.cost); this.nextPrice.replaceChildren(icon('scrap', 'ico tiny'), fmtNum(e.cost)); }
-      text(this.nextEta, next.eta !== null && next.eta > 0 ? `~${fmtDuration(next.eta)}` : '');
-      attr(this.nextChip, 'aria-label', `Next upgrade: ${e.name}, ${fmtNum(e.cost)} Scrap${next.eta ? `, affordable in about ${fmtDuration(next.eta)}` : ''}. Opens its tree.`);
-    }
-    // the explainer only for the first few purchases, and only while the chips it explains are open
-    const coach = prefs().buyCoach < COACH_BUYS && !empty;
-    show(this.coach, coach);
-    this.quickRow.classList.toggle('coach', coach);
+  /** ★ Suggested: at most SUGGEST_MAX rows across the screen (only once 'bulk' is revealed, like the old Suggested line). */
+  private updateSuggest(ui: UiState): void {
+    this.suggested = this.f.bulk ? suggestedNodes(this.pooled(ui)) : new Set();
+    // the explainer only for the first few purchases, and only while something carries the tag
+    show(this.coach, prefs().buyCoach < COACH_BUYS && this.suggested.size > 0);
   }
 
   /**
@@ -794,33 +868,12 @@ export class Shop {
     this.decisions.replaceChildren(...rows);
     show(this.decisions, rows.length > 0);
   }
-
-  /** Relabel every "Spend here" button: Max uses the sim's shopTreeTotals (approximate). */
-  private updateSpend(ui: UiState): void {
-    const q = this.qty;
-    for (const sp of this.spends) {
-      if (!sp.btn.isConnected) continue;
-      const s = treeSpend(ui.shop.filter((e) => inBulkTree(e, sp.tree)), ui.run.scrap, q, ui.shopTreeTotals?.[sp.tree]);
-      const key = `${q}|${s.ranks}|${s.total}`;
-      if (key === sp.key) continue;
-      sp.key = key;
-      text(sp.line, spendLabel(s, q));
-      disable(sp.btn, s.ranks === 0);
-      attr(sp.btn, 'aria-label', s.ranks === 0 ? `Spend here: nothing affordable in ${sp.name}` : `Spend here: buy the cheapest ${q === 1 ? 'rank' : `${s.ranks} ranks`} in ${sp.name} for about ${fmtNum(s.total)} Scrap`);
-    }
-  }
-
-  private sorted(list: ShopEntry[]): ShopEntry[] {
-    if (!prefs().affordableFirst) return list;
-    return list.map((e, i) => ({ e, i })).sort((a, b) => (Number(b.e.affordable) - Number(a.e.affordable)) || a.i - b.i).map((x) => x.e);
-  }
-
   /** The view's items before folding. */
   private plan(ui: UiState, chipsOn: boolean): Item[] {
     const chip = this.tree;
     const out: Item[] = [];
     const byId = new Map(ui.shop.map((e) => [e.node, e]));
-    const nodes = (ids: string[]): Item[] => this.sorted(ids.map((id) => byId.get(id)).filter((e): e is ShopEntry => !!e)).map((e) => ({ t: 'node', e }));
+    const nodes = (ids: string[]): Item[] => (ids.map((id) => byId.get(id)).filter((e): e is ShopEntry => !!e)).map((e) => ({ t: 'node', e }));
 
     if (this.cat === 'elements' || this.cat === 'hardpoints') {
       const isEl = this.cat === 'elements';
@@ -840,8 +893,8 @@ export class Shop {
 
     if (this.cat === 'cross') {
       for (const g of CROSS_GROUPS) {
-        const list = this.sorted(this.pooled(ui).filter((e) => e.tree === g.id));
-        out.push({ t: 'head', text: g.label, sec: g.id, spend: this.f.bulk && list.length ? g.id : undefined });
+        const list = (this.pooled(ui).filter((e) => e.tree === g.id));
+        out.push({ t: 'head', text: g.label, sec: g.id });
         if (!list.length) out.push({ t: 'note', text: g.empty });
         for (const e of list) out.push({ t: 'node', e });
       }
@@ -850,7 +903,7 @@ export class Shop {
 
     if (this.cat === 'cores') {
       out.push({ t: 'head', text: 'Exotics', sec: 'exotic', sub: '2 Cores each, one per tree, once its Doctrine fork is reached' });
-      const list = this.sorted(ui.shop.filter((e) => e.kind === 'exotic'));
+      const list = (ui.shop.filter((e) => e.kind === 'exotic'));
       if (!list.length) out.push({ t: 'note', text: 'No Exotics visible yet.' });
       for (const e of list) out.push({ t: 'node', e });
       out.push({ t: 'head', text: 'Refit', sec: 'refit', sub: `${REFIT_CORES} Cores: swap a mounted hardpoint. 60% of its Scrap comes back; its ranks are lost.` });
@@ -871,7 +924,7 @@ export class Shop {
     if (!t) return out;
     if (!this.f.chassisAll) { out.push({ t: 'head', text: t.name }, ...nodes(t.shared.map((n) => n.id).filter((id) => STARTER_IDS.has(id)))); return out; }   // stage 0: 3 stats
     // the chip row names the tree; without it (one tree in the category) the heading does
-    out.push({ t: 'head', text: chipsOn ? 'Core nodes' : `${t.name} core nodes`, spend: this.f.bulk ? t.id : undefined });
+    out.push({ t: 'head', text: chipsOn ? 'Core nodes' : `${t.name} core nodes` });
     // Reachability: a Borrowed Blade takes base nodes only; mounting it in an open slot opens the rest
     if ((ui.extraSystems ?? []).some((x) => x.system === t.id && x.via === 'borrowed')) {
       const free = this.openSlotsOf(ui, false).length > 0;
@@ -897,8 +950,8 @@ export class Shop {
       out.push({ t: 'node', e: ex });
     }
     if (t.id === 'reactor') {
-      // ability rank nodes (visible while the ability is slotted; Reactor's "Spend here" buys them too)
-      const ab = this.sorted(ui.shop.filter((e) => e.tree === 'ability'));
+      // ability rank nodes (visible while the ability is slotted)
+      const ab = (ui.shop.filter((e) => e.tree === 'ability'));
       out.push({ t: 'head', text: 'Ability ranks', sub: 'One per slotted ability (slot them on the Battle bar or in Build).' });
       if (!ab.length) out.push({ t: 'note', text: 'No ability is slotted: slot one to upgrade it here.' });
       for (const e of ab) out.push({ t: 'node', e });
@@ -943,11 +996,11 @@ export class Shop {
   }
 
   // ---------------------------------------------------------------- render
-  private render(ui: UiState, items: Item[], chipsOn: boolean): void {
+  private render(ui: UiState, items: Item[]): void {
     const frag = document.createDocumentFragment();
     let section: HTMLElement | null = null;
     const used = new Set<string>();
-    this.spends = [];
+    const sections: Section[] = [];
     const nodeRow = (e: ShopEntry): HTMLElement => {
       let row = this.rows.get(e.node);
       if (!row) { row = new NodeRow(e, (x, count) => this.sendBuy(x, count), () => this.qty, this.descOpen); this.rows.set(e.node, row); }
@@ -955,20 +1008,13 @@ export class Shop {
       used.add(e.node);
       return row.el;
     };
-    let firstHead: HTMLElement | null = null;
     for (const it of items) {
       if (it.t === 'head') {
-        const title = h('h3', { class: 'sec-title' }, it.text, it.sub ? h('span', { class: 'sec-sub', text: it.sub }) : null);
-        const head = h('div', { class: 'sec-head' }, title);
-        if (it.spend) {
-          const tree = it.spend, name = it.text;
-          const line = h('span', { class: 'spend-line' });
-          const btn = button([h('span', { class: 'spend-title', text: 'Spend here' }), line], () => this.doSpend(tree, name), { class: 'btn spend-btn', title: 'Buy the cheapest upgrades here (uses the buy quantity)' });
-          this.spends.push({ tree, name, btn, line, key: '' });
-          head.appendChild(btn);
-        }
-        firstHead ??= head;
-        section = h('div', { class: 'shop-section', data: it.sec ? { sec: it.sec } : undefined }, head);
+        // a light header that sticks under the breadcrumb while its section scrolls (no buttons in it)
+        const sec = it.sec ?? `s${sections.length}`;
+        sections.push({ sec, label: it.text });
+        const head = h('div', { class: 'sec-head' }, h('h3', { class: 'sec-title', text: it.text }));
+        section = h('div', { class: 'shop-section', data: { sec } }, head, it.sub ? h('p', { class: 'sec-sub', text: it.sub }) : null);
         frag.appendChild(section);
         continue;
       }
@@ -994,14 +1040,18 @@ export class Shop {
       else host.appendChild(it.make());
     }
     for (const k of [...this.rows.keys()]) if (!used.has(k)) this.rows.delete(k);
-    if (this.qmHere()) { frag.insertBefore(this.qmWrap, frag.firstChild); this.syncQm(ui); }
+    this.sections = sections;
+    if (this.qmPlace(ui) === 'list') { frag.insertBefore(this.qmWrap, frag.firstChild); this.syncQm(ui); }
     this.list.replaceChildren(frag);
-    // sort: on the list's first heading, beside "Spend here" (nothing to sort in a picker)
-    if (firstHead) firstHead.insertBefore(this.sortBtn, firstHead.querySelector('.spend-btn'));
-    this.sortBtn.hidden = !firstHead;
-    show(this.listHead, chipsOn);
-    // the chip row fades at its right edge only when it scrolls sideways
-    requestAnimationFrame(() => this.treeRow.classList.toggle('more', this.treeRow.scrollWidth > this.treeRow.clientWidth + 1));
+    // a swipe / ← → slides the new tree in from its side (none with reduced motion: CSS)
+    if (this.slide) {
+      const cls = this.slide > 0 ? 'slide-next' : 'slide-prev';
+      this.slide = 0;
+      this.list.classList.remove('slide-next', 'slide-prev');
+      void this.list.offsetWidth;
+      this.list.classList.add(cls);
+      window.setTimeout(() => this.list.classList.remove(cls), 260);
+    }
   }
 
   /** Attune / mount picker for an open slot (the Upgrades slot row and the Build screen's Mount button). */

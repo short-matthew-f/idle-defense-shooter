@@ -6,6 +6,7 @@ export interface Prefs {
   /** Legacy (the old intro cards); the progressive reveal (progression.ts, coach.ts) replaced them. */
   onboarded: boolean;
   bloom: boolean;
+  /** Unused since the Upgrades breadcrumb redesign (no sort toggle); kept for save compatibility. */
   affordableFirst: boolean;
   /** Desktop side panel shown (B toggles it). */
   panelOpen: boolean;
@@ -17,7 +18,7 @@ export interface Prefs {
   buyCoach: number;
   /** Upgrades quantity selector: ranks per Buy tap (1, 10, 0 = Max). Q cycles it. */
   buyQty: 1 | 10 | 0;
-  /** The Suggested line at the top of the Upgrades list is expanded to its chips (collapsed to one line by default). */
+  /** Unused since the Upgrades breadcrumb redesign (the Suggested line is gone); kept for save compatibility. */
   suggestExpanded: boolean;
   /** Sound (audio pass): slider values 0..1 (gain = value², see src/audio/engine.ts), mute, music switch. */
   soundMaster: number;

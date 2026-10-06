@@ -132,10 +132,9 @@ describe('pointer hints: abilities, offers, bulk, Prestige', () => {
     expect(nextHint(ui({ draft: true }), ctx(f5, { live: { draftWaiting: true } }))).toMatchObject({ id: 'anomaly', target: 'tab-build' });
     expect(nextHint(ui({ draft: true }), ctx(f5, { nav: { screen: 'build', battle: false }, live: { draftWaiting: true } }))).toMatchObject({ target: 'draft', final: true });
   });
-  it('bulk: only on Upgrades, Buy all when it shows, else the quantity selector', () => {
+  it('bulk: only on Upgrades, on the quantity selector', () => {
     const f5 = feats(15);
     expect(nextHint(ui(), ctx(f5))).toBeNull();
-    expect(nextHint(ui(), ctx(f5, { nav: { screen: 'upgrades', battle: false }, live: { buyAll: true } }))).toMatchObject({ id: 'bulk', target: 'buy-all' });
     expect(nextHint(ui(), ctx(f5, { nav: { screen: 'upgrades', battle: false } }))).toMatchObject({ id: 'bulk', target: 'qty' });
   });
   it('Prestige: the tab when the Forecast first recommends it; retires on opening it', () => {
@@ -149,7 +148,8 @@ describe('pointer hints: abilities, offers, bulk, Prestige', () => {
     const q = ui({ prestige: 1, qm: { unlocked: true, on: false } });
     expect(nextHint(q, ctx(f7, { coach: { current: QM_COACH, seen: new Set() } }))).toMatchObject({ id: 'quartermaster', target: 'qm-turn-on', final: true });
     expect(nextHint(q, ctx(f7, { nav: { screen: 'upgrades', battle: false }, done: new Set(['bulk']) }))).toMatchObject({ target: 'quartermaster-toggle' });
-    expect(nextHint(q, ctx(f7, { nav: { screen: 'upgrades', battle: false }, shop: { cat: 'elements', tree: 'fire' }, done: new Set(['bulk']) }))).toMatchObject({ target: 'cat-chassis', final: false });
+    // the switch sits in the breadcrumb line on every page: no detour through Chassis
+    expect(nextHint(q, ctx(f7, { nav: { screen: 'upgrades', battle: false }, shop: { cat: 'elements', tree: 'fire' }, done: new Set(['bulk']) }))).toMatchObject({ target: 'quartermaster-toggle', final: true });
     expect(nextHint(ui({ prestige: 1, qm: { unlocked: true, on: true } }), ctx(f7))).toBeNull();
   });
 });

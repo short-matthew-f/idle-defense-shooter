@@ -41,7 +41,7 @@ import { BuildScreen } from './build';
 import { MoreScreen, PrestigeScreen, type MoreSub } from './screens';
 import { Shell } from './shell';
 import { WalletBar, updateLiveWallets, type WalletView } from './wallet';
-import { anyModalOpen, mountModalLayer } from './modal';
+import { anyModalOpen, mountModalLayer, topModalClass } from './modal';
 import { ArenaLabel, mountA11y } from './a11y';
 import { announce, mountAnnouncer } from './announce';
 import { SrWatch } from './sr-watch';
@@ -179,7 +179,7 @@ export class GameUi {
       nav: () => ({ screen: (['upgrades', 'build', 'prestige', 'more'] as const).find((s) => this.shell.isShown(s)) ?? null, battle: this.shell.battleVisible }),
       shop: () => this.shop.view(),
       coach: () => (this.coach.el.hidden ? null : this.coach.el.dataset.coach ?? null),   // ladder lines and extras alike
-      blocked: () => anyModalOpen() || this.death.visible || this.attn.hintsHeld,
+      blocked: () => (anyModalOpen() && topModalClass() !== 'crumb-menu') || this.death.visible || this.attn.hintsHeld,   // the Upgrades page menu is a hint step
       armed: () => this.abilities.arming.armed,
       boonChip: () => !this.boonOffer.chip.hidden,
       draftWaiting: () => this.draft.pending,
@@ -393,6 +393,10 @@ export class GameUi {
     else if (k === 'p') { const ui = this.latest; if (ui && f.runControls) this.ctx.host.send({ type: 'set_mode', mode: ui.run.mode === 'push' ? 'patrol' : 'push' }); }
     else if (k === 'b') this.shell.togglePanel();
     else if (k === 'f') { if (f.forecast) this.open('forecast'); }
+    else if ((k === 'arrowleft' || k === 'arrowright') && this.shell.isShown('upgrades')) {
+      // Upgrades: previous / next tree (the keyboard twin of the list swipe)
+      if (this.shop.step(k === 'arrowleft' ? -1 : 1)) e.preventDefault();
+    }
     else if (k === 'q') {
       if (!f.bulk) return;   // no quantity selector yet: Q does nothing
       const q = this.shop.cycleQty();
