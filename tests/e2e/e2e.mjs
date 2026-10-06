@@ -530,8 +530,8 @@ async function phone() {
   const s5 = await state();
   check('phone: sub-screen Back → More list → Battle', subVisible && s3.hist?.sub === 'settings' && s4.body.includes('tab-more') && listVisible && s5.body.includes('tab-battle'), { s3: s3.hist, s4: s4.hist, s5: s5.hist });
 
-  // the status strip returns to Battle
-  await tab(page, 'build');
+  // the status strip returns to Battle (on More: the breadcrumb screens Upgrades / Build / Prestige hide it)
+  await tab(page, 'more');
   const strip = page.locator('.status-strip');
   const stripText = (await strip.textContent()) ?? '';
   await strip.tap();
