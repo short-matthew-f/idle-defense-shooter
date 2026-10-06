@@ -4,13 +4,13 @@
 .anomaly-card.r-rare { --rc: var(--r-rare); }
 .anomaly-card.r-paradox { --rc: var(--r-paradox); border-style: double; border-width: 4px; }
 .anomaly-card.r-cursed { --rc: var(--r-cursed); border-style: dashed; }
-.an-rarity { display: flex; align-items: center; gap: 6px; color: var(--rc); font-size: 14px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
-.an-name { font-size: 17px; font-weight: 700; }
-.an-desc { margin: 0; font-size: 14px; color: var(--text-dim); line-height: 1.4; flex: 1; }
+.an-rarity { display: flex; align-items: center; gap: 6px; color: var(--rc); font-size: 0.875rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+.an-name { font-size: 1.0625rem; font-weight: 700; }
+.an-desc { margin: 0; font-size: 0.875rem; color: var(--text-dim); line-height: 1.4; flex: 1; }
 .an-needs { display: flex; flex-wrap: wrap; gap: 4px; }
 .tag.missing { color: var(--warn); border-color: var(--warn); }
 .anomaly-card .btn { margin-top: 4px; }
-.draft-timer { margin: 10px 0 0; font-size: 14px; color: var(--text-dim); }
+.draft-timer { margin: 10px 0 0; font-size: 0.875rem; color: var(--text-dim); }
 .draft-foot { display: grid; grid-template-columns: auto 1fr 1fr; gap: 8px; }
 @media (min-width: 600px) { .draft-foot { grid-template-columns: 1fr auto auto; } .draft-foot > :first-child { justify-self: start; } }
 /* short viewports (a landscape phone): each card's Pick sticks to the bottom of the dialog's scroller, so it is always in

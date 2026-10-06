@@ -26,16 +26,16 @@
 }
 .bo-card:hover { background: var(--bg-3); }
 .bo-card.on { border-color: var(--accent); border-top-color: var(--bc); background: color-mix(in srgb, var(--accent) 14%, var(--bg-2)); box-shadow: 0 0 0 1px var(--accent); }
-.bo-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; font-size: 14px; line-height: 17px; font-weight: 700; }
+.bo-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; font-size: 0.875rem; line-height: 17px; font-weight: 700; }
 .bo-cat { display: inline-flex; align-items: center; gap: 3px; color: var(--bc); }
 .tag.rare { gap: 3px; color: var(--text); }
 .bo-rare-meta { display: none; align-items: center; gap: 3px; color: var(--text); font-weight: 600; }
 .bo-rare-meta .ico { color: var(--r-rare); }
 .tag.rare .ico { color: var(--r-rare); width: 13px; height: 13px; }
 .bo-meta .ico.tiny { width: 14px; height: 14px; }
-.bo-name { font-size: 15px; line-height: 18px; font-weight: 700; overflow-wrap: anywhere; }
+.bo-name { font-size: 0.9375rem; line-height: 18px; font-weight: 700; overflow-wrap: anywhere; }
 .bo-short {
-  font-size: 14px; line-height: 17px; color: var(--text-dim); overflow: hidden;
+  font-size: 0.875rem; line-height: 17px; color: var(--text-dim); overflow: hidden;
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow-wrap: break-word;
 }
 .bo-needs { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 1px; }
@@ -44,7 +44,7 @@
 .bo-sel { position: absolute; top: 3px; right: 3px; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: var(--on-accent); }
 .bo-sel .ico.tiny { width: 14px; height: 14px; stroke-width: 3; }
 .bo-detail { margin: 5px 2px 0; display: flex; flex-direction: column; gap: 3px; }
-.bo-detail p { margin: 0; font-size: 14px; line-height: 1.35; color: var(--text-dim); }
+.bo-detail p { margin: 0; font-size: 0.875rem; line-height: 1.35; color: var(--text-dim); }
 .bo-desc b { color: var(--text); }
 .bo-replace { display: flex; align-items: center; gap: 6px; color: var(--warn) !important; }
 .bo-replace > span { flex: 1; min-width: 0; }
@@ -56,7 +56,7 @@
 @media (max-height: 800px) {
   .bo-card { padding: 3px 6px 4px; gap: 1px; border-top-width: 2px; }
   .bo-meta, .bo-short { line-height: 16px; }
-  .bo-name { font-size: 14px; line-height: 16px; }
+  .bo-name { font-size: 0.875rem; line-height: 16px; }
   .bo-needs { margin-top: 0; }
   .bo-needs .tag { line-height: 17px; }
   .bo-foot { margin-top: 4px; }
@@ -66,7 +66,7 @@
 /* a card capped by the overlay lanes scrolls: Take / Reroll / Decline stay in view at its bottom edge */
 .bo-foot { position: sticky; bottom: 0; z-index: 1; background: rgb(14, 18, 26); }
 body.shell-rail .boon-offer:not(.narrow) .bo-foot { position: static; background: none; }
-.bo-heading { flex: 1; min-width: 0; display: flex; flex-direction: column; padding-left: 4px; font-size: 14px; line-height: 17px; }
+.bo-heading { flex: 1; min-width: 0; display: flex; flex-direction: column; padding-left: 4px; font-size: 0.875rem; line-height: 17px; }
 .bo-title { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bo-q { color: var(--text-dim); }
 .bo-q:empty { display: none; }
@@ -139,16 +139,16 @@ body.shell-rail .boon-offer.narrow:not(.thin) .bo-heading { justify-content: fle
 .br-icons { display: flex; gap: 3px; }
 .br-ico { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: var(--bc); background: color-mix(in srgb, var(--bc) 20%, var(--bg-3)); }
 .br-ico .ico.tiny { width: 14px; height: 14px; }
-.br-count { font-size: 14px; font-weight: 700; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.br-count { font-size: 0.875rem; font-weight: 700; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 
 /* ---------------------------------------------------------------- boon rows (list dialog, Build tab) */
 .boon-list { display: flex; flex-direction: column; }
 .boon-item { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .bi-ico { flex: none; width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; color: var(--bc); background: color-mix(in srgb, var(--bc) 16%, var(--bg-3)); }
 .bi-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.bi-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; font-weight: 700; font-size: 15px; }
-.bi-desc { margin: 0; font-size: 14px; line-height: 1.4; color: var(--text-dim); }
-.bi-note { margin: 0; font-size: 14px; color: var(--warn); }
+.bi-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; font-weight: 700; font-size: 0.9375rem; }
+.bi-desc { margin: 0; font-size: 0.875rem; line-height: 1.4; color: var(--text-dim); }
+.bi-note { margin: 0; font-size: 0.875rem; color: var(--warn); }
 .bi-act { flex: none; align-self: center; }
 .btn.boon-waiting .ico:first-child { color: var(--warn); }
 .btn.boon-waiting .bs-main { flex: 1; min-width: 0; padding: 4px 0; }

@@ -6,7 +6,7 @@
 }
 .dc-head { display: flex; align-items: center; gap: 8px; }
 .dc-head > .ico { color: var(--bad); }
-.dc-title { flex: 1; min-width: 0; font-weight: 700; font-size: 15px; line-height: 1.3; }
+.dc-title { flex: 1; min-width: 0; font-weight: 700; font-size: 0.9375rem; line-height: 1.3; }
 .btn.dc-fold .ico { transform: rotate(180deg); transition: transform 0.15s; }
 /* folded (death.ts DEATH_SHRINK_MS): the headline only, one line; tap it (or the chevron) for the rest */
 /* or folded by the overlay lanes (lane-folded: no room for more right now) */
@@ -15,17 +15,17 @@
 /* the headline wraps to two lines before it ellipsizes */
 .death-card:is(.folded, .lane-folded) .dc-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; cursor: pointer; }
 .death-card:is(.folded, .lane-folded) .btn.dc-fold .ico { transform: none; }
-.dc-sub, .dc-lead { margin: 2px 0 6px; font-size: 14px; color: var(--text-dim); }
+.dc-sub, .dc-lead { margin: 2px 0 6px; font-size: 0.875rem; color: var(--text-dim); }
 .dc-lead { color: var(--text); }
 .dc-list { display: flex; flex-direction: column; gap: 6px; }
 .btn.dc-item { justify-content: flex-start; gap: 8px; font-weight: 600; text-align: left; white-space: normal; }
 .btn.dc-item .dc-name { flex: 1; }
-.btn.dc-item .dc-why { color: var(--text-dim); font-weight: 400; font-size: 14px; display: inline-flex; align-items: center; gap: 4px; }
+.btn.dc-item .dc-why { color: var(--text-dim); font-weight: 400; font-size: 0.875rem; display: inline-flex; align-items: center; gap: 4px; }
 .btn.dc-item.affordable, .btn.dc-item.slot { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--bg-3)); }
 .btn.dc-item.slot .ico { color: var(--accent); }
 .dc-more { align-self: flex-end; }
 /* near the Frontier (death.ts frontierLine): the first line under the headline, with a Forecast button */
-.dc-frontier { display: flex; align-items: center; gap: 8px; margin: 4px 0 6px; font-size: 14px; font-weight: 600; color: var(--warn, var(--text)); }
+.dc-frontier { display: flex; align-items: center; gap: 8px; margin: 4px 0 6px; font-size: 0.875rem; font-weight: 600; color: var(--warn, var(--text)); }
 .dc-frontier > span { flex: 1; min-width: 0; }
 .dc-frontier .btn { flex: none; }
 /* a real button, not text: bordered, 44 px tall, with a chevron */
@@ -36,7 +36,7 @@
 .death-card.dc-tight .dc-lead { margin-top: 0; }
 .death-card.dc-tight > .dc-lead { display: none; }
 .death-card.dc-tight:not(.dc-narrow) .dc-list { flex-direction: row; gap: 6px; }
-.death-card.dc-tight:not(.dc-narrow) .btn.dc-item { flex: 1 1 0; min-width: 0; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; padding: 6px 8px; font-size: 14px; line-height: 1.2; }
+.death-card.dc-tight:not(.dc-narrow) .btn.dc-item { flex: 1 1 0; min-width: 0; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; padding: 6px 8px; font-size: 0.875rem; line-height: 1.2; }
 .death-card.dc-tight:not(.dc-narrow) .btn.dc-item .dc-name { flex: none; overflow-wrap: anywhere; }
 .death-card.dc-tight:not(.dc-narrow) .btn.dc-item > .ico { display: none; }
 .death-card.dc-tight .dc-more { display: none; }
