@@ -54,13 +54,28 @@ export interface Prefs {
   coreExplained: boolean;
   /** Phase 2: the full Quartermaster card was shown once (unlocked); from then on Upgrades folds it to one line. */
   qmSeen: boolean;
+  /** Phase 3 (accessibility): text size, percent of the base root size (100 / 115 / 130). */
+  textScale: 100 | 115 | 130;
+  /** Phase 3: left-hand layout: thumb controls (abilities, Overcharge, quick-buy) mirror to the left edge. */
+  leftHand: boolean;
+  /** Phase 3 (tap intent): ms a finger must rest before a press on the field becomes a hold/steer (0 = the default). */
+  holdDelayMs: number;
+  /** Phase 3 (timing assists): Overcharge releases itself at the top of the perfect band. */
+  overchargeAssist: boolean;
+  /** Phase 3 (timing assists): boss tell windows last longer (sent to the sim as a setting; deterministic). */
+  tellAssist: boolean;
+  /** Phase 3: optional vibration on tells and on low HP (only offered where the browser supports vibration). */
+  hapticCues: boolean;
+  /** Phase 3: announce boss start, tells and deaths to a screen reader (aria-live). */
+  srAnnounce: boolean;
 }
 
 const KEY = 'citadel.prefs.v1';
 const DEFAULTS: Prefs = { onboarded: false, bloom: true, affordableFirst: false, panelOpen: true, shopCategory: 'chassis', shopTree: 'ballistics', activeTrial: null, buyCoach: 0, buyQty: 1, suggestExpanded: false,
   soundMaster: 0.71, soundSfx: 0.8, soundMusic: 0.55, soundMuted: false, musicOn: true, touchCal: null,
   unlockAll: false, coachSeen: [], tabsVisited: [], revealInit: false, contentSeen: [], contentInit: false, echoGuide: false,
-  pointerHints: true, hintsDone: [], hintsInit: false, coreExplained: false, qmSeen: false };
+  pointerHints: true, hintsDone: [], hintsInit: false, coreExplained: false, qmSeen: false,
+  textScale: 100, leftHand: false, holdDelayMs: 0, overchargeAssist: false, tellAssist: false, hapticCues: false, srAnnounce: true };
 
 let cache: Prefs | null = null;
 
