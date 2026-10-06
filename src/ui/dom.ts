@@ -4,7 +4,7 @@
  */
 import { HoldGesture, type HoldAction } from './hold';
 
-type Child = Node | string | number | null | undefined | false;
+export type Child = Node | string | number | null | undefined | false;
 export interface Props {
   class?: string;
   text?: string;

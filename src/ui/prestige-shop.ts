@@ -3,6 +3,8 @@
  * waves 20 / 40 / 60 / 80, priced in Echoes (×1.5 per rank), bought with `buy_prestige`.
  * Calm like Upgrades: each row shows its headline effect on one line (the row body unfolds the rest); a layer not
  * open yet folds into one line ("9 upgrades · opens at deepest wave 60"), and an open layer's maxed rows into "N maxed".
+ * One tier shows at a time (`setTier`): the Prestige screen's "Tier ▾" crumb and the swipe pick it (screens.ts).
+ * No Buy all; the only "Suggested" tag is the first-Prestige guide's one pick (ceremony.ts echoGuide*).
  */
 import '../styles/prestige.css';
 import type { UiState } from '@sim/core/types';
@@ -27,6 +29,8 @@ export class PrestigeShop {
   shown = false;
   private readonly rows: Row[] = [];
   private readonly layerEls: Layer[] = [];
+  /** The tier on show (1–4). */
+  private tierOn = 1;
   /** First-Prestige guide (ceremony.ts): an inline coach line; the affordable Layer I picks get the class `guide`. */
   private readonly guide: HTMLElement;
   private readonly guideText = h('span', { class: 'coach-text', text: ECHO_GUIDE_TEXT });
@@ -74,9 +78,29 @@ export class PrestigeShop {
       this.layerEls.push(layer);
       this.el.appendChild(sec);
     }
+    this.setTier(1);
   }
 
   get isOpen(): boolean { return this.shown; }
+  get tier(): number { return this.tierOn; }
+  /** Show one tier (1–4). */
+  setTier(t: number): void {
+    this.tierOn = Math.max(1, Math.min(LAYERS.length, t | 0));
+    for (const L of this.layerEls) L.el.hidden = L.layer !== this.tierOn;
+  }
+  /** The first-Prestige guide is on (its picks are in tier I: the screen lands there). */
+  get guiding(): boolean { return echoGuideOn(); }
+
+  /** Per tier: open (its wave reached), and how many of its upgrades the Echoes buy now (the menu's quiet count). */
+  tierState(ui: UiState): { layer: number; open: boolean; wave: number; affordable: number }[] {
+    const m = ui.meta;
+    return LAYERS.map((L) => {
+      const open = m.deepestEver >= L.wave;
+      let n = 0;
+      if (open) for (const r of this.rows) if (r.def.layer === L.layer) { const rank = m.prestigeRanks[r.def.id] | 0; if (rank < r.def.maxRank && m.echoes >= nextRankCost(r.def.cost, rank)) n++; }
+      return { layer: L.layer, open, wave: L.wave, affordable: n };
+    });
+  }
   setShown(on: boolean): void {
     this.shown = on;
     const ui = this.ctx.state(); if (on && ui) this.update(ui);

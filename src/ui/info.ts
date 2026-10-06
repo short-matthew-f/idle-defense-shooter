@@ -45,6 +45,9 @@ export const INFO: Readonly<Record<string, InfoEntry>> = {
   frame: { title: 'Frame', feature: 'frame', text: 'Your Frame is the machine\'s body: how many weapon and element slots it has and what it does for free. A new Frame is chosen when you Prestige.' },
   boons: { title: 'Boons', feature: 'boons', text: 'A Boon helps until the tower falls. Pick one of the offers, or decline.' },
   anomalies: { title: 'Anomalies', feature: 'anomalies', text: 'After a boss you may draft an Anomaly. Each one bends the rules in your favour at a price, until you Prestige.' },
+  hardpoints: { title: 'Hardpoints', feature: 'hardpoints', text: 'A hardpoint slot mounts one weapon system. Mounting it opens that system\'s upgrade tree in Upgrades → Hardpoints.' },
+  attunements: { title: 'Attunements', feature: 'elements', text: 'An attunement slot binds one element to the tower. Attuning it opens that element\'s upgrade tree in Upgrades → Elements.' },
+  abilities: { title: 'Abilities', feature: 'abilities', text: 'Abilities are slotted powers you cast from the Battle bar. Each costs Command Energy and then cools down.' },
   doctrines: { title: 'Doctrines', feature: 'buildTab', text: 'A Doctrine is a path you choose for a tree once enough of its core upgrades are owned. It sets how that tree plays.' },
   quartermaster: { title: 'Quartermaster', feature: 'quartermaster', text: 'An optional helper that buys stat upgrades for you with a share of your income. It never picks Boons, elements or weapons.' },
 };
@@ -71,14 +74,18 @@ export function infoText(key: string): string {
   return e.early && e.feature && feats && !feats[e.feature] ? e.early : e.text;
 }
 
-/** Open the info sheet for `key` (an unknown key does nothing). */
-export function openInfo(key: string): void {
+/**
+ * Open the info sheet for `key` (an unknown key does nothing). `more`: a screen's own rule for this place, shown under
+ * the entry's text (Build's section notes ride on their ⓘ as `data-info-more`).
+ */
+export function openInfo(key: string, more?: string | null): void {
   const e = INFO[key];
   if (!e) return;
   current?.close();
   const ok = button('Got it', () => m.close(), { class: 'btn primary wide info-ok' });
+  const body = h('div', null, h('p', { class: 'info-text', text: infoText(key) }), more ? h('p', { class: 'info-text info-more', text: more }) : null);
   const m = openModal({
-    title: e.title, body: h('p', { class: 'info-text', text: infoText(key) }), footer: ok,
+    title: e.title, body, footer: ok,
     className: 'info-sheet', variant: 'sheet', onClose: () => { if (current === m) current = null; },
   });
   current = m;
@@ -106,12 +113,13 @@ if (typeof document !== 'undefined') {
     const el = (t as Element | null)?.closest?.('[data-info]') as HTMLElement | null;
     return el && !el.closest('.info-sheet') ? el.dataset.info ?? null : null;
   };
-  document.addEventListener('click', (e) => { const k = keyOf(e.target); if (k) openInfo(k); });
+  const moreOf = (t: EventTarget | null): string | null => ((t as Element | null)?.closest?.('[data-info]') as HTMLElement | null)?.dataset.infoMore ?? null;
+  document.addEventListener('click', (e) => { const k = keyOf(e.target); if (k) openInfo(k, moreOf(e.target)); });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' && e.key !== ' ') return;
     const t = e.target as HTMLElement | null;
     if (!t || t.tagName === 'BUTTON' || t.tagName === 'INPUT') return;
     const k = keyOf(t);
-    if (k && t.dataset.info) { e.preventDefault(); openInfo(k); }
+    if (k && t.dataset.info) { e.preventDefault(); openInfo(k, moreOf(t)); }
   });
 }

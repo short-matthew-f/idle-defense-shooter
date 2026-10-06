@@ -170,16 +170,17 @@ export class GameUi {
           el: this.shop.el, ownScroll: true,
           onShow: () => { if (this.latest) this.shop.update(this.latest, this.hud.lastRate); this.refreshWallet(); },
         },
-        build: { el: this.build.el, onShow: () => { this.build.setShown(true); this.refreshWallet(); }, onHide: () => this.build.setShown(false) },
-        prestige: { el: this.prestigeScreen.el, onShow: () => { this.prestigeScreen.setShown(true); this.refreshWallet(); }, onHide: () => this.prestigeScreen.setShown(false) },
+        build: { el: this.build.el, ownScroll: true, onShow: () => { this.build.setShown(true); this.refreshWallet(); }, onHide: () => this.build.setShown(false) },
+        prestige: { el: this.prestigeScreen.el, ownScroll: true, onShow: () => { this.prestigeScreen.setShown(true); this.refreshWallet(); }, onHide: () => this.prestigeScreen.setShown(false) },
         more: { el: this.more.el, onShow: (sub) => { this.more.enter(sub); this.refreshWallet(); }, onHide: () => this.more.hide() },
       },
     });
     this.hints = new HintDriver(root, {
       nav: () => ({ screen: (['upgrades', 'build', 'prestige', 'more'] as const).find((s) => this.shell.isShown(s)) ?? null, battle: this.shell.battleVisible }),
       shop: () => this.shop.view(),
+      build: () => ({ sec: this.build.section }),
       coach: () => (this.coach.el.hidden ? null : this.coach.el.dataset.coach ?? null),   // ladder lines and extras alike
-      blocked: () => (anyModalOpen() && topModalClass() !== 'crumb-menu') || this.death.visible || this.attn.hintsHeld,   // the Upgrades page menu is a hint step
+      blocked: () => (anyModalOpen() && topModalClass() !== 'crumb-menu') || this.death.visible || this.attn.hintsHeld,   // a breadcrumb menu is a hint step
       armed: () => this.abilities.arming.armed,
       boonChip: () => !this.boonOffer.chip.hidden,
       draftWaiting: () => this.draft.pending,
@@ -393,9 +394,11 @@ export class GameUi {
     else if (k === 'p') { const ui = this.latest; if (ui && f.runControls) this.ctx.host.send({ type: 'set_mode', mode: ui.run.mode === 'push' ? 'patrol' : 'push' }); }
     else if (k === 'b') this.shell.togglePanel();
     else if (k === 'f') { if (f.forecast) this.open('forecast'); }
-    else if ((k === 'arrowleft' || k === 'arrowright') && this.shell.isShown('upgrades')) {
-      // Upgrades: previous / next tree (the keyboard twin of the list swipe)
-      if (this.shop.step(k === 'arrowleft' ? -1 : 1)) e.preventDefault();
+    else if (k === 'arrowleft' || k === 'arrowright') {
+      // the breadcrumb screens: previous / next tree, section or view (the keyboard twin of the list swipe)
+      const d = k === 'arrowleft' ? -1 : 1;
+      const moved = this.shell.isShown('upgrades') ? this.shop.step(d) : this.shell.isShown('build') ? this.build.step(d) : this.shell.isShown('prestige') ? this.prestigeScreen.step(d) : false;
+      if (moved) e.preventDefault();
     }
     else if (k === 'q') {
       if (!f.bulk) return;   // no quantity selector yet: Q does nothing

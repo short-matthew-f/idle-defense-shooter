@@ -17,42 +17,10 @@ body:not(.tab-upgrades) .btn.qty-chip { display: none; }
 .shop { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 /* the pinned part: the breadcrumb line */
 .shop-head { flex: none; padding: 0 var(--gutter); }
-body.tab-upgrades .screen-top > .status-strip { display: none; }   /* "Battle ›": the tab bar and swipe back do that here */
-.crumbs { display: flex; align-items: center; gap: 2px; min-width: 0; min-height: var(--touch); }
-.btn.crumb {
-  flex: 0 1 auto; min-width: 0; min-height: var(--touch); gap: 4px; padding: 0 6px; border: 0; background: transparent;
-  font-size: 1rem; font-weight: 800; color: var(--text); white-space: nowrap;
-}
-.btn.crumb:hover:not(:disabled) { background: var(--bg-2); }
-.btn.crumb-page { flex-shrink: 0; max-width: 48%; }   /* the page name stays whole; a long tree name ellipsises */
-.crumb-page.static { pointer-events: none; }
-.crumb-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.crumb-caret { flex: none; font-size: 0.875rem; color: var(--text-dim); }
-.crumb-count { flex: none; font-weight: 700; color: var(--text-dim); font-variant-numeric: tabular-nums; }
-.crumb-count:empty { display: none; }
-.crumb-sep { flex: none; color: var(--text-faint); font-size: 1rem; }
-.crumb-gap { flex: 1 1 0; min-width: 0; }
 .qm-crumb { flex: none; display: flex; align-items: center; gap: 2px; }
 .btn.crumb-qm { flex: none; min-width: var(--touch); justify-content: center; padding: 0 6px; font-size: 0.875rem; font-weight: 700; color: var(--text-dim); letter-spacing: 0.04em; }
 .qm-crumb .switch { flex: none; }
-@media (max-width: 360px) { .shop-head { padding-left: 6px; padding-right: 8px; } .btn.crumb { padding: 0 4px; gap: 3px; } .btn.crumb-qm { padding: 0 4px; } }
-/* a decision waits on a page / in a tree (an empty slot, an open fork) */
-.cat-dot, .chip-dot, .dr-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
-.crumb .cat-dot, .crumb .chip-dot { align-self: flex-start; margin-top: 10px; }
-
-/* the breadcrumb menus (modal.ts variant 'popover'): 48 px rows */
-.crumb-menu-list { display: flex; flex-direction: column; gap: 2px; }
-.btn.cm-row {
-  justify-content: flex-start; gap: 8px; min-height: 48px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent;
-  font-size: 1rem; font-weight: 700; color: var(--text); text-align: left;
-}
-.btn.cm-row.current { background: var(--bg-3); color: var(--accent); }
-.btn.cm-row.sub { min-height: 48px; padding-left: 30px; font-size: 0.9375rem; font-weight: 500; color: var(--text-dim); }
-.btn.cm-row.empty { color: var(--text-dim); font-weight: 600; }
-.cm-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cm-count { flex: none; font-weight: 700; color: var(--text-dim); font-variant-numeric: tabular-nums; }
-.cm-star { flex: none; color: var(--scrap); }
-.cm-new { flex: none; display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.875rem; font-weight: 700; color: var(--warn); }
+@media (max-width: 360px) { .shop-head { padding-left: 6px; padding-right: 8px; } .btn.crumb-qm { padding: 0 4px; } }
 
 .shop-body {
   position: relative; flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--gutter) 28px; border-top: 1px solid var(--line);
@@ -63,13 +31,6 @@ body.shell-rail .shop-body:has(> :is(.bottleneck, .star-explain, .shop-decisions
 body.shell-rail .shop-body > :is(.bottleneck, .star-explain, .shop-decisions) { grid-column: 1; }
 body.shell-rail .shop-body > .shop-list { grid-column: 2; grid-row: 1 / span 4; }
 
-/* swipe / ← → between trees: a short slide (none with reduced motion) */
-@keyframes shop-in-next { from { transform: translateX(28px); opacity: 0.2; } to { transform: none; opacity: 1; } }
-@keyframes shop-in-prev { from { transform: translateX(-28px); opacity: 0.2; } to { transform: none; opacity: 1; } }
-.shop-list.slide-next { animation: shop-in-next 0.2s ease-out; }
-.shop-list.slide-prev { animation: shop-in-prev 0.2s ease-out; }
-body.reduce-motion .shop-list.slide-next, body.reduce-motion .shop-list.slide-prev { animation: none; }
-@media (prefers-reduced-motion: reduce) { .shop-list.slide-next, .shop-list.slide-prev { animation: none; } }
 .shop-body { touch-action: pan-y; }
 
 /* first purchases: one sentence on the ★ tags */
@@ -88,13 +49,6 @@ body.reduce-motion .shop-list.slide-next, body.reduce-motion .shop-list.slide-pr
 .dr-sub { font-size: 0.875rem; color: var(--text-dim); line-height: 1.3; }
 .decision-row .chev { color: var(--text-faint); }
 
-/* section heads: a quiet label that sticks under the breadcrumb while its section scrolls (no buttons) */
-.sec-head {
-  position: sticky; top: 0; z-index: 2; margin: 0 calc(-1 * var(--gutter)); padding: 0 var(--gutter);
-  background: var(--bg-0); border-bottom: 1px solid transparent;
-}
-.sec-head .sec-title { margin: 10px 0 0; padding: 4px 0 2px; }
-.shop-list > .shop-section:first-child .sec-head .sec-title { margin-top: 2px; }
 .shop-section > .sec-sub { margin: 0 0 6px; }
 
 /* the Quartermaster card under a one-line summary (open while it is off; folded once on) */
@@ -176,4 +130,3 @@ body.reduce-motion .shop-list.slide-next, body.reduce-motion .shop-list.slide-pr
 .pick-card.frost { border-left: 4px solid #8fdcff; }
 .refit-one { margin: 14px 0; }
 /* a narrow phone with large text: the tree name keeps the room (its count is in the menu; the separator goes) */
-@media (max-width: 360px) { body:is(.text-115, .text-130) :is(.crumb-count, .crumb-sep) { display: none; } }

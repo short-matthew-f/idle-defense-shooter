@@ -1,21 +1,29 @@
 /**
- * Build screen (design §4, "why did my build converge"): every commitment of this Prestige on one
- * page — Frame, this attempt's active Boons (and a pending boon offer), Hardpoint and Attunement slots, the
- * Doctrine per tree, Anomaly sockets, ability slots, and what Cores buy (the balance is in the wallet bar above the screen, wallet.ts). It reuses the shop's slot pickers, Refit dialog,
- * Doctrine fork cards (by opening the tree in Upgrades) and Cores tab rather than duplicating them.
- * Progressive reveal (progression.ts): each section shows once its feature is earned (or the player has something in it).
- * Calm by default: section notes say only what the title does not; locked slots fold into one row, trees without a
- * Doctrine into one "N trees …" line that opens on tap (per session), empty Anomaly sockets into one card.
+ * Build screen (design §4, "why did my build converge"): every commitment of this Prestige, one section page at a time.
+ * Pinned (under the shell's top row with the Cores balance): one breadcrumb line "Section ▾ ⓘ … Frame ▸".
+ *   Section ▾ lists the revealed sections in one order (BUILD_SECS: Hardpoints, Attunements, Abilities, Doctrines,
+ *   Boons, Anomalies, Cores, Frame), each with a cheap status ("2 empty", "1/4") and a dot + "New" where a decision
+ *   waits (an empty open slot, a free Doctrine fork, a boon offer, an Anomaly draft: what the tab badge counts). The ⓘ
+ *   explains the section on show (info.ts; the section's rule rides along as `data-info-more`). The right-end chip
+ *   names the Frame ("Standard ▸") and opens its page.
+ * A swipe left / right on the page (or ← / →) steps along the sections (crumbs.ts). Opening the tab lands on the
+ * section that needs attention (buildAttention, in the tab badge's order), else on the last section viewed
+ * (prefs.buildSection).
+ * It reuses the shop's slot pickers, Refit dialog, Doctrine fork cards (by opening the tree in Upgrades) and Cores page
+ * rather than duplicating them. A pending Anomaly draft shows as a banner above every section.
+ * Progressive reveal (progression.ts): each section shows once its feature is earned.
+ * Calm by default: locked slots fold into one row, trees without a Doctrine into one "N trees …" line that opens on tap
+ * (per session), empty Anomaly sockets into one card.
  */
 import '../styles/build.css';
 import type { DoctrineId, TreeId } from '@sim/core/ids';
 import type { UiState } from '@sim/core/types';
-import { button, h, clear } from './dom';
+import { button, h, clear, attr, text } from './dom';
 import { abilityIcon, icon } from './icons';
 import { ABILITY_BY_ID, CHASSIS, ELEMENT_BLURB, FRAME_BY_ID, HARDPOINT_BLURB, NODE_BY_ID, TREE_BY_ID, TREE_LABEL } from './content';
 import { anomalyCard } from './draft';
 import { autocastOn, setAutocast } from './abilities';
-import { boonsSection } from './boons';
+import { BOONS_RULE, boonsSection } from './boons';
 import { SECOND_SOURCE_LABEL, atCheckpoint, strengthLabel } from './doctrine';
 import { openModal } from './modal';
 import type { Shop } from './shop';
@@ -24,10 +32,60 @@ import type { DraftModal } from './draft';
 import type { UiCtx } from './ctx';
 import { markInfo } from './info';
 import { nodeTier } from './echo-tiers';
+import { prefs, setPref } from './prefs';
+import { openForkCount } from './shell-logic';
+import type { Features } from './progression';
+import { CrumbMenu, crumbButton, crumbGap, crumbLine, paintCrumb, slideIn, stepId, wireSwipe, type Crumb } from './crumbs';
 
 const REFIT_CORES = 3;
 /** Tag a control for the pointer hints (hints.ts). */
 const hint = <T extends HTMLElement>(el: T, key: string): T => { el.dataset.hint = key; return el; };
+
+// ---------------------------------------------------------------- sections (pure)
+
+export type BuildSec = 'hardpoints' | 'attunements' | 'abilities' | 'doctrines' | 'boons' | 'anomalies' | 'cores' | 'frame';
+/** The Build sections in swipe / menu order, with their info.ts key. */
+export const BUILD_SECS: readonly { id: BuildSec; label: string; info: string }[] = [
+  { id: 'hardpoints', label: 'Hardpoints', info: 'hardpoints' },
+  { id: 'attunements', label: 'Attunements', info: 'attunements' },
+  { id: 'abilities', label: 'Abilities', info: 'abilities' },
+  { id: 'doctrines', label: 'Doctrines', info: 'doctrines' },
+  { id: 'boons', label: 'Boons', info: 'boons' },
+  { id: 'anomalies', label: 'Anomalies', info: 'anomalies' },
+  { id: 'cores', label: 'Cores', info: 'cores' },
+  { id: 'frame', label: 'Frame', info: 'frame' },
+];
+
+/** The revealed sections, in order (the gates are the ones the one-page screen had; Doctrines always shows). Pure. */
+export function buildStops(f: Pick<Features, 'hardpoints' | 'elements' | 'abilities' | 'boons' | 'anomalies' | 'cores' | 'frame'>, threatDial = false): BuildSec[] {
+  const on: Record<BuildSec, boolean> = { hardpoints: f.hardpoints, attunements: f.elements, abilities: f.abilities, doctrines: true, boons: f.boons, anomalies: f.anomalies, cores: f.cores, frame: f.frame || threatDial };
+  return BUILD_SECS.map((s) => s.id).filter((id) => on[id]);
+}
+
+/** What waits on Build (the tab badge's signals). */
+export interface BuildWaiting { draft: boolean; boon: boolean; hardpoints: number; attunements: number; forks: number }
+
+/** The section that needs attention, in the tab badge's order (draft, boon offer, empty slot, open fork), among `stops`. Pure. */
+export function buildAttention(w: BuildWaiting, stops: readonly BuildSec[]): BuildSec | null {
+  const want: [boolean, BuildSec][] = [[w.draft, 'anomalies'], [w.boon, 'boons'], [w.hardpoints > 0, 'hardpoints'], [w.attunements > 0, 'attunements'], [w.forks > 0, 'doctrines']];
+  for (const [on, sec] of want) if (on && stops.includes(sec)) return sec;
+  return null;
+}
+
+/** Where the tab opens: the section needing attention, else the last one viewed, else the first. Pure. */
+export function buildLanding(stops: readonly BuildSec[], attention: BuildSec | null, last: string): BuildSec | null {
+  if (attention && stops.includes(attention)) return attention;
+  if (stops.includes(last as BuildSec)) return last as BuildSec;
+  return stops[0] ?? null;
+}
+
+/** What waits on Build in this state. */
+export function buildWaiting(ui: UiState): BuildWaiting {
+  let hp = 0, at = 0;
+  for (let i = 0; i < ui.run.hardpointSlotsOpen; i++) if (!ui.build.hardpoints[i]) hp++;
+  for (let i = 0; i < ui.run.attunementSlotsOpen; i++) if (!ui.build.attunements[i]) at++;
+  return { draft: !!ui.run.pendingDraft?.length, boon: !!ui.run.boonOffer?.length, hardpoints: hp, attunements: at, forks: openForkCount(ui) };
+}
 
 function row(ico: Node, name: string | Node, sub: string | Node | null, actions: (HTMLElement | null)[] = [], cls = ''): HTMLElement {
   return h('div', { class: `bs-row ${cls}` },
@@ -36,8 +94,9 @@ function row(ico: Node, name: string | Node, sub: string | Node | null, actions:
     actions.some(Boolean) ? h('div', { class: 'bs-act' }, ...actions) : null);
 }
 
-function section(title: string, sub: string | null, ...rows: (HTMLElement | null)[]): HTMLElement {
-  return h('section', { class: 'bs-section' }, h('h3', { class: 'sec-title' }, title, sub ? h('span', { class: 'sec-sub', text: sub }) : null), h('div', { class: 'bs-list' }, ...rows));
+/** A section page: its rows (the title is the breadcrumb; the rule rides on the ⓘ). */
+function section(id: BuildSec, ...rows: (HTMLElement | null)[]): HTMLElement {
+  return h('section', { class: 'bs-section', data: { sec: id } }, h('div', { class: 'bs-list' }, ...rows));
 }
 
 /** Build-screen key: rebuild only when a commitment (or what can be afforded for it) changes. */
@@ -59,36 +118,197 @@ function sharedOwned(ui: UiState, tree: TreeId): number {
 }
 
 export class BuildScreen {
-  readonly el = h('div', { class: 'build' });
+  /** The screen: the pinned breadcrumb line over its own scroller (the shell's top row holds the Cores balance). */
+  readonly el: HTMLElement;
+  /** The section page on show (the rows). */
+  private readonly page = h('div', { class: 'build crumb-page-body' });
+  private readonly body: HTMLElement;
+  private readonly secC: Crumb;
+  private readonly info: HTMLButtonElement;
+  private readonly frameLabel = h('span', { class: 'crumb-label' });
+  private readonly frameChip: HTMLButtonElement;
+  private readonly menu = new CrumbMenu();
   shown = false;
   private key = '';
+  private cur: BuildSec | null = null;
+  private stops: BuildSec[] = [];
+  private slide: -1 | 0 | 1 = 0;
   /** The "N trees without a Doctrine yet" line is open (this session). */
   private docsOpen = false;
 
   constructor(private readonly ctx: UiCtx, private readonly shop: Shop, private readonly abilities: AbilityBar, private readonly draft: DraftModal,
     /** Boons: show the pending offer on Battle. */
-    private readonly openBoonOffer: () => void = () => {}) {}
+    private readonly openBoonOffer: () => void = () => {}) {
+    this.secC = crumbButton(() => this.openMenu(), { cls: 'crumb-page', hint: 'build-menu', count: true });
+    this.info = button(icon('info', 'ico info-mark'), () => {}, { class: 'btn ghost crumb-info' });
+    this.frameChip = button([this.frameLabel, h('span', { class: 'crumb-caret', text: '▸', attrs: { 'aria-hidden': 'true' } })], () => this.go('frame'), { class: 'btn ghost crumb-chip' });
+    this.frameChip.dataset.hint = 'bsec-frame';
+    const head = h('div', { class: 'crumb-head' }, crumbLine('Build: section', this.secC.btn, this.info, crumbGap(), this.frameChip));
+    this.body = h('div', { class: 'crumb-body' }, this.page);
+    this.el = h('div', { class: 'crumb-screen build-screen', attrs: { 'aria-label': 'Build' } }, head, this.body);
+    wireSwipe(this.body, (d) => this.step(d));
+  }
+
+  /** The section on show (pointer hints chain through it). */
+  get section(): BuildSec | null { return this.cur; }
 
   setShown(on: boolean): void {
+    const opening = on && !this.shown;
     this.shown = on;
-    if (on) { this.key = ''; const ui = this.ctx.state(); if (ui) this.update(ui); }
+    if (!on) { this.menu.close(); return; }
+    const ui = this.ctx.state();
+    if (opening && ui) {
+      // land on what needs attention, else where the player left off
+      this.stops = this.stopsOf(ui);
+      const land = buildLanding(this.stops, buildAttention(buildWaiting(ui), this.stops), prefs().buildSection);
+      if (land !== this.cur) { this.cur = land; this.body.scrollTop = 0; }
+    }
+    this.key = '';
+    if (ui) this.update(ui);
+  }
+
+  private stopsOf(ui: UiState): BuildSec[] {
+    return buildStops(this.ctx.features(), (ui.meta.prestigeRanks['prestige.threat_dial'] | 0) > 0);
+  }
+
+  /** Show a section (the menu, the Frame chip, a swipe, ← / →, a pointer hint). */
+  go(sec: BuildSec, dir: -1 | 0 | 1 = 0): void {
+    this.menu.close();
+    if (!this.stops.includes(sec)) return;
+    if (sec !== this.cur) { this.cur = sec; this.slide = dir; this.body.scrollTop = 0; }
+    setPref('buildSection', sec);
+    this.key = '';
+    const ui = this.ctx.state();
+    if (ui) this.update(ui);
+  }
+
+  /** Next (+1) / previous (-1) section (swipe on the page, ← / →). False at either end. */
+  step(dir: -1 | 1): boolean {
+    if (!this.cur) return false;
+    const next = stepId(this.stops, this.cur, dir);
+    if (!next) return false;
+    this.go(next, dir);
+    return true;
+  }
+
+  /** Status per section for the menu ("2 empty", "1/4"), and why a dot shows (a decision waits). */
+  private status(ui: UiState, sec: BuildSec, w: BuildWaiting): { status: string | null; dot: string | null } {
+    const b = ui.build, r = ui.run;
+    switch (sec) {
+      case 'hardpoints': return w.hardpoints ? { status: `${w.hardpoints} empty`, dot: 'empty hardpoint slot' } : { status: `${b.hardpoints.filter(Boolean).length + (ui.extraSystems?.length ?? 0)} mounted`, dot: null };
+      case 'attunements': return w.attunements ? { status: `${w.attunements} empty`, dot: 'empty attunement slot' } : { status: `${b.attunements.filter(Boolean).length} attuned`, dot: null };
+      case 'abilities': { const n = ui.abilitySlots ?? b.abilities.length; return { status: `${b.abilities.slice(0, n).filter(Boolean).length}/${n}`, dot: null }; }
+      case 'doctrines': return w.forks ? { status: `${w.forks} to choose`, dot: w.forks === 1 ? 'Doctrine fork open' : 'Doctrine forks open' } : { status: `${Object.values(b.doctrines).filter(Boolean).length} chosen`, dot: null };
+      case 'boons': return { status: `${(r.boons ?? []).length}/${r.boonCap || 4}`, dot: w.boon ? 'boon offer waiting' : null };
+      case 'anomalies': return { status: `${b.anomalies.length}/${b.anomalySockets}`, dot: w.draft ? 'Anomaly draft waiting' : null };
+      case 'cores': return { status: null, dot: null };
+      case 'frame': return { status: FRAME_BY_ID.get(b.frame)?.name ?? null, dot: null };
+    }
+  }
+
+  private openMenu(): void {
+    const ui = this.ctx.state();
+    if (!ui || this.stops.length < 2) return;
+    const w = buildWaiting(ui);
+    const rows = this.stops.map((id) => {
+      const st = this.status(ui, id, w);
+      return this.menu.row({ label: BUILD_SECS.find((s) => s.id === id)!.label, current: id === this.cur, status: st.status, dot: st.dot, hint: `bsec-${id}`, onPick: () => this.go(id) });
+    });
+    this.menu.open(this.secC.btn, 'Build sections', rows, 'build-menu');
+  }
+
+  /** The section's rule (the old grey note under its title), shown under the ⓘ entry. */
+  private rule(ui: UiState, sec: BuildSec): string | null {
+    const f = this.ctx.features();
+    switch (sec) {
+      case 'hardpoints': return f.prestigeTab ? `Mounts lock for this Prestige.${f.cores ? ` A Refit costs ${REFIT_CORES} Cores.` : ''}` : 'A mount stays once chosen.';
+      case 'attunements': return f.prestigeTab ? 'Attunements lock for this Prestige.' : 'An attunement stays once chosen.';
+      case 'abilities': {
+        const n = ui.abilitySlots ?? ui.build.abilities.length;
+        const auto = (ui.meta.prestigeRanks['prestige.autocast'] | 0) > 0;
+        const more = !f.prestigeTab || n >= 4 ? '' : n === 2 ? ` More slots: Third Tactical Slot (${nodeTier('third_tactical_slot')}), the Command capstone (Reactor).` : ' A fourth: the Command capstone (Reactor) or Third Tactical Slot.';
+        return `Keys 1–${n} on Battle.${more}${auto ? ' Autocast fires each when affordable and useful.' : ''}`;
+      }
+      case 'doctrines': {
+        const rule = f.cores ? (f.prestigeTab ? 'Locked for this Prestige; a change costs 1 Core, at a checkpoint.' : 'A change costs 1 Core, at a checkpoint.') : 'A chosen path stays.';
+        const seconds = Object.keys(ui.secondDoctrine ?? {}).length > 0;
+        return `${rule}${seconds ? ' Trees marked 2nd run a second Doctrine.' : ''}`;
+      }
+      case 'boons': return BOONS_RULE;
+      case 'anomalies': return `${ui.build.anomalies.length}/${ui.build.anomalySockets} sockets${f.prestigeTab ? ', for this Prestige' : ''}.`;
+      case 'cores': return 'Bosses drop them; they reset at Prestige.';
+      case 'frame': return null;
+    }
+  }
+
+  /** The breadcrumb line: the section (a dot when a decision waits in another one), its ⓘ, the Frame chip. */
+  private paintCrumbs(ui: UiState, w: BuildWaiting): void {
+    const cur = this.cur;
+    const def = BUILD_SECS.find((s) => s.id === cur);
+    const label = def?.label ?? 'Build';
+    const st = cur ? this.status(ui, cur, w) : null;
+    const frac = cur === 'boons' || cur === 'anomalies' || cur === 'abilities' ? st?.status ?? null : null;
+    const others = this.stops.filter((s) => s !== cur).map((s) => this.status(ui, s, w).dot).filter(Boolean);
+    const menuable = this.stops.length > 1;
+    paintCrumb(this.secC, { label, menuable, dot: others.length > 0, aria: `Section: ${label}${frac ? ` ${frac}` : ''}${menuable ? '. Choose a section' : ''}${others.length ? ` (${others[0]} in another section)` : ''}` });
+    // a fraction reads as part of the name ("Boons 1/4"); counts elsewhere live in the menu
+    text(this.secC.count, frac ?? '');
+    this.info.hidden = !def;
+    if (def) {
+      this.info.dataset.info = def.info;
+      const more = this.rule(ui, def.id);
+      if (more) this.info.dataset.infoMore = more; else delete this.info.dataset.infoMore;
+      attr(this.info, 'aria-label', `About ${label}`);
+    }
+    const frameOn = this.stops.includes('frame');
+    this.frameChip.hidden = !frameOn;
+    if (frameOn) {
+      const name = FRAME_BY_ID.get(ui.build.frame)?.name ?? ui.build.frame;
+      text(this.frameLabel, name);
+      this.frameChip.classList.toggle('current', cur === 'frame');
+      attr(this.frameChip, 'aria-label', `Frame: ${name}. Open the Frame page`);
+    }
   }
 
   update(ui: UiState): void {
     if (!this.shown) return;
     const f = this.ctx.features();
-    const key = buildKey(ui) + `|${f.frame}${f.boons}${f.hardpoints}${f.elements}${f.anomalies}${f.abilities}${f.cores}${f.prestigeTab}${f.cross}|${this.docsOpen}`;
+    this.stops = this.stopsOf(ui);
+    if (!this.cur || !this.stops.includes(this.cur)) this.cur = buildLanding(this.stops, null, prefs().buildSection);
+    const w = buildWaiting(ui);
+    this.paintCrumbs(ui, w);
+    const key = buildKey(ui) + `|${f.frame}${f.boons}${f.hardpoints}${f.elements}${f.anomalies}${f.abilities}${f.cores}${f.prestigeTab}${f.cross}|${this.docsOpen}|${this.cur}|${this.draft.pending}`;
     if (key === this.key) return;
     this.key = key;
-    const y = this.el.parentElement?.scrollTop ?? 0;
-    clear(this.el);
-    if (this.draft.pending) this.el.append(hint(button([icon('info', 'ico'), h('span', { class: 'bs-name', text: 'An Anomaly draft is waiting: choose one' }), icon('right', 'ico tiny chev')], () => this.draft.open(), { class: 'btn bs-draft top' }), 'draft'));
-    const on = <T>(gate: boolean, make: () => T): T | null => (gate ? make() : null);
-    for (const sec of [on(f.frame, () => this.frame(ui)), on(f.boons, () => boonsSection(ui, this.openBoonOffer)), on(f.hardpoints, () => this.hardpoints(ui)),
-      on(f.elements, () => this.attunements(ui)), this.doctrines(ui), on(f.anomalies, () => this.anomalies(ui)), on(f.abilities, () => this.abilitySlots(ui)), on(f.cores, () => this.cores(ui))]) if (sec) this.el.append(sec);
-    const dial = this.threatDial(ui);
-    if (dial) this.el.append(dial);
-    if (this.el.parentElement) this.el.parentElement.scrollTop = y;
+    const y = this.body.scrollTop;
+    clear(this.page);
+    if (this.draft.pending) this.page.append(hint(button([icon('info', 'ico'), h('span', { class: 'bs-name', text: 'An Anomaly draft is waiting: choose one' }), icon('right', 'ico tiny chev')], () => this.draft.open(), { class: 'btn bs-draft top' }), 'draft'));
+    const sec = this.render(ui);
+    if (sec) this.page.append(sec);
+    this.body.scrollTop = y;
+    slideIn(this.page, this.slide);
+    this.slide = 0;
+  }
+
+  /** The page of the section on show. */
+  private render(ui: UiState): HTMLElement | null {
+    switch (this.cur) {
+      case 'hardpoints': return this.hardpoints(ui);
+      case 'attunements': return this.attunements(ui);
+      case 'abilities': return this.abilitySlots(ui);
+      case 'doctrines': return this.doctrines(ui);
+      case 'boons': return boonsSection(ui, this.openBoonOffer);
+      case 'anomalies': return this.anomalies(ui);
+      case 'cores': return this.cores(ui);
+      case 'frame': {
+        const page = h('div', { class: 'bs-frame-page', data: { sec: 'frame' } });
+        if (this.ctx.features().frame) page.append(this.frame(ui));
+        const dial = this.threatDial(ui);
+        if (dial) page.append(dial);
+        return page;
+      }
+      default: return null;
+    }
   }
 
   private frame(ui: UiState): HTMLElement {
@@ -144,8 +364,7 @@ export class BuildScreen {
   }
 
   private hardpoints(ui: UiState): HTMLElement {
-    const f = this.ctx.features();
-    return section('Hardpoints', f.prestigeTab ? `Mounts lock for this Prestige.${f.cores ? ` A Refit costs ${REFIT_CORES} Cores.` : ''}` : 'A mount stays once chosen.', ...this.slotRows(ui, false), ...this.extraRows(ui));
+    return section('hardpoints', ...this.slotRows(ui, false), ...this.extraRows(ui));
   }
 
   /** Systems that run without a slot: a Frame's free mount, or a Borrowed Blade from an Anomaly. */
@@ -163,20 +382,18 @@ export class BuildScreen {
   }
 
   private attunements(ui: UiState): HTMLElement {
-    return section('Attunements', this.ctx.features().prestigeTab ? 'Attunements lock for this Prestige.' : 'An attunement stays once chosen.', ...this.slotRows(ui, true));
+    return section('attunements', ...this.slotRows(ui, true));
   }
 
   private doctrines(ui: UiState): HTMLElement {
     const frameMounted = (ui.extraSystems ?? []).filter((x) => x.via === 'frame').map((x) => x.system);
     const trees = [...CHASSIS, ...ui.build.attunements.filter(Boolean), ...ui.build.hardpoints.filter(Boolean), ...frameMounted] as TreeId[];
-    let seconds = false;
     const waiting: HTMLElement[] = [];
     const rows = trees.map((tree) => {
       const t = TREE_BY_ID.get(tree);
       if (!t) return null;
       const first = ui.build.doctrines[tree], second = ui.build.secondDoctrines[tree];
       const sd = ui.secondDoctrine?.[tree];
-      if (sd) seconds = true;
       const nameOf = (d: DoctrineId): string => t.doctrines.find((x) => x.id === d)?.name ?? d;
       const capOf = (d: DoctrineId): string | undefined => NODE_BY_ID.get(t.doctrines.find((x) => x.id === d)?.capstone ?? '')?.name;
       const open = (): void => this.shop.jumpTo(tree, true);
@@ -211,9 +428,7 @@ export class BuildScreen {
       fold.setAttribute('aria-expanded', this.docsOpen ? 'true' : 'false');
       rows.push(fold, ...(this.docsOpen ? waiting : []));
     }
-    const fx = this.ctx.features();
-    const rule = fx.cores ? (fx.prestigeTab ? 'Locked for this Prestige; a change costs 1 Core, at a checkpoint.' : 'A change costs 1 Core, at a checkpoint.') : 'A chosen path stays.';
-    return section('Doctrines', `${rule}${seconds ? ' Trees marked 2nd run a second Doctrine.' : ''}`, ...rows);
+    return section('doctrines', ...rows);
   }
 
   private anomalies(ui: UiState): HTMLElement {
@@ -223,7 +438,7 @@ export class BuildScreen {
     const empty = b.anomalySockets - b.anomalies.length;
     if (empty > 0) cards.appendChild(h('div', { class: 'bs-socket', text: `${empty === 1 ? 'An empty socket' : `${empty} empty sockets`}: Anomaly drafts follow boss kills` }));
     rows.push(cards);
-    return section('Anomalies', `${b.anomalies.length}/${b.anomalySockets} sockets${this.ctx.features().prestigeTab ? ', for this Prestige' : ''}`, ...rows);
+    return section('anomalies', ...rows);
   }
 
   private abilitySlots(ui: UiState): HTMLElement {
@@ -247,9 +462,7 @@ export class BuildScreen {
         : def ? `${def.cost} CE · ${def.cooldown}s cooldown · ${def.desc}` : 'Abilities spend Command Energy (CE).';
       return row(id ? abilityIcon(id, 'ico') : icon('plus', 'ico'), h('span', null, h('span', { class: 'bs-num-inline', text: `${i + 1} · ` }), def ? def.name : 'Empty ability slot'), sub, acts, inactive ? 'locked' : def ? 'filled' : 'open');
     });
-    const fy = this.ctx.features();
-    const more = !fy.prestigeTab || n >= 4 ? '' : n === 2 ? ` More slots: Third Tactical Slot (${nodeTier('third_tactical_slot')}), the Command capstone (Reactor).` : ' A fourth: the Command capstone (Reactor) or Third Tactical Slot.';
-    return section('Abilities', `Keys 1–${n} on Battle.${more}${auto ? ' Autocast fires each when affordable and useful.' : ''}`, ...rows);
+    return section('abilities', ...rows);
   }
 
   /** Reachability: the Threat Dial can be lowered mid-run (never raised; Echoes pay at the lowest level used). */
@@ -259,8 +472,8 @@ export class BuildScreen {
     const sub = lvl > 0
       ? `Enemy HP +${lvl * 12}%, speed +${lvl * 3}% · Echoes +${low * 10}% (they pay at the lowest level used this Prestige: ${low}). Lowering is permanent for this Prestige.`
       : 'Level 0. Choose a level when you Prestige.';
-    return section('Threat Dial', null, row(icon('skull', 'ico'), `Level ${lvl}`, sub,
-      [lvl > 0 ? button('Lower…', () => this.lowerDial(lvl), { class: 'btn small', label: `Lower the Threat Dial from level ${lvl}` }) : null]));
+    return h('section', { class: 'bs-section bs-dial' }, h('h3', { class: 'sec-title', text: 'Threat Dial' }), h('div', { class: 'bs-list' }, row(icon('skull', 'ico'), `Level ${lvl}`, sub,
+      [lvl > 0 ? button('Lower…', () => this.lowerDial(lvl), { class: 'btn small', label: `Lower the Threat Dial from level ${lvl}` }) : null])));
   }
 
   private lowerDial(cur: number): void {
@@ -279,8 +492,7 @@ export class BuildScreen {
     const go = (label: string, cost: string, sub: string, onTap: () => void, can: boolean): HTMLElement =>
       button([h('span', { class: 'bs-main' }, h('span', { class: 'bs-name', text: label }), h('span', { class: 'bs-sub', text: sub })),
         h('span', { class: `price cores${can ? '' : ' short'}` }, icon('cores', 'ico tiny'), cost), icon('right', 'ico tiny chev')], onTap, { class: 'btn bs-core-row' });
-    return h('section', { class: 'bs-section' },
-      h('h3', { class: 'sec-title' }, 'Cores', h('span', { class: 'sec-sub', text: 'Bosses drop them; they reset at Prestige.' })),
+    return h('section', { class: 'bs-section', data: { sec: 'cores' } },
       h('div', { class: 'bs-list' },
         go('Exotics', '2', 'One per tree, once its Doctrine fork is reached', () => this.shop.open('cores', 'exotic'), c >= 2),
         go('Refit', String(REFIT_CORES), 'Swap a mounted hardpoint (60% of its Scrap back)', () => this.shop.open('cores', 'refit'), c >= REFIT_CORES),

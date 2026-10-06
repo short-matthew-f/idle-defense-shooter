@@ -54,6 +54,8 @@ export interface HintCtx {
   nav: { screen: HintScreen | null; battle: boolean };
   /** The Upgrades screen's page (category) and tree (empty slots are `slot:<i>`). */
   shop: { cat: string; tree: string };
+  /** The Build screen's section page on show (absent: unknown, the hint points at the control directly). */
+  build?: { sec: string | null };
   /** A modal, draft or death card is open (or the touch test runs). */
   blocked: boolean;
   /** An ability is armed (waiting for a field tap). */
@@ -119,9 +121,14 @@ function viaUpgrades(c: HintCtx, cat: string | null, last: HintStep): HintStep |
   if (cat && c.shop.cat !== cat) return { target: `cat-${cat}`, text: 'Tap here', final: false };
   return last;
 }
-/** Build → control. */
-function viaBuild(c: HintCtx, last: HintStep): HintStep {
-  return c.nav.screen !== 'build' ? { target: 'tab-build', text: 'Open Build', final: false } : last;
+/**
+ * Build → section → control. The section step targets `bsec-<id>`: that section's row in the open "Section ▾" menu,
+ * else the crumb itself (pointer.ts). Opening Build lands on the section that needs attention, so the step is rare.
+ */
+function viaBuild(c: HintCtx, last: HintStep, sec?: string): HintStep {
+  if (c.nav.screen !== 'build') return { target: 'tab-build', text: 'Open Build', final: false };
+  if (sec && c.build && c.build.sec !== sec) return { target: `bsec-${sec}`, text: 'Tap here', final: false };
+  return last;
 }
 /** Battle → control (phones: a full-screen tab hides the arena). */
 function viaBattle(c: HintCtx, last: HintStep): HintStep {
@@ -165,7 +172,7 @@ export const HINTS: readonly HintDef[] = [
   {
     id: 'build', prio: 21, coach: 'build', feature: 'hardpoints', kind: 'event',
     when: (ui, c) => c.f.hardpoints && c.f.buildTab && emptySlot(ui.build.hardpoints, ui.run.hardpointSlotsOpen) >= 0,
-    step: (_ui, c) => viaBuild(c, { target: 'build-mount', text: 'Mount a weapon', final: true }),
+    step: (_ui, c) => viaBuild(c, { target: 'build-mount', text: 'Mount a weapon', final: true }, 'hardpoints'),
   },
   tabReveal('upgrades', 30),
   tabReveal('build', 31),
@@ -190,7 +197,7 @@ export const HINTS: readonly HintDef[] = [
     id: 'boon', prio: 51, coach: 'boons', feature: 'boons', kind: 'event',
     when: (ui, c) => c.live.boonChip && !!ui.run.boonOffer?.length,
     step: (_ui, c) => (c.nav.battle ? { target: 'boon-chip', text: 'Your boon waits here', final: true }
-      : viaBuild(c, { target: 'build-boon', text: 'Your boon waits here', final: true })),
+      : viaBuild(c, { target: 'build-boon', text: 'Your boon waits here', final: true }, 'boons')),
   },
   {
     // only on Upgrades (a ring on the tab for this would nag): the quantity selector (★ Suggested tags explain themselves)

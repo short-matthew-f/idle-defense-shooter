@@ -12,6 +12,8 @@ export interface Prefs {
   panelOpen: boolean;
   shopCategory: string;
   shopTree: string;
+  /** Build: the section page last viewed (crumbs; '' = the first revealed). */
+  buildSection: string;
   /** The Trial the player started (UiState does not report the active Trial; see report). */
   activeTrial: TrialId | null;
   /** Purchases made while the first-purchase coach was showing (it retires after 3). */
@@ -72,7 +74,7 @@ export interface Prefs {
 }
 
 const KEY = 'citadel.prefs.v1';
-const DEFAULTS: Prefs = { onboarded: false, bloom: true, affordableFirst: false, panelOpen: true, shopCategory: 'chassis', shopTree: 'ballistics', activeTrial: null, buyCoach: 0, buyQty: 1, suggestExpanded: false,
+const DEFAULTS: Prefs = { onboarded: false, bloom: true, affordableFirst: false, panelOpen: true, shopCategory: 'chassis', shopTree: 'ballistics', buildSection: '', activeTrial: null, buyCoach: 0, buyQty: 1, suggestExpanded: false,
   soundMaster: 0.71, soundSfx: 0.8, soundMusic: 0.55, soundMuted: false, musicOn: true, touchCal: null,
   unlockAll: false, coachSeen: [], tabsVisited: [], revealInit: false, contentSeen: [], contentInit: false, echoGuide: false,
   pointerHints: true, hintsDone: [], hintsInit: false, coreExplained: false, qmSeen: false,

@@ -27,6 +27,7 @@ import { icon } from './icons';
 import { fmtNum, fmtStatChange, splitDesc, substituteDesc, titleCase } from './format';
 import { CHASSIS, ELEMENTS, ELEMENT_BLURB, HARDPOINTS, HARDPOINT_BLURB, NODE_BY_ID, TREE_BY_ID, TREE_LABEL } from './content';
 import { confirmDialog, openModal, type ModalHandle } from './modal';
+import { CrumbMenu, crumbButton, crumbGap, crumbLine, crumbSep, paintCrumb, slideIn, stepStop, wireSwipe, type Crumb, type NavStop } from './crumbs';
 import { doctrineFork, doctrinesShown, forkKey, freeDoctrineTrees } from './doctrine';
 import { prefs, setPref } from './prefs';
 import { POOL_COMPLETE_AT, STARTER_IDS, contentPool, newInPool, poolShop, type ContentPool, type Features } from './progression';
@@ -227,39 +228,14 @@ interface SlotDecision { slot: number; offer: boolean }
 /** A section of the list on show (a jump link in the breadcrumb menus). */
 interface Section { sec: string; label: string }
 
-/** Minimum horizontal travel (px) for a swipe on the list, and how much more horizontal than vertical it must be. */
-export const SWIPE_MIN_DX = 50;
-export const SWIPE_RATIO = 1.5;
-/** Touches that start this close to the left edge belong to the system's swipe-back (→ Battle). */
-export const SWIPE_EDGE = 24;
-
-/** Is a touch from (x0, y0) to (x1, y1) a list swipe? -1 / +1 (previous / next) or 0. Pure. */
-export function swipeDir(x0: number, y0: number, x1: number, y1: number): -1 | 0 | 1 {
-  if (x0 < SWIPE_EDGE) return 0;
-  const dx = x1 - x0, dy = y1 - y0;
-  if (Math.abs(dx) < SWIPE_MIN_DX || Math.abs(dx) <= SWIPE_RATIO * Math.abs(dy)) return 0;
-  return dx < 0 ? 1 : -1;
-}
-
-/** One stop of the swipe order: a tree of a page, or a whole page (stacked pages, pages with no tree yet). */
-export interface NavStop { cat: Category; tree: string }
-
 /** The flattened swipe order: every revealed page's trees in order (a page without trees is one stop). Pure. */
-export function navStops(pages: readonly { cat: Category; trees: readonly string[] }[]): NavStop[] {
-  const out: NavStop[] = [];
+export function navStops(pages: readonly { cat: Category; trees: readonly string[] }[]): NavStop<Category>[] {
+  const out: NavStop<Category>[] = [];
   for (const p of pages) {
     if (STACKED.has(p.cat) || !p.trees.length) out.push({ cat: p.cat, tree: '' });
     else for (const t of p.trees) out.push({ cat: p.cat, tree: t });
   }
   return out;
-}
-
-/** The stop `dir` steps from (cat, tree), or null at either end (no wrap). Pure. */
-export function stepStop(stops: readonly NavStop[], cat: Category, tree: string, dir: -1 | 1): NavStop | null {
-  let i = stops.findIndex((s) => s.cat === cat && (s.tree === '' || s.tree === tree));
-  if (i < 0) i = stops.findIndex((s) => s.cat === cat);
-  if (i < 0) return stops[0] ?? null;
-  return stops[i + dir] ?? null;
 }
 
 /** How many rows carry a "★ Suggested" tag (across the whole Upgrades screen). */
@@ -275,14 +251,10 @@ export class Shop {
   readonly qtyChip: HTMLButtonElement;
   private readonly qtyVal = h('span', { class: 'qty-val' });
   // ---- the breadcrumb line: Page ▾ › Tree ▾ … QM [switch]
-  private readonly pageLabel = h('span', { class: 'crumb-label' });
-  private readonly pageDot = h('span', { class: 'cat-dot', attrs: { 'aria-hidden': 'true' } });
-  private readonly pageCaret = h('span', { class: 'crumb-caret', text: '▾', attrs: { 'aria-hidden': 'true' } });
+  private readonly pageC: Crumb;
   private readonly pageBtn: HTMLButtonElement;
-  private readonly sep = h('span', { class: 'crumb-sep', text: '›', attrs: { 'aria-hidden': 'true' } });
-  private readonly treeLabel = h('span', { class: 'crumb-label' });
-  private readonly treeCount = h('span', { class: 'crumb-count', attrs: { 'aria-hidden': 'true' } });
-  private readonly treeDot = h('span', { class: 'chip-dot', attrs: { 'aria-hidden': 'true' } });
+  private readonly sep = crumbSep();
+  private readonly treeC: Crumb;
   private readonly treeBtn: HTMLButtonElement;
   private readonly qmBtn: HTMLButtonElement;
   private readonly crumbs: HTMLElement;
@@ -317,8 +289,8 @@ export class Shop {
   private sections: Section[] = [];
   /** Rows marked "★ Suggested" (suggestedNodes over the pooled shop; only once 'bulk' is revealed). */
   private suggested = new Set<string>();
-  /** The breadcrumb menu open now (closed by Esc, Back, a tap outside or a choice). */
-  private menu: ModalHandle | null = null;
+  /** The breadcrumb menu (closed by Esc, Back, a tap outside or a choice). */
+  private readonly menu = new CrumbMenu();
   /** Slide direction for the next render (a swipe or ← / →). */
   private slide: -1 | 0 | 1 = 0;
   /**
@@ -349,16 +321,14 @@ export class Shop {
     const p = prefs();
     this.cat = (CATEGORIES.some((c) => c.id === p.shopCategory) ? p.shopCategory : 'chassis') as Category;
     this.tree = p.shopTree;
-    this.pageBtn = button([this.pageLabel, this.pageDot, this.pageCaret], () => this.openPageMenu(), { class: 'btn ghost crumb crumb-page' });
-    this.pageBtn.dataset.hint = 'page-menu';
-    attr(this.pageBtn, 'aria-haspopup', 'menu');
-    this.treeBtn = button([this.treeLabel, this.treeCount, this.treeDot, h('span', { class: 'crumb-caret', text: '▾', attrs: { 'aria-hidden': 'true' } })], () => this.openTreeMenu(), { class: 'btn ghost crumb crumb-tree' });
-    this.treeBtn.dataset.hint = 'tree-menu';
-    attr(this.treeBtn, 'aria-haspopup', 'menu');
+    this.pageC = crumbButton(() => this.openPageMenu(), { cls: 'crumb-page', hint: 'page-menu', dotCls: 'cat-dot' });
+    this.pageBtn = this.pageC.btn;
+    this.treeC = crumbButton(() => this.openTreeMenu(), { cls: 'crumb-tree', hint: 'tree-menu', dotCls: 'chip-dot', count: true });
+    this.treeBtn = this.treeC.btn;
     this.qmBtn = button('QM', () => this.openQmSheet(), { class: 'btn ghost crumb crumb-qm', label: 'Quartermaster settings' });
     this.qmCrumb = h('div', { class: 'qm-crumb' }, this.qmBtn, this.qmSwitchWrap);
     this.qmCrumb.hidden = true;
-    this.crumbs = h('nav', { class: 'crumbs', attrs: { 'aria-label': 'Upgrades: page and tree' } }, this.pageBtn, this.sep, this.treeBtn, h('span', { class: 'crumb-gap' }), this.qmCrumb);
+    this.crumbs = crumbLine('Upgrades: page and tree', this.pageBtn, this.sep, this.treeBtn, crumbGap(), this.qmCrumb);
     this.head = h('div', { class: 'shop-head' }, this.crumbs);
     this.qtyChip = button([h('span', { class: 'qty-k', text: 'Buy' }), this.qtyVal], () => this.cycleQty(), { class: 'btn qty-chip', title: 'Ranks per Buy tap: ×1 → ×10 → Max (Q)' });
     this.qtyChip.dataset.hint = 'qty';
@@ -378,7 +348,7 @@ export class Shop {
       button('Forecast', () => this.ctx.open('forecast'), { class: 'btn small bn-btn', label: 'Open the Forecast' }));
     this.bneck.hidden = true;
     this.body.insertBefore(this.bneck, this.body.firstChild);
-    this.wireSwipe();
+    wireSwipe(this.body, (d) => this.step(d));
   }
 
   // ---------------------------------------------------------------- Quartermaster
@@ -557,7 +527,7 @@ export class Shop {
 
   // ---------------------------------------------------------------- navigation: swipe, ← / →
   /** Every revealed page with its trees (filled ones; stacked pages none), for the swipe order. */
-  private stops(ui: UiState): NavStop[] {
+  private stops(ui: UiState): NavStop<Category>[] {
     return navStops(this.shownCats().map((cat) => ({ cat, trees: STACKED.has(cat) ? [] : this.chips(ui, cat).filter((c) => !c.empty).map((c) => c.id) })));
   }
 
@@ -574,60 +544,12 @@ export class Shop {
     return true;
   }
 
-  /** Horizontal swipes on the list (not from the left edge: that is the system's swipe back to Battle). */
-  private wireSwipe(): void {
-    let s: { x: number; y: number; id: number } | null = null;
-    let swallowUntil = 0;
-    this.body.addEventListener('touchstart', (e) => {
-      const t = e.touches[0];
-      const tgt = e.target as Element | null;
-      // one finger, on the list, not on a control that is pressed and held (a Buy button, a switch, a picker card)
-      s = e.touches.length === 1 && t && !tgt?.closest('button, input, label, select, .pick-card, .fork-cards') ? { x: t.clientX, y: t.clientY, id: t.identifier } : null;
-    }, { passive: true });
-    this.body.addEventListener('touchend', (e) => {
-      const st = s;
-      s = null;
-      if (!st) return;
-      const t = [...e.changedTouches].find((x) => x.identifier === st.id);
-      if (!t) return;
-      const d = swipeDir(st.x, st.y, t.clientX, t.clientY);
-      if (d && this.step(d)) swallowUntil = performance.now() + 400;
-    }, { passive: true });
-    this.body.addEventListener('touchcancel', () => { s = null; }, { passive: true });
-    // the tap that ended a swipe never also unfolds a row
-    this.body.addEventListener('click', (e) => { if (performance.now() < swallowUntil) { e.stopPropagation(); e.preventDefault(); } }, true);
-  }
-
   // ---------------------------------------------------------------- breadcrumb menus
-  private closeMenu(): void { const m = this.menu; this.menu = null; m?.close(); }
-
-  private openMenu(anchor: HTMLButtonElement, title: string, rows: HTMLElement[], cls: string): void {
-    this.closeMenu();
-    const body = h('div', { class: `crumb-menu-list ${cls}`, attrs: { role: 'menu', 'aria-label': title } }, ...rows);
-    attr(anchor, 'aria-expanded', 'true');
-    const m = openModal({ title, body, variant: 'popover', className: 'crumb-menu', anchor, returnFocus: anchor,
-      onClose: () => { attr(anchor, 'aria-expanded', 'false'); if (this.menu === m) this.menu = null; } });
-    this.menu = m;
-    (body.querySelector<HTMLElement>('[aria-current="true"]') ?? body.querySelector<HTMLElement>('button'))?.focus({ preventScroll: true });
-  }
-
-  /** One menu row: label, a quiet count, ★ (holds a suggested buy), a dot + "New" (a decision waits). */
-  private menuRow(o: { label: string; sub?: boolean; current?: boolean; count?: number; star?: boolean; dot?: string | null; hint?: string; empty?: boolean; onPick: () => void }): HTMLButtonElement {
-    const parts: (HTMLElement | string)[] = [h('span', { class: 'cm-label', text: o.label })];
-    if (o.count) parts.push(h('span', { class: 'cm-count', text: String(o.count), attrs: { 'aria-hidden': 'true' } }));
-    if (o.star) parts.push(h('span', { class: 'cm-star', text: '★', attrs: { 'aria-hidden': 'true' } }));
-    if (o.dot) parts.push(h('span', { class: 'cm-new' }, h('span', { class: 'cat-dot', attrs: { 'aria-hidden': 'true' } }), h('span', { text: 'New' })));
-    const b = button(parts, () => { this.closeMenu(); o.onPick(); }, { class: `btn ghost cm-row${o.sub ? ' sub' : ''}${o.current ? ' current' : ''}${o.empty ? ' empty' : ''}` });
-    b.setAttribute('role', 'menuitem');
-    if (o.current) attr(b, 'aria-current', 'true');
-    if (o.hint) b.dataset.hint = o.hint;
-    attr(b, 'aria-label', `${o.label}${o.count ? `, ${o.count} affordable` : ''}${o.star ? ', has a suggested upgrade' : ''}${o.dot ? ` (${o.dot})` : ''}`);
-    return b;
-  }
+  private closeMenu(): void { this.menu.close(); }
 
   /** Jump links to the sections of the list on show (indented under the current page or tree). */
   private sectionRows(): HTMLElement[] {
-    return this.sections.map((s) => this.menuRow({ label: s.label, sub: true, onPick: () => this.scrollToSec(s.sec) }));
+    return this.sections.map((s) => this.menu.row({ label: s.label, sub: true, onPick: () => this.scrollToSec(s.sec) }));
   }
 
   /** "Page ▾": the revealed pages in order; a stacked page on show lists its sections under it. */
@@ -640,11 +562,11 @@ export class Shop {
     for (const c of CATEGORIES) {
       if (!cats.includes(c.id)) continue;
       const cur = c.id === this.cat;
-      rows.push(this.menuRow({ label: c.label, current: cur, star: this.starIn(ui, c.id), dot: this.decisionIn(ui, c.id), hint: `cat-${c.id}`,
+      rows.push(this.menu.row({ label: c.label, current: cur, star: this.starIn(ui, c.id), dot: this.decisionIn(ui, c.id), hint: `cat-${c.id}`,
         onPick: () => { if (cur) this.body.scrollTop = 0; else this.setCategory(c.id); } }));
       if (cur && STACKED.has(c.id)) rows.push(...this.sectionRows());
     }
-    this.openMenu(this.pageBtn, 'Upgrade pages', rows, 'page-menu');
+    this.menu.open(this.pageBtn, 'Upgrade pages', rows, 'page-menu');
   }
 
   /** "Tree ▾": the page's trees (and empty slots); the current tree lists its sections under it. */
@@ -656,14 +578,14 @@ export class Shop {
     for (const c of this.chips(ui, this.cat)) {
       const cur = c.id === this.tree;
       if (c.empty) {
-        rows.push(this.menuRow({ label: '+ Empty slot', empty: true, current: cur, hint: 'slot-menu', onPick: () => this.setTree(c.id) }));
+        rows.push(this.menu.row({ label: '+ Empty slot', empty: true, current: cur, hint: 'slot-menu', onPick: () => this.setTree(c.id) }));
         continue;
       }
-      rows.push(this.menuRow({ label: c.label, current: cur, count: this.affordableCount(ui, c.id), star: this.starInTree(ui, c.id), dot: forks.has(c.id) ? 'Doctrine fork open' : null,
+      rows.push(this.menu.row({ label: c.label, current: cur, count: this.affordableCount(ui, c.id), star: this.starInTree(ui, c.id), dot: forks.has(c.id) ? 'Doctrine fork open' : null,
         onPick: () => { if (cur) this.body.scrollTop = 0; else this.setTree(c.id); } }));
       if (cur) rows.push(...this.sectionRows());
     }
-    this.openMenu(this.treeBtn, `${CATEGORIES.find((c) => c.id === this.cat)?.label ?? ''} trees`, rows, 'tree-menu');
+    this.menu.open(this.treeBtn, `${CATEGORIES.find((c) => c.id === this.cat)?.label ?? ''} trees`, rows, 'tree-menu');
   }
 
   /** Does `cat` hold a ★ Suggested row? */
@@ -679,26 +601,18 @@ export class Shop {
   private updateCrumbs(ui: UiState, all: Chip[], chipsOn: boolean, forks: Set<string>): void {
     const cats = this.shownCats();
     const label = CATEGORIES.find((c) => c.id === this.cat)?.label ?? '';
-    text(this.pageLabel, label);
     const menuable = cats.length > 1 || STACKED.has(this.cat);
-    this.pageBtn.classList.toggle('static', !menuable);
     this.pageBtn.dataset.pages = cats.join(',');   // the revealed pages (tests, and the menu's source)
-    show(this.pageCaret, menuable);
     const others = cats.filter((c) => c !== this.cat).map((c) => this.decisionIn(ui, c)).filter(Boolean);
-    show(this.pageDot, others.length > 0);
-    attr(this.pageBtn, 'aria-label', `Page: ${label}${menuable ? '. Choose a page' : ''}${others.length ? ` (${others[0]} on another page)` : ''}`);
-    this.pageBtn.tabIndex = menuable ? 0 : -1;
+    paintCrumb(this.pageC, { label, menuable, dot: others.length > 0, aria: `Page: ${label}${menuable ? '. Choose a page' : ''}${others.length ? ` (${others[0]} on another page)` : ''}` });
     show(this.treeBtn, chipsOn);
     show(this.sep, chipsOn);
     if (chipsOn) {
       const cur = all.find((c) => c.id === this.tree);
       const name = cur?.empty ? 'Empty slot' : cur?.label ?? '';
-      text(this.treeLabel, name);
       const n = cur && !cur.empty ? this.affordableCount(ui, cur.id) : 0;
-      text(this.treeCount, n > 0 ? String(n) : '');
       const otherFork = [...forks].some((t) => t !== this.tree);
-      show(this.treeDot, otherFork);
-      attr(this.treeBtn, 'aria-label', `Tree: ${name}${n > 0 ? `, ${n} affordable` : ''}. Choose a tree${otherFork ? ' (Doctrine fork open in another tree)' : ''}`);
+      paintCrumb(this.treeC, { label: name, menuable: true, count: n, dot: otherFork, aria: `Tree: ${name}${n > 0 ? `, ${n} affordable` : ''}. Choose a tree${otherFork ? ' (Doctrine fork open in another tree)' : ''}` });
     }
   }
 
@@ -1044,14 +958,8 @@ export class Shop {
     if (this.qmPlace(ui) === 'list') { frag.insertBefore(this.qmWrap, frag.firstChild); this.syncQm(ui); }
     this.list.replaceChildren(frag);
     // a swipe / ← → slides the new tree in from its side (none with reduced motion: CSS)
-    if (this.slide) {
-      const cls = this.slide > 0 ? 'slide-next' : 'slide-prev';
-      this.slide = 0;
-      this.list.classList.remove('slide-next', 'slide-prev');
-      void this.list.offsetWidth;
-      this.list.classList.add(cls);
-      window.setTimeout(() => this.list.classList.remove(cls), 260);
-    }
+    slideIn(this.list, this.slide);
+    this.slide = 0;
   }
 
   /** Attune / mount picker for an open slot (the Upgrades slot row and the Build screen's Mount button). */

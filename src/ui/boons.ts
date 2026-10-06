@@ -150,7 +150,7 @@ export function boonRowEl(v: BoonView, note?: string | null, actions: (HTMLEleme
     actions.some(Boolean) ? h('div', { class: 'bi-act' }, ...actions) : null);
 }
 
-/** The Build tab's "Active boons" section. */
+/** Build → Boons: the pending-offer prompt and the active boons (or one line saying when offers come). */
 export function boonsSection(ui: UiState, openOffer: () => void): HTMLElement {
   const r = ui.run, active = r.boons ?? [];
   const cap = r.boonCap || 4;
@@ -165,11 +165,12 @@ export function boonsSection(ui: UiState, openOffer: () => void): HTMLElement {
   });
   // nothing active: say when offers come (not while one is waiting right above)
   if (!active.length && !r.boonOffer?.length) list.appendChild(h('div', { class: 'bs-socket', text: r.mode === 'patrol' ? 'No active boons. Offers come at the start of an attempt and after each boss, in Push.' : 'No active boons. Offers come at the start of every retry and after each boss.' }));
-  return h('section', { class: 'bs-section' },
-    h('h3', { class: 'sec-title' }, `Active boons · ${active.length}/${cap}`,
-      h('span', { class: 'sec-sub', text: 'This attempt only; at the cap a new pick replaces the oldest.' })),
-    list);
+  // the title ("Boons" and n/cap) is Build's breadcrumb; the rule rides on its ⓘ (BOONS_RULE)
+  return h('section', { class: 'bs-section', data: { sec: 'boons' } }, list);
 }
+
+/** The Boons rule (Build → Boons, behind the ⓘ). */
+export const BOONS_RULE = 'This attempt only; at the cap a new pick replaces the oldest.';
 
 /** Active boons: a list in a dialog (tap on the row under the top bar). */
 export function openActiveBoons(ui: UiState): ModalHandle {

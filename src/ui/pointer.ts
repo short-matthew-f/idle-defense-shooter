@@ -115,6 +115,8 @@ const TARGETS = new Map<string, Resolver>([
   ['field', fieldSpot],
   // Upgrades pages (hints.ts viaUpgrades): the page's row in the open "Page ▾" menu carries the key; else the crumb
   ...(['chassis', 'elements', 'hardpoints', 'cross', 'cores'] as const).map((c): [string, Resolver] => [`cat-${c}`, '.screen.s-upgrades .crumb-page']),
+  // Build sections (hints.ts viaBuild): the section's row in the open "Section ▾" menu carries the key; else the crumb
+  ...(['hardpoints', 'attunements', 'abilities', 'doctrines', 'boons', 'anomalies', 'cores', 'frame'] as const).map((c): [string, Resolver] => [`bsec-${c}`, '.screen.s-build .crumb-page']),
 ]);
 
 /** Map a hint key to a selector or resolver (for controls whose module has no `data-hint`). */
@@ -400,6 +402,8 @@ registerHint({
 export interface HintSources {
   nav(): { screen: HintScreen | null; battle: boolean };
   shop(): { cat: string; tree: string };
+  /** The Build screen's section on show (null: none yet). */
+  build?(): { sec: string | null };
   /** The coach banner that is current (coach.ts CoachBanner.current). */
   coach(): string | null;
   /** A modal, draft or death card is open. */
@@ -494,7 +498,7 @@ export class HintDriver {
       done: new Set(p.hintsDone), visited: new Set(p.tabsVisited),
       coach: { current, seen: new Set(p.coachSeen), visible, visibleMs: current ? this.bannerMs.get(current) ?? 0 : 0 },
       snoozed: new Set(this.snooze.keys()),
-      nav: this.src.nav(), shop: this.src.shop(),
+      nav: this.src.nav(), shop: this.src.shop(), build: this.src.build?.(),
       blocked: this.src.blocked() || document.body.classList.contains('touch-testing'),
       armed: this.src.armed(),
       live: {

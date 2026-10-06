@@ -16,3 +16,4 @@
 [data-info] { cursor: help; }
 [data-info]:focus-visible { outline: 2px solid var(--accent, #6cf); outline-offset: 2px; }
 .info-mark { opacity: 0.6; flex: none; }
+.info-sheet .info-text.info-more { margin-top: 10px; }

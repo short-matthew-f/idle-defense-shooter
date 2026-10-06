@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ShopEntry } from '../../src/sim/core/types';
-import { SUGGEST_MAX, navStops, stepStop, suggestedNodes, swipeDir } from '../../src/ui/shop';
+import { SUGGEST_MAX, navStops, suggestedNodes } from '../../src/ui/shop';
+import { stepStop, swipeDir } from '../../src/ui/crumbs';
 import { popoverBox } from '../../src/ui/modal';
 
 const entry = (node: string, cost: number, extra: Partial<ShopEntry> = {}): ShopEntry => ({

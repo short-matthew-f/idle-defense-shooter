@@ -1,7 +1,9 @@
 /**
  * The Prestige and More screens of the shell.
- *   Prestige: a segmented control over the Forecast (readouts, chart, the Prestige button), the
- *     Prestige layers shop and the Constellation / Ascend; each segment explains its lock.
+ *   Prestige: one breadcrumb line "View ▾ › Tier ▾" (crumbs.ts) over the Forecast (readouts, chart, the Prestige
+ *     button), the Echo tiers shop (one tier at a time: "Tier ▾") and the Constellation / Ascend. The View menu lists
+ *     the three views; a locked one shows its lock and reason and cannot be picked. A swipe (or ← / →) steps along the
+ *     unlocked views, Echo tiers through its four tiers.
  *   More: a list of rows (Inspector, Codex, Automation, Trials, Settings, Help) that push a
  *     sub-screen with a back button (the shell records it in the browser history).
  */
@@ -14,7 +16,8 @@ import type { PrestigeShop } from './prestige-shop';
 import type { ConstellationPanel } from './constellation';
 import type { UiCtx } from './ctx';
 import type { Features, FeatureId } from './progression';
-import { earliestGate, gateText } from './echo-tiers';
+import { ECHO_TIERS, earliestGate, gateText } from './echo-tiers';
+import { CrumbMenu, crumbButton, crumbGap, crumbLine, crumbSep, paintCrumb, slideIn, stepStop, wireSwipe, type Crumb, type NavStop } from './crumbs';
 
 const pr = (ui: UiState, id: string): number => ui.meta.prestigeRanks[`prestige.${id}`] | 0;
 
@@ -27,28 +30,34 @@ export const PRESTIGE_SEGS: { id: PrestigeSeg; label: string; lock: (ui: UiState
   { id: 'ascension', label: 'Ascension', lock: (ui) => (ui.meta.ascension === 0 && ui.run.deepestCleared < 100 ? 'Beat wave 100' : null) },
 ];
 
+/** The roman numeral of an Echo tier (1–4). */
+const ROMAN = ['I', 'II', 'III', 'IV'];
+
 export class PrestigeScreen {
+  /** The screen: the pinned breadcrumb line over its own scroller (the shell's top row holds the Echoes balance). */
   readonly el: HTMLElement;
-  private readonly seg = h('div', { class: 'seg-ctl', attrs: { role: 'tablist', 'aria-label': 'Prestige' } });
-  private readonly body = h('div', { class: 'ps-body' });
+  private readonly body: HTMLElement;
+  private readonly panel = h('div', { class: 'ps-body crumb-page-body' });
   /** Progressive reveal: before the first Prestige the tab opens as a teaser. */
   private readonly teaser = h('p', { class: 'ps-teaser', text: 'Something is coming: Prestige starts a new, stronger machine. The Forecast says when it pays off.' });
-  private readonly btns = new Map<PrestigeSeg, { b: HTMLButtonElement; lock: HTMLElement; dot: HTMLElement }>();
+  private readonly viewC: Crumb;
+  private readonly sep = crumbSep();
+  private readonly tierC: Crumb;
+  private readonly menu = new CrumbMenu();
   private cur: PrestigeSeg = 'forecast';
   private shown = false;
+  private slide: -1 | 0 | 1 = 0;
   /** The segment on show changed (GameUi: the wallet bar follows it). */
   onViewChange: (() => void) | null = null;
 
   constructor(private readonly ctx: UiCtx, private readonly forecast: ForecastPanel, private readonly layers: PrestigeShop, private readonly stars: ConstellationPanel) {
-    for (const s of PRESTIGE_SEGS) {
-      const lock = icon('lock', 'ico tiny seg-lock');
-      const dot = h('span', { class: 'seg-dot', attrs: { 'aria-hidden': 'true' } });
-      const b = button([lock, s.label, dot], () => this.select(s.id), { class: 'seg-btn' });
-      b.setAttribute('role', 'tab');
-      this.btns.set(s.id, { b, lock: lock as unknown as HTMLElement, dot });
-      this.seg.appendChild(b);
-    }
-    this.el = h('div', { class: 'prestige-screen' }, this.teaser, this.seg, this.body);
+    this.viewC = crumbButton(() => this.openViewMenu(), { cls: 'crumb-page', hint: 'view-menu' });
+    this.tierC = crumbButton(() => this.openTierMenu(), { cls: 'crumb-tree', hint: 'tier-menu', dotCls: 'chip-dot', count: true });
+    const head = h('div', { class: 'crumb-head' }, crumbLine('Prestige: view', this.viewC.btn, this.sep, this.tierC.btn, crumbGap()));
+    this.body = h('div', { class: 'crumb-body' }, this.teaser, this.panel);
+    this.el = h('div', { class: 'crumb-screen prestige-screen', attrs: { 'aria-label': 'Prestige' } }, head, this.body);
+    // the Constellation map's stars are tapped, never swiped from
+    wireSwipe(this.body, (d) => this.step(d), 'button, input, label, select, .pick-card, .fork-cards, g.star');
     this.render();
   }
 
@@ -56,14 +65,53 @@ export class PrestigeScreen {
 
   select(s: PrestigeSeg): void {
     if (s === this.cur) return;
+    this.menu.close();
     this.cur = s;
+    if (s === 'layers' && this.layers.guiding) this.layers.setTier(1);   // the first-Prestige guide's picks are in tier I
     this.render();
-    this.el.closest('.screen')?.scrollTo({ top: 0 });
+    this.body.scrollTop = 0;
     this.onViewChange?.();
+  }
+
+  /** Echo tiers: show tier `t` (1–4). */
+  selectTier(t: number): void {
+    this.menu.close();
+    if (this.cur !== 'layers') this.select('layers');
+    if (this.layers.tier !== t) { this.layers.setTier(t); this.body.scrollTop = 0; slideIn(this.panel, this.slide); }
+    this.slide = 0;
+    const ui = this.ctx.state();
+    if (ui) this.update(ui);
+  }
+
+  /** The swipe order: the unlocked views, Echo tiers flattened into its four tiers. */
+  private stops(ui: UiState): NavStop<PrestigeSeg>[] {
+    const out: NavStop<PrestigeSeg>[] = [];
+    for (const s of PRESTIGE_SEGS) {
+      if (s.lock(ui) && s.id !== this.cur) continue;
+      if (s.id === 'layers') for (let t = 1; t <= ECHO_TIERS.length; t++) out.push({ cat: 'layers', tree: String(t) });
+      else out.push({ cat: s.id, tree: '' });
+    }
+    return out;
+  }
+
+  /** Next (+1) / previous (-1) view or tier (swipe on the page, ← / →). False at either end. */
+  step(dir: -1 | 1): boolean {
+    const ui = this.ctx.state();
+    if (!ui) return false;
+    const next = stepStop(this.stops(ui), this.cur, this.cur === 'layers' ? String(this.layers.tier) : '', dir);
+    if (!next) return false;
+    this.slide = dir;
+    if (next.cat === 'layers') {
+      const t = Number(next.tree);
+      if (this.cur !== 'layers') { this.layers.setTier(t); this.select('layers'); slideIn(this.panel, dir); this.slide = 0; this.update(ui); }
+      else this.selectTier(t);
+    } else { this.select(next.cat); slideIn(this.panel, dir); this.slide = 0; }
+    return true;
   }
 
   setShown(on: boolean): void {
     this.shown = on;
+    if (!on) this.menu.close();
     this.forecast.setShown(on && this.cur === 'forecast');
     this.layers.setShown(on && this.cur === 'layers');
     this.stars.setShown(on && this.cur === 'ascension');
@@ -73,27 +121,61 @@ export class PrestigeScreen {
 
   private render(): void {
     const panel = this.cur === 'forecast' ? this.forecast.el : this.cur === 'layers' ? this.layers.el : this.stars.el;
-    this.body.replaceChildren(panel);
-    for (const [id, x] of this.btns) {
-      x.b.classList.toggle('active', id === this.cur);
-      attr(x.b, 'aria-selected', id === this.cur ? 'true' : 'false');
-    }
+    this.panel.replaceChildren(panel);
     if (this.shown) this.setShown(true);
+  }
+
+  /** A view's attention: the Forecast recommends a Prestige; Ascension is open. */
+  private alert(ui: UiState, s: PrestigeSeg): string | null {
+    return s === 'forecast' ? (ui.forecast?.recommended ? 'Prestige recommended' : null) : s === 'ascension' ? (ui.run.deepestCleared >= 100 ? 'Ascension open' : null) : null;
+  }
+
+  private openViewMenu(): void {
+    const ui = this.ctx.state();
+    if (!ui) return;
+    const rows: HTMLElement[] = [];
+    for (const s of PRESTIGE_SEGS) {
+      const cur = s.id === this.cur;
+      rows.push(this.menu.row({ label: s.label, current: cur, lock: s.lock(ui), dot: this.alert(ui, s.id), hint: `pview-${s.id}`,
+        onPick: () => { if (cur) this.body.scrollTop = 0; else this.select(s.id); } }));
+      // under Echo tiers on show: its tiers as indented jump links
+      if (cur && s.id === 'layers') for (const t of this.layers.tierState(ui)) rows.push(this.menu.row({ label: tierName(t.layer), sub: true, onPick: () => this.selectTier(t.layer) }));
+    }
+    this.menu.open(this.viewC.btn, 'Prestige views', rows, 'view-menu');
+  }
+
+  private openTierMenu(): void {
+    const ui = this.ctx.state();
+    if (!ui || this.cur !== 'layers') return;
+    const rows = this.layers.tierState(ui).map((t) => this.menu.row({ label: tierName(t.layer), current: t.layer === this.layers.tier, count: t.affordable,
+      status: t.open ? null : `wave ${t.wave}`, onPick: () => this.selectTier(t.layer) }));
+    this.menu.open(this.tierC.btn, 'Echo tiers', rows, 'tier-menu');
   }
 
   update(ui: UiState): void {
     if (!this.shown) return;
     show(this.teaser, ui.meta.prestigeCount === 0);
-    for (const s of PRESTIGE_SEGS) {
-      const x = this.btns.get(s.id)!;
-      const lock = s.lock(ui);
-      x.lock.style.display = lock ? '' : 'none';   // an SVG icon: `hidden` does not apply
-      x.b.title = lock ?? '';
-      attr(x.b, 'aria-label', lock ? `${s.label} (locked: ${lock})` : s.label);
-      const alert = s.id === 'forecast' ? !!ui.forecast?.recommended : s.id === 'ascension' ? ui.run.deepestCleared >= 100 : false;
-      x.dot.classList.toggle('on', alert);
+    const def = PRESTIGE_SEGS.find((s) => s.id === this.cur)!;
+    const lock = def.lock(ui);
+    const others = PRESTIGE_SEGS.filter((s) => s.id !== this.cur).map((s) => this.alert(ui, s.id)).filter(Boolean);
+    paintCrumb(this.viewC, { label: def.label, menuable: true, dot: others.length > 0,
+      aria: `View: ${def.label}${lock ? ` (locked: ${lock})` : ''}. Choose a view${others.length ? ` (${others[0]})` : ''}` });
+    this.viewC.btn.dataset.views = PRESTIGE_SEGS.map((s) => `${s.id}:${s.lock(ui) ? 'locked' : 'open'}`).join(',');   // tests
+    const tiers = this.cur === 'layers';
+    show(this.tierC.btn, tiers);
+    show(this.sep, tiers);
+    if (tiers) {
+      const st = this.layers.tierState(ui).find((t) => t.layer === this.layers.tier);
+      const name = tierName(this.layers.tier);
+      paintCrumb(this.tierC, { label: tierName(this.layers.tier, true), menuable: true, count: st?.affordable ?? 0, aria: `Tier: ${name}${st && !st.open ? ` (opens at wave ${st.wave})` : ''}. Choose a tier` });
     }
   }
+}
+
+/** "Tier I · Inheritance" (the menus), or "Tier I" (the crumb, `short`). */
+function tierName(layer: number, short = false): string {
+  const t = ECHO_TIERS[layer - 1];
+  return t && !short ? `Tier ${ROMAN[layer - 1]} · ${t.name}` : `Tier ${ROMAN[layer - 1] ?? layer}`;
 }
 
 // ---------------------------------------------------------------- More

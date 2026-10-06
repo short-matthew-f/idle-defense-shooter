@@ -1,0 +1,88 @@
+/*
+ * The breadcrumb navigation shared by Upgrades, Build and Prestige (crumbs.ts): one pinned line ("Page ▾ › Tree ▾ …")
+ * over a scrolling list, popover menus of 48 px rows, sticky section heads, a short slide on a swipe. Dots mean "a
+ * decision is waiting" (--warn); ★ Suggested is amber (--scrap).
+ */
+/* "Battle ›" is hidden on the breadcrumb screens: the tab bar and the system swipe back do that there */
+body:is(.tab-upgrades, .tab-build, .tab-prestige) .screen-top > .status-strip { display: none; }
+
+/* a breadcrumb screen: the pinned line (.crumb-head) over its own scroller (.crumb-body) */
+.crumb-screen { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.crumb-head { flex: none; padding: 0 var(--gutter); }
+.crumb-body {
+  position: relative; flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--gutter) 28px; border-top: 1px solid var(--line);
+  overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y;
+}
+
+.crumbs { display: flex; align-items: center; gap: 2px; min-width: 0; min-height: var(--touch); }
+.btn.crumb {
+  flex: 0 1 auto; min-width: 0; min-height: var(--touch); gap: 4px; padding: 0 6px; border: 0; background: transparent;
+  font-size: 1rem; font-weight: 800; color: var(--text); white-space: nowrap;
+}
+.btn.crumb:hover:not(:disabled) { background: var(--bg-2); }
+.btn.crumb-page { flex-shrink: 0; max-width: 48%; }   /* the page name stays whole; a long tree name ellipsises */
+.crumb-page.static { pointer-events: none; }
+.crumb-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.crumb-caret { flex: none; font-size: 0.875rem; color: var(--text-dim); }
+.crumb-count { flex: none; font-weight: 700; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.crumb-count:empty { display: none; }
+.crumb-sep { flex: none; color: var(--text-faint); font-size: 1rem; }
+.crumb-gap { flex: 1 1 0; min-width: 0; }
+
+/* a decision waits on a page / in a tree (an empty slot, an open fork) */
+.cat-dot, .chip-dot, .dr-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
+.crumb .cat-dot, .crumb .chip-dot { align-self: flex-start; margin-top: 10px; }
+
+/* the breadcrumb menus (modal.ts variant 'popover'): 48 px rows */
+.crumb-menu-list { display: flex; flex-direction: column; gap: 2px; }
+.btn.cm-row {
+  justify-content: flex-start; gap: 8px; min-height: 48px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent;
+  font-size: 1rem; font-weight: 700; color: var(--text); text-align: left;
+}
+.btn.cm-row.current { background: var(--bg-3); color: var(--accent); }
+.btn.cm-row.sub { min-height: 48px; padding-left: 30px; font-size: 0.9375rem; font-weight: 500; color: var(--text-dim); }
+.btn.cm-row.empty { color: var(--text-dim); font-weight: 600; }
+.cm-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-count { flex: none; font-weight: 700; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.cm-star { flex: none; color: var(--scrap); }
+.cm-new { flex: none; display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.875rem; font-weight: 700; color: var(--warn); }
+
+/* swipe / ← → between stops: a short slide (none with reduced motion) */
+@keyframes crumb-in-next { from { transform: translateX(28px); opacity: 0.2; } to { transform: none; opacity: 1; } }
+@keyframes crumb-in-prev { from { transform: translateX(-28px); opacity: 0.2; } to { transform: none; opacity: 1; } }
+.slide-next { animation: crumb-in-next 0.2s ease-out; }
+.slide-prev { animation: crumb-in-prev 0.2s ease-out; }
+body.reduce-motion :is(.slide-next, .slide-prev) { animation: none; }
+@media (prefers-reduced-motion: reduce) { :is(.slide-next, .slide-prev) { animation: none; } }
+
+/* section heads: a quiet label that sticks under the breadcrumb while its section scrolls (no buttons) */
+.sec-head {
+  position: sticky; top: 0; z-index: 2; margin: 0 calc(-1 * var(--gutter)); padding: 0 var(--gutter);
+  background: var(--bg-0); border-bottom: 1px solid transparent;
+}
+.sec-head .sec-title { margin: 10px 0 0; padding: 4px 0 2px; }
+.shop-list > .shop-section:first-child .sec-head .sec-title, .crumb-page-body > .bs-section:first-child .sec-head .sec-title { margin-top: 2px; }
+
+/* the right-end chip (Build: "Standard ▸" jumps to the Frame page) */
+.btn.crumb-chip { flex: 0 1 auto; min-width: var(--touch); max-width: 42%; min-height: var(--touch); gap: 2px; padding: 0 6px; border: 0; background: transparent;
+  font-size: 0.875rem; font-weight: 700; color: var(--text-dim); white-space: nowrap; }
+.btn.crumb-chip .crumb-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.btn.crumb-chip.current { color: var(--accent); }
+/* a menu row's status ("2 empty", "0/4") and a locked row's reason */
+.cm-status { flex: none; font-size: 0.875rem; font-weight: 600; color: var(--text-dim); }
+.btn.cm-row.locked { color: var(--text-dim); font-weight: 600; flex-wrap: wrap; row-gap: 0; padding-top: 4px; padding-bottom: 4px; cursor: default; }
+.cm-lock { flex: none; color: var(--text-faint); }
+.cm-why { flex: 1 0 100%; padding-left: 22px; font-size: 0.875rem; font-weight: 500; color: var(--text-dim); white-space: normal; line-height: 1.3; }
+
+/* narrow phones */
+@media (max-width: 360px) { .crumb-head { padding-left: 6px; padding-right: 8px; } .btn.crumb { padding: 0 4px; gap: 3px; } .btn.crumb-chip { padding: 0 4px; } }
+/* a narrow phone with large text: the names keep the room (counts are in the menu; the separator goes) */
+@media (max-width: 360px) { body:is(.text-115, .text-130) :is(.crumb-count, .crumb-sep) { display: none; } }
+
+/* the ⓘ beside a section crumb (Build): explains the section on show (info.ts) */
+.btn.crumb-info { flex: none; min-width: var(--touch); min-height: var(--touch); padding: 0; border: 0; background: transparent; color: var(--text-dim); justify-content: center; }
+.btn.crumb-info .info-mark { opacity: 0.8; }
+/* a section page under the crumb line */
+.crumb-page-body { padding-top: 10px; }
+/* Echo tier names are long: they wrap rather than lose their name at large text */
+.crumb-menu-list.tier-menu .cm-label, .crumb-menu-list.view-menu .btn.cm-row.sub .cm-label { white-space: normal; line-height: 1.25; padding: 4px 0; }
