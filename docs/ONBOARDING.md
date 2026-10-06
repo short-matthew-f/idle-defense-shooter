@@ -168,10 +168,24 @@ rest is one tap away.
   on the decision row. Affordability is the tab bar's count; a tree's count is its affordable nodes in a quiet neutral
   style. The bright accent is kept for the primary action (the starter Upgrade, Attune / Mount / Choose) and the
   selected state.
-- **Build** and **Prestige → Upgrades** follow suit: section notes say only what the title does not; Build folds its
-  locked slots into one row, the trees without a Doctrine into one line and the empty Anomaly sockets into one card;
-  a Prestige layer not yet open is one line ("9 upgrades · open at deepest wave 60"), and an open layer folds its
-  maxed rows (the guided first-Echo picks never fold).
+- **Build** and **Prestige** use the same breadcrumb (`src/ui/crumbs.ts`: the crumb line, popover menus, swipe with
+  the left-edge rule, ← / →, sticky section heads), and both hide "Battle ›" like Upgrades.
+  - **Build:** `Section ▾ ⓘ … Frame ▸`. One section page at a time, in the order Hardpoints, Attunements, Abilities,
+    Doctrines, Boons, Anomalies, Cores, Frame (`BUILD_SECS`); only revealed sections are listed (`buildStops`: the same
+    gates as before; a Threat Dial lives on the Frame page). The menu shows a status per section ("1 empty", "1/4") and
+    a dot + "New" where the tab badge sees a decision (an empty open slot, a free Doctrine fork, a boon offer, an
+    Anomaly draft). Opening the tab lands on that section (`buildAttention`, in the badge's order), else on the last
+    section viewed (`prefs.buildSection`). Each section's note is behind the ⓘ (info.ts, `data-info-more`), not under
+    a title. Build still folds its locked slots into one row, the trees without a Doctrine into one line and the empty
+    Anomaly sockets into one card; a pending Anomaly draft is a banner above every section. Pointer hints walk Build
+    tab → the section's row in "Section ▾" (`bsec-<id>`) → the control.
+  - **Prestige:** `View ▾ › Tier ▾`. The View menu lists Forecast, Echo tiers and Ascension; a locked view shows its
+    lock and reason and cannot be picked. Echo tiers shows one tier at a time (`Tier ▾`, with each tier's affordable
+    count; a closed tier says its wave). A swipe steps along the unlocked views, Echo tiers through its four tiers. The
+    "Prestige…" button stays on the Forecast. A tier not yet open is one line ("9 upgrades · reach wave 60 to open …"),
+    and an open tier folds its maxed rows (the guided first-Echo picks never fold). The first-Prestige guide
+    (`ceremony.ts echoGuide*`) lands on Tier I; Echo tiers has no Buy all, and its only "Suggested" tag is the guide's
+    one pick.
 - `tests/e2e/e2e.mjs` "phone calm" (skip with `E2E_SKIP_UX=1`) measures it at 393×852 and 375×667: pinned chrome ≤ 25%
   of the height, at most two pinned rows beyond the breadcrumb line, list ≥ 55%, no sideways overflow, 44 px targets,
   14 px text, AA contrast.

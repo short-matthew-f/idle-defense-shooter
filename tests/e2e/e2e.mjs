@@ -156,6 +156,20 @@ const pickTree = async (page, name, touch = true) => {
   await page.waitForTimeout(300);
   return true;
 };
+/** A breadcrumb menu of `screen` (s-build / s-prestige): open its crumb (`crumb`: '.crumb-page' / '.crumb-tree') and pick the row named `name`. */
+const crumbPick = async (page, screen, crumb, name) => {
+  await page.locator(`.screen.${screen} ${crumb}`).tap();
+  await page.waitForTimeout(250);
+  const row = page.locator('.modal-card.popover .cm-row', { hasText: name }).first();
+  if (!(await row.count())) { await page.keyboard.press('Escape'); return false; }
+  await row.tap();
+  await page.waitForTimeout(350);
+  return true;
+};
+/** Prestige: "View ▾" → that view (Forecast, Echo tiers, Ascension). */
+const pickView = (page, name) => crumbPick(page, 's-prestige', '.crumb-page', name);
+/** Build: "Section ▾" → that section. */
+const pickSection = (page, name) => crumbPick(page, 's-build', '.crumb-page', name);
 /** The Buy button of the first "★ Suggested" row (else the first affordable row) on Upgrades. */
 const topBuy = async (page) => {
   const sug = page.locator('.screen.s-upgrades .node.suggested .btn.buy:not(:disabled)').first();
@@ -831,6 +845,14 @@ async function onboard() {
   await page.screenshot({ path: `${OUT}/phone-onboard-stage3.png` });
   check('onboard: wave 10 reveals Build and More (New), still no Prestige tab or ability bar', v3.tabs.join() === 'battle,upgrades,build,more' && v3.badges.build !== null && v3.badges.more === 'New' && !v3.abilities, v3);
 
+  // Build at its first appearance: only the revealed sections (Hardpoints, Attunements, Doctrines), no Frame chip; it
+  // opens on the empty hardpoint slot (the tab badge's "+")
+  await tapTab('build');
+  const b3 = await page.evaluate(() => { const c = document.querySelector('.screen.s-build .crumb-page'); const f = document.querySelector('.screen.s-build .crumb-chip');
+    const u = window.__citadel.game.latestUi(); return { pages: c.dataset.pages, sec: c.dataset.sec, frame: !!f && !f.hidden, mount: !!document.querySelector('.screen.s-build [data-hint="build-mount"]'), emptyHp: u.run.hardpointSlotsOpen > 0 && !u.build.hardpoints[0], text: document.querySelector('.screen.s-build').textContent }; });
+  await page.screenshot({ path: `${OUT}/phone-onboard-stage3-build.png` });
+  check('onboard: Build at wave 10 shows only Hardpoints, Attunements and Doctrines (no Abilities / Boons / Anomalies / Cores / Frame), landing on the empty hardpoint slot',
+    b3.pages === 'hardpoints,attunements,doctrines' && !b3.frame && (!b3.emptyHp || (b3.sec === 'hardpoints' && b3.mount)) && !/Cores|Anomal|Boon|Echo/.test(b3.text), { ...b3, text: b3.text.slice(0, 200) });
   // 5. Settings → Unlock everything: every tab at once; switching it off hides them again (More / Settings stay)
   const unlockSwitch = async () => {
     await tapTab('more');
@@ -843,6 +865,9 @@ async function onboard() {
   const v4 = await view();
   const onPrestige = await tapTab('prestige');
   check('onboard: Unlock everything shows every tab (Prestige opens)', v4.tabs.join() === 'battle,upgrades,build,prestige,more' && onPrestige, v4.tabs);
+  await tapTab('build');
+  const b4 = await page.evaluate(() => document.querySelector('.screen.s-build .crumb-page').dataset.pages);
+  check('onboard: with Unlock everything Build lists every section', b4 === 'hardpoints,attunements,abilities,doctrines,boons,anomalies,cores,frame', b4);
   await unlockSwitch();
   const v5 = await view();
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('citadel.prefs.v1') || '{}').unlockAll);
@@ -1228,14 +1253,15 @@ async function wallet() {
     const views = [
       { id: 'upgrades-chassis', tab: 'upgrades', page: 'Chassis', scroller: '.screen.s-upgrades .shop-body', want: ['scrap', 'cores'] },
       { id: 'upgrades-cores', tab: 'upgrades', page: 'Cores', scroller: '.screen.s-upgrades .shop-body', want: ['scrap', 'cores'] },
-      { id: 'prestige-layers', tab: 'prestige', pick: '.screen.s-prestige .seg-btn:has-text("Echo tiers")', scroller: '.screen.s-prestige', want: ['echoes'] },
-      { id: 'prestige-ascension', tab: 'prestige', pick: '.screen.s-prestige .seg-btn:has-text("Ascension")', scroller: '.screen.s-prestige', want: ['echoes', 'stars'] },
-      { id: 'build', tab: 'build', pick: null, scroller: '.screen.s-build', want: ['cores'] },
+      { id: 'prestige-layers', tab: 'prestige', view: 'Echo tiers', scroller: '.screen.s-prestige .crumb-body', want: ['echoes'] },
+      { id: 'prestige-ascension', tab: 'prestige', view: 'Ascension', scroller: '.screen.s-prestige .crumb-body', want: ['echoes', 'stars'] },
+      { id: 'build', tab: 'build', section: 'Cores', scroller: '.screen.s-build .crumb-body', want: ['cores'] },
     ];
     for (const v of views) {
       await tapTab(v.tab);
       if (v.page) await pickPage(page, v.page);
-      if (v.pick) { await page.locator(v.pick).first().tap(); await page.waitForTimeout(300); }
+      if (v.view) await pickView(page, v.view);
+      if (v.section) await pickSection(page, v.section);
       const m = await probe(v.scroller);
       await page.waitForTimeout(250);
       await page.screenshot({ path: `${OUT}/phone-wallet-${vp.id}-${v.id}.png` });
@@ -1367,27 +1393,135 @@ async function calm() {
     await ready();
     await page.waitForTimeout(1200);
     const tapTab = async (id) => { await page.locator(`.tabbar .tab-btn[data-tab="${id}"]`).tap(); await page.waitForTimeout(400); };
-    const tapIf = async (sel) => { const l = page.locator(sel).first(); if (await l.count() && await l.isVisible()) { await l.tap(); await page.waitForTimeout(300); } };
     const views = [
       { id: 'upgrades-chassis', tab: 'upgrades', page: 'Chassis', sc: '.screen.s-upgrades .shop-body' },
       { id: 'upgrades-elements', tab: 'upgrades', page: 'Elements', sc: '.screen.s-upgrades .shop-body' },
       { id: 'upgrades-cores', tab: 'upgrades', page: 'Cores', sc: '.screen.s-upgrades .shop-body' },
-      { id: 'build', tab: 'build', pick: null, sc: '.screen.s-build' },
-      { id: 'prestige-layers', tab: 'prestige', pick: '.screen.s-prestige .seg-btn:has-text("Echo tiers")', sc: '.screen.s-prestige' },
+      { id: 'build', tab: 'build', sc: '.screen.s-build .crumb-body' },
+      { id: 'build-doctrines', tab: 'build', section: 'Doctrines', sc: '.screen.s-build .crumb-body' },
+      { id: 'prestige-forecast', tab: 'prestige', view: 'Forecast', sc: '.screen.s-prestige .crumb-body' },
+      { id: 'prestige-layers', tab: 'prestige', view: 'Echo tiers', sc: '.screen.s-prestige .crumb-body' },
     ];
     for (const v of views) {
       await tapTab(v.tab);
       if (v.page) await pickPage(page, v.page);
-      if (v.pick) await tapIf(v.pick);
+      if (v.view) await pickView(page, v.view);
+      if (v.section) await pickSection(page, v.section);
       await page.evaluate((s) => { document.querySelector(s).scrollTop = 0; }, v.sc);
       await page.waitForTimeout(250);
       const m = await page.evaluate(calmAudit, v.sc);
       await page.screenshot({ path: `${OUT}/phone-calm-${vp.id}-${v.id}.png` });
       const lowContrast = Object.entries(m.contrast).filter(([, r]) => r < 4.5);
-      const upgrades = v.tab === 'upgrades';
+      const upgrades = v.tab !== 'more';   // every breadcrumb screen has its crumb line
       check(`calm ${vp.id} ${v.id}: pinned ≤ 25% (${m.pinnedPct}%), ≤ 2 pinned rows beyond the breadcrumb (${m.rows}), list ≥ 55% (${m.listPct}%), no sideways overflow`,
         m.pinnedPct <= 25 && m.rows <= 2 && m.listPct >= 55 && !m.overflow && (!upgrades || m.tabs === 1), m);
       check(`calm ${vp.id} ${v.id}: tap targets ≥ 44 px, text ≥ 14 px (badges aside), quiet styles keep AA contrast`, m.targets.length === 0 && m.small.length === 0 && lowContrast.length === 0, { targets: m.targets, small: m.small, contrast: m.contrast });
+    }
+
+    // ---- Build and Prestige breadcrumbs (crumbs.ts): landing, menus (Esc / outside / Back, focus return), swipe, edge, ← / →
+    {
+      const B = '.screen.s-build', P = '.screen.s-prestige';
+      const bstate = () => page.evaluate((B) => { const c = document.querySelector(`${B} .crumb-page`); return { sec: c.dataset.sec, pages: c.dataset.pages, label: c.querySelector('.crumb-label').textContent, frame: (() => { const f = document.querySelector(`${B} .crumb-chip`); return f && !f.hidden ? f.textContent : null; })(), battleBtn: (() => { const b = document.querySelector('.screen-top .status-strip'); return !!b && b.getBoundingClientRect().height > 0; })() }; }, B);
+      // this save: an empty open slot (the tab badge says "+"): Build opens on its section, not on the last one viewed (Cores)
+      await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('citadel.prefs.v1')); p.buildSection = 'cores'; localStorage.setItem('citadel.prefs.v1', JSON.stringify(p)); });
+      await tapTab('battle');
+      await tapTab('build');
+      const land = await bstate();
+      // (a start-of-attempt boon offer or a draft would come first, as on the tab badge)
+      const want = await page.evaluate(() => { const u = window.__citadel.game.latestUi(); const empty = (l, n) => { for (let i = 0; i < n; i++) if (!l[i]) return true; return false; };
+        return u.run.pendingDraft?.length ? 'anomalies' : u.run.boonOffer?.length ? 'boons' : empty(u.build.hardpoints, u.run.hardpointSlotsOpen) ? 'hardpoints' : empty(u.build.attunements, u.run.attunementSlotsOpen) ? 'attunements' : 'none'; });
+      const ctl = { hardpoints: 'build-mount', attunements: 'build-attune' }[want];
+      const attune = !ctl || await page.locator(`${B} [data-hint="${ctl}"]`).first().isVisible().catch(() => false);
+      await page.screenshot({ path: `${OUT}/phone-crumbs-${vp.id}-build-landed.png` });
+      check(`crumbs ${vp.id}: Build opens on the section that needs attention (an empty slot: its Mount / Attune button in view); "Battle ›" hidden; Frame chip`,
+        land.sec === want && attune && !land.battleBtn && /\w/.test(land.frame ?? ''), { land, want });
+      // the menu: 48 px rows, a dot + New on the waiting section; Esc / outside / Back close it, focus returns to the crumb
+      await page.locator(`${B} .crumb-page`).tap();
+      await page.waitForTimeout(250);
+      const menu = await page.evaluate(() => { const c = document.querySelector('.modal-card.popover'); if (!c) return null; const b = c.getBoundingClientRect();
+        return { rows: [...c.querySelectorAll('.cm-row')].map((r) => ({ label: r.querySelector('.cm-label').textContent, h: Math.round(r.getBoundingClientRect().height), dot: !!r.querySelector('.cm-new'), status: r.querySelector('.cm-status')?.textContent ?? null })), left: b.left, right: b.right, vw: innerWidth, focusIn: c.contains(document.activeElement) }; });
+      await page.screenshot({ path: `${OUT}/phone-crumbs-${vp.id}-build-menu.png` });
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(200);
+      const esc = await page.evaluate((B) => ({ open: !!document.querySelector('.modal-card.popover'), focus: document.activeElement === document.querySelector(`${B} .crumb-page`) }), B);
+      await page.locator(`${B} .crumb-page`).tap();
+      await page.waitForTimeout(250);
+      await page.touchscreen.tap(12, (await page.evaluate(() => innerHeight)) * 0.8);
+      await page.waitForTimeout(250);
+      const outside = await page.evaluate(() => !!document.querySelector('.modal-card.popover'));
+      await page.locator(`${B} .crumb-page`).tap();
+      await page.waitForTimeout(250);
+      await page.goBack();
+      await page.waitForTimeout(450);
+      const back = await page.evaluate(() => ({ open: !!document.querySelector('.modal-card.popover'), build: document.body.classList.contains('tab-build') }));
+      const at = menu?.rows.find((r) => r.label === 'Attunements');
+      check(`crumbs ${vp.id}: Build "Section ▾" lists the revealed sections in order with statuses, a dot on the waiting one; Esc, a tap outside and Back close it`,
+        !!menu && menu.rows.map((r) => r.label).join() === 'Hardpoints,Attunements,Abilities,Doctrines,Boons,Anomalies,Cores,Frame' && menu.rows.every((r) => r.h >= 48) && menu.left >= 0 && menu.right <= menu.vw
+          && menu.focusIn && at?.dot && /1 empty/.test(at?.status ?? '') && !esc.open && esc.focus && !outside && !back.open && back.build, { menu, esc, outside, back });
+      // swipe: next section; a vertical scroll and a left-edge swipe do nothing; ← / →
+      await pickSection(page, 'Attunements');
+      const bb = await page.locator(`${B} .crumb-body`).boundingBox();
+      await touchSwipe(page, bb.x + bb.width * 0.55, bb.y + 140, bb.x + bb.width * 0.55 - 110, bb.y + 146);
+      const s1 = (await bstate()).sec;
+      await page.screenshot({ path: `${OUT}/phone-crumbs-${vp.id}-build-swiped.png` });
+      await touchSwipe(page, 8, bb.y + 140, 150, bb.y + 144);
+      const s2 = (await bstate()).sec;
+      await touchSwipe(page, bb.x + bb.width * 0.5, bb.y + 300, bb.x + bb.width * 0.5 + 20, bb.y + 120);
+      const s3 = (await bstate()).sec;
+      await page.keyboard.press('ArrowLeft');
+      await page.waitForTimeout(200);
+      const s4 = (await bstate()).sec;
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(200);
+      const s5 = (await bstate()).sec;
+      check(`crumbs ${vp.id}: Build swipe steps to the next section (not from the left edge, not on a vertical scroll); ← / → step too`,
+        s1 === 'abilities' && s2 === 'abilities' && s3 === 'abilities' && s4 === 'attunements' && s5 === 'abilities', { s1, s2, s3, s4, s5 });
+      // the ⓘ explains the section (its rule rides along); the Frame chip opens the Frame page; the last section viewed is kept
+      await page.locator(`${B} .crumb-info`).tap();
+      await page.waitForTimeout(300);
+      const info = await page.evaluate(() => ({ title: document.querySelector('.info-sheet .modal-title')?.textContent ?? null, more: document.querySelector('.info-sheet .info-more')?.textContent ?? null }));
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(200);
+      await page.locator(`${B} .crumb-chip`).tap();
+      await page.waitForTimeout(300);
+      const fr = await page.evaluate((B) => ({ sec: document.querySelector(`${B} .crumb-page`).dataset.sec, card: !!document.querySelector(`${B} .bs-frame`), pref: JSON.parse(localStorage.getItem('citadel.prefs.v1')).buildSection }), B);
+      check(`crumbs ${vp.id}: Build ⓘ explains the section with its rule; the Frame chip opens the Frame page (kept as the last section)`,
+        info.title === 'Abilities' && /Keys 1–\d on Battle/.test(info.more ?? '') && fr.sec === 'frame' && fr.card && fr.pref === 'frame', { info, fr });
+      // Prestige: View ▾ (Ascension locked with its reason), swipe Forecast → Tier I, Tier ▾, the locked view is not picked
+      await tapTab('prestige');
+      await pickView(page, 'Forecast');
+      const pst = () => page.evaluate((P) => ({ view: document.querySelector(`${P} .crumb-page .crumb-label`).textContent, tier: (() => { const t = document.querySelector(`${P} .crumb-tree`); return t.hidden ? null : t.querySelector('.crumb-label').textContent; })(), seg: window.__citadel.game.ui.prestigeScreen.segment, prestigeBtn: !!document.querySelector(`${P} .forecast .btn.primary`) }), P);
+      const p0 = await pst();
+      await page.locator(`${P} .crumb-page`).tap();
+      await page.waitForTimeout(250);
+      const vmenu = await page.evaluate(() => [...document.querySelectorAll('.modal-card.popover .cm-row')].map((r) => ({ label: r.querySelector('.cm-label').textContent, locked: r.classList.contains('locked'), why: r.querySelector('.cm-why')?.textContent ?? null, h: Math.round(r.getBoundingClientRect().height) })));
+      await page.screenshot({ path: `${OUT}/phone-crumbs-${vp.id}-prestige-menu.png` });
+      await page.locator('.modal-card.popover .cm-row', { hasText: 'Ascension' }).first().tap({ force: true });   // aria-disabled: Playwright would wait
+      await page.waitForTimeout(250);
+      const stay = await page.evaluate(() => ({ open: !!document.querySelector('.modal-card.popover'), seg: window.__citadel.game.ui.prestigeScreen.segment }));
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(200);
+      const pb = await page.locator(`${P} .crumb-body`).boundingBox();
+      await touchSwipe(page, pb.x + pb.width * 0.55, pb.y + 60, pb.x + pb.width * 0.55 - 110, pb.y + 64);
+      const p1 = await pst();
+      await page.screenshot({ path: `${OUT}/phone-crumbs-${vp.id}-prestige-swiped.png` });
+      await page.locator(`${P} .crumb-tree`).tap();
+      await page.waitForTimeout(250);
+      const tmenu = await page.evaluate(() => [...document.querySelectorAll('.modal-card.popover .cm-row')].map((r) => r.querySelector('.cm-label').textContent));
+      await page.locator('.modal-card.popover .cm-row', { hasText: 'Tier IV' }).first().tap();
+      await page.waitForTimeout(300);
+      const p2 = await pst();
+      await page.keyboard.press('ArrowRight');   // Ascension is locked here: the end of the order
+      await page.waitForTimeout(200);
+      const p3 = await pst();
+      await page.keyboard.press('ArrowLeft');
+      await page.waitForTimeout(200);
+      const p4 = await pst();
+      check(`crumbs ${vp.id}: Prestige "View ▾" lists Forecast / Echo tiers / Ascension (locked, with its reason, not pickable); the Prestige button stays on Forecast`,
+        p0.view === 'Forecast' && p0.prestigeBtn && vmenu.map((r) => r.label).join() === 'Forecast,Echo tiers,Ascension' && vmenu.every((r) => r.h >= 48) && vmenu[2].locked && /wave 100/.test(vmenu[2].why ?? '') && stay.open && stay.seg === 'forecast', { p0, vmenu, stay });
+      check(`crumbs ${vp.id}: Prestige swipe Forecast → Echo tiers (Tier I); "Tier ▾" lists the four tiers; → stops at the end; ← steps back a tier`,
+        p1.view === 'Echo tiers' && p1.tier === 'Tier I' && tmenu.length === 4 && /Tier IV/.test(tmenu[3]) && p2.tier === 'Tier IV' && p3.tier === 'Tier IV' && p3.seg === 'layers' && p4.tier === 'Tier III', { p1, tmenu, p2, p3, p4 });
+      await pickView(page, 'Forecast');
     }
 
     // dots mean decisions: Elements (an empty slot with something to attune) and Chassis (the open Ballistics fork); Cross none

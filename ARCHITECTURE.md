@@ -154,8 +154,9 @@ checks that no overlay covers the tower, the dock, the HUD, the tab bar or anoth
 ## Tab screens (`src/ui/shell.ts`)
 
 Every tab screen shares one top row outside its scroller (`.screen-top`: the wallet, an optional control such as the
-Upgrades quantity chip, and the Battle button); a screen pins at most its own segmented control below it and scrolls
-everything else. Dots mark decisions only (an empty slot, an open fork, a draft or offer), never affordability (the tab
+Upgrades quantity chip, and the Battle button); a screen pins at most one more line below it and scrolls everything
+else. Upgrades, Build and Prestige pin a breadcrumb line (`src/ui/crumbs.ts`: crumb buttons, popover menus, swipe with
+the left-edge rule, ← / →, sticky section heads) and hide the Battle button. Dots mark decisions only (an empty slot, an open fork, a draft or offer), never affordability (the tab
 bar's count). Rules and measurements: `docs/ONBOARDING.md` ("Calm spending screens").
 
 ## Economy constants (design §17) — implement in `economy/curves.ts`

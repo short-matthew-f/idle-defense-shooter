@@ -104,6 +104,9 @@ describe('pointer hints: chains (tab → category → control)', () => {
     const f3 = feats(10), h = ui({ hpOpen: 1, hp: [] });
     expect(nextHint(h, ctx(f3))).toMatchObject({ id: 'build', target: 'tab-build' });
     expect(nextHint(h, ctx(f3, { nav: { screen: 'build', battle: false } }))).toMatchObject({ target: 'build-mount', final: true });
+    // Build's breadcrumb: on another section the ring first walks to the Hardpoints row of "Section ▾" (else the crumb)
+    expect(nextHint(h, ctx(f3, { nav: { screen: 'build', battle: false }, build: { sec: 'doctrines' } }))).toMatchObject({ target: 'bsec-hardpoints', final: false });
+    expect(nextHint(h, ctx(f3, { nav: { screen: 'build', battle: false }, build: { sec: 'hardpoints' } }))).toMatchObject({ target: 'build-mount', final: true });
   });
   it('a hint whose control is not on screen gives way to the next one', () => {
     const h = ui({ hpOpen: 1, hp: [] });

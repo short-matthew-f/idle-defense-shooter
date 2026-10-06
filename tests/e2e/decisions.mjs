@@ -65,6 +65,21 @@ export async function decisions({ browser, BASE, OUT, check, attachLogs }) {
     const cer = await page.evaluate(() => ({ verdict: document.querySelector('.ceremony-modal .cer-verdict')?.textContent ?? null, gain: document.querySelector('.ceremony-modal .cer-gain-val')?.textContent ?? null }));
     await page.screenshot({ path: `${OUT}/decide-${vp.id}-first-prestige.png` });
     check(`decide ${vp.id}: the first-Prestige ceremony shows the Forecast verdict`, !!cer.verdict && /Recommended now|Waiting ~\d+ min likely adds \+\d+ Echoes|Not recommended yet/.test(cer.verdict), cer);
+    // end to end: Prestige from the ceremony → Prestige → Echo tiers, Tier I, the guided first Echo spend; a guided Buy spends
+    await page.locator('.ceremony-modal .cer-go').tap();
+    await page.waitForFunction(() => (window.__citadel.game.latestUi()?.meta.prestigeCount | 0) >= 1, null, { timeout: 8000 }).catch(() => {});
+    await page.waitForTimeout(700);
+    const guide = await page.evaluate(() => ({ tab: window.__citadel.game.ui.shell.tab, seg: window.__citadel.game.ui.prestigeScreen.segment,
+      view: document.querySelector('.screen.s-prestige .crumb-page .crumb-label')?.textContent ?? null, tier: document.querySelector('.screen.s-prestige .crumb-tree .crumb-label')?.textContent ?? null,
+      banner: (() => { const b = document.querySelector('.screen.s-prestige .ps-guide'); return !!b && !b.hidden && b.getBoundingClientRect().height > 0; })(),
+      picks: [...document.querySelectorAll('.screen.s-prestige .pshop .node.guide')].filter((e) => e.offsetParent).length,
+      echoes: window.__citadel.game.latestUi().meta.echoes, prestiges: window.__citadel.game.latestUi().meta.prestigeCount }));
+    await page.screenshot({ path: `${OUT}/decide-${vp.id}-first-prestige-guide.png` });
+    const pick = page.locator('.screen.s-prestige .pshop .node.guide .btn.buy:not(:disabled)').first();
+    if (await pick.count()) { await pick.tap(); await page.waitForTimeout(600); }
+    const spent = await page.evaluate(() => window.__citadel.game.latestUi().meta.echoes);
+    check(`decide ${vp.id}: the ceremony's Prestige lands on Prestige → Echo tiers (Tier I) with the guided first Echo spend, and a guided Buy spends Echoes`,
+      guide.prestiges >= 1 && guide.tab === 'prestige' && guide.seg === 'layers' && guide.view === 'Echo tiers' && guide.tier === 'Tier I' && guide.banner && guide.picks > 0 && spent < guide.echoes, { guide, spent });
     await closeDialogs();
 
     // ---- 2. a later Prestige: verdict first, locked Frames folded, choices above the Frames, summary in the confirm

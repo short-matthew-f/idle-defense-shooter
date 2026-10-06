@@ -18,9 +18,9 @@ body:not(.tab-upgrades) .btn.qty-chip { display: none; }
 /* the pinned part: the breadcrumb line */
 .shop-head { flex: none; padding: 0 var(--gutter); }
 .qm-crumb { flex: none; display: flex; align-items: center; gap: 2px; }
-.btn.crumb-qm { flex: none; min-width: var(--touch); justify-content: center; padding: 0 6px; font-size: 0.875rem; font-weight: 700; color: var(--text-dim); letter-spacing: 0.04em; }
+.btn.crumb.crumb-qm { flex: none; min-width: var(--touch); justify-content: center; padding: 0 6px; font-size: 0.875rem; font-weight: 700; color: var(--text-dim); letter-spacing: 0.04em; }
 .qm-crumb .switch { flex: none; }
-@media (max-width: 360px) { .shop-head { padding-left: 6px; padding-right: 8px; } .btn.crumb-qm { padding: 0 4px; } }
+@media (max-width: 360px) { .shop-head { padding-left: 6px; padding-right: 8px; } .btn.crumb.crumb-qm { padding: 0 4px; } }
 
 .shop-body {
   position: relative; flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--gutter) 28px; border-top: 1px solid var(--line);

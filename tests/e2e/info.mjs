@@ -89,14 +89,22 @@ export async function info({ browser, BASE, OUT, check, attachLogs }) {
     check(`info ${vp.id}: a tap outside closes the sheet`, (await sheet().count()) === 0);
 
     // 2. the Echo tiers screen: the lock names the tier and the wave
-    await page.locator('.screen.s-prestige .seg-btn:has-text("Echo tiers")').tap();
+    // (the breadcrumb: "View ▾" → Echo tiers, then "Tier ▾" → Tier II, the first closed tier of this save)
+    await page.locator('.screen.s-prestige .crumb-page').tap();
+    await page.waitForTimeout(300);
+    await page.locator('.modal-card.popover .cm-row:not(.sub)', { hasText: 'Echo tiers' }).first().tap();
+    await page.waitForTimeout(400);
+    const tier1 = await page.evaluate(() => [...document.querySelectorAll('.screen.s-prestige .pshop .sec-title')].filter((e) => e.offsetParent).map((e) => e.textContent));
+    await page.locator('.screen.s-prestige .crumb-tree').tap();
+    await page.waitForTimeout(300);
+    await page.locator('.modal-card.popover .cm-row', { hasText: 'Tier II' }).first().tap();
     await page.waitForTimeout(400);
     const tiers = await page.evaluate(() => ({ text: document.querySelector('.screen.s-prestige')?.textContent ?? '', folds: [...document.querySelectorAll('.ps-fold')].filter((e) => e.offsetParent).map((e) => e.textContent) }));
     await page.evaluate(() => [...document.querySelectorAll('.ps-fold')].find((e) => e.offsetParent)?.scrollIntoView({ block: 'center' }));
     await page.waitForTimeout(250);
     await page.screenshot({ path: `${OUT}/info-${vp.id}-echo-tiers.png` });
     check(`info ${vp.id}: Echo tiers: named "Echo tier I–IV" with locks that state the wave; no "Prestige II/III/IV"`,
-      /Echo tier I: Inheritance/.test(tiers.text) && tiers.folds.some((f) => /reach wave 40 to open Echo tier II/.test(f)) && !/Prestige (II|III|IV)\b/.test(tiers.text), tiers.folds);
+      tier1.some((t) => /Echo tier I: Inheritance/.test(t)) && /Echo tier I: Inheritance/.test(tiers.text) && tiers.folds.some((f) => /reach wave 40 to open Echo tier II/.test(f)) && !/Prestige (II|III|IV)\b/.test(tiers.text), { tier1, folds: tiers.folds });
 
     // 3. Help: the "What is…" glossary
     await go('more', 'help');

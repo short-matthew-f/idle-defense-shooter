@@ -250,6 +250,8 @@ export class BuildScreen {
     const frac = cur === 'boons' || cur === 'anomalies' || cur === 'abilities' ? st?.status ?? null : null;
     const others = this.stops.filter((s) => s !== cur).map((s) => this.status(ui, s, w).dot).filter(Boolean);
     const menuable = this.stops.length > 1;
+    this.secC.btn.dataset.pages = this.stops.join(',');   // the revealed sections (tests, and the menu's source)
+    this.secC.btn.dataset.sec = cur ?? '';
     paintCrumb(this.secC, { label, menuable, dot: others.length > 0, aria: `Section: ${label}${frac ? ` ${frac}` : ''}${menuable ? '. Choose a section' : ''}${others.length ? ` (${others[0]} in another section)` : ''}` });
     // a fraction reads as part of the name ("Boons 1/4"); counts elsewhere live in the menu
     text(this.secC.count, frac ?? '');
