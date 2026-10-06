@@ -46,6 +46,7 @@ describe('WP10 simulator harness', () => {
     for (const r of report.rows) { expect(typeof r.pass).toBe('boolean'); expect(r.value.length).toBeGreaterThan(0); expect(r.target.length).toBeGreaterThan(0); }
     expect(acceptMarkdown(report.rows)).toContain('| Test | Result |');
     expect(report.data.difficulty?.cells.length ?? 0).toBeGreaterThan(10);
+    for (const n of ['First wall', 'Forecast', 'Active edge', 'Directive gap']) expect(report.rows.find((r) => r.name === n)!.skipped).toContain('needs full run');
     // the determinism row is a harness property, not a balance number
     expect(report.rows.find((r) => r.name === 'Determinism')!.pass).toBe(true);
   }, 900_000);

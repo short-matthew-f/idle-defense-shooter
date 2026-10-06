@@ -391,3 +391,9 @@ regeneration gate: outside the range, inside the range and 3 s after a push; the
 knockback-heavy build clears a Shielded wave as fast as one without); `tests/core/phase1.test.ts` (the boss steps in
 alone, then the wave Rushes if nothing changes; non-boss waves unchanged). The existing behavior tests set the primary's range
 explicitly because regeneration now needs it.
+
+## Acceptance harness fixes (wip/harness-fixes)
+
+- Active edge now passes at 15–40 % (the agreed band, docs/ACTIVE.md); it was 15–30 % in the harness.
+- `sim:accept --quick` reports First wall, Forecast, Active edge and Directive gap as SKIPPED (quick climbs end before the first Prestige; one seed and a few attempts cannot judge the edge). Full mode is unchanged.
+- Full mode runs the Prestige chain on every seed (1, 2, 3); Reclimb and Push are gated on the per-Prestige median across seeds, per-seed values are in Notes. Quick mode keeps one seed and marks them "indicative". Full run: Reclimb s1 39.8/54 %, s2 62/34 %, s3 44/40.7 % (median 44 %, 40.7 %: FAIL, band widening is the owner's call); Push +10/+11 on all seeds (PASS).

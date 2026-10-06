@@ -50,7 +50,7 @@ async function main(): Promise<void> {
     const res = await runJobs<RunResult>(p.map((x) => x.job), jobsN, (_i, r, done) => { if (done % 10 === 0 || done === p.length) console.error(`  ${done}/${p.length} (${round((performance.now() - t0) / 1000, 0)} s) ${r.name}: ${r.deepestCleared}`); });
     const runs: Record<string, RunResult> = {};
     p.forEach((x, i) => { runs[x.key] = res[i]; });
-    const row = testBoonCap({ mode, seeds, hours: 0, runs, chain: null, offline: null, difficulty: null, determinism: null, wallSeconds: 0 });
+    const row = testBoonCap({ mode, seeds, hours: 0, runs, chain: null, chains: [], offline: null, difficulty: null, determinism: null, wallSeconds: 0 });
     writeJson(`boon-cap${a.quick ? '-quick' : ''}`, { row, depths: Object.fromEntries(Object.entries(runs).map(([k, r]) => [k, r.deepestCleared])) }, out);
     console.log(`${row.name}: ${row.pass ? 'PASS' : 'FAIL'} · ${row.value}\n${row.notes}`);
     return;

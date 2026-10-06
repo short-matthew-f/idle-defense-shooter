@@ -71,7 +71,10 @@ export interface AcceptData {
   seeds: number[];
   hours: number;
   runs: Record<string, RunResult>;
+  /** The first seed's chain (kept for single-chain readers). */
   chain: PrestigeChainResult | null;
+  /** One chain per chain seed (full: every seed; quick: the first seed only). */
+  chains: PrestigeChainResult[];
   offline: OfflineResult | null;
   difficulty: DifficultyResult | null;
   determinism: [RunResult, RunResult] | null;
@@ -126,7 +129,7 @@ export function plan(mode: Mode, seeds: number[], hours: number): Plan[] {
     for (const b of quick ? quickBoons() : BOONS.map((x) => x.id)) att(`boon-${b}-s${seed}`, { seed, agent: 'generalist', policy: 'idle', maxSimSeconds: bH, forceBoon: b, boonCompanions: 'none', hashes: false });
   }
   // Prestige chain, offline, determinism
-  out.push({ key: 'chain', job: { kind: 'chain', cfg: { name: `chain-generalist-s${s0}`, seed: s0, agent: 'generalist', policy: 'idle', maxSimSeconds: quick ? 3600 : H }, n: quick ? 2 : 3 } });
+  for (const seed of quick ? [s0] : seeds) out.push({ key: `chain-s${seed}`, job: { kind: 'chain', cfg: { name: `chain-generalist-s${seed}`, seed, agent: 'generalist', policy: 'idle', maxSimSeconds: quick ? 3600 : H }, n: quick ? 2 : 3 } });
   out.push({ key: 'offline', job: { kind: 'offline', cfg: { name: 'offline', seed: s0, agent: 'generalist', policy: 'idle', maxSimSeconds: 3600, stopAtWave: 19 }, patrolSeconds: quick ? 600 : 1800 } });
   for (const k of ['a', 'b']) att(`determinism-${k}`, { seed: 7, agent: 'greedy', policy: 'active', maxSimSeconds: quick ? 600 : 1800 });
   // Difficulty phase 1: archetype climbs (phase 2 — one job per archetype × band — runs after)
@@ -158,6 +161,7 @@ export async function gather(opts: AcceptOptions): Promise<AcceptData> {
     if (x.job.kind === 'attempt') runs[x.key] = byKey[x.key] as RunResult;
     else if (x.job.kind === 'diffclimb') snaps.push(byKey[x.key] as ArchetypeSnapshots);
   }
+  const chains = p.filter((x) => x.job.kind === 'chain').map((x) => byKey[x.key] as PrestigeChainResult).filter(Boolean);
   // Difficulty phase 2
   const dopts = mode === 'quick' ? QUICK_DIFF : FULL_DIFF;
   const dj = difficultyJobs(dopts, snaps);
@@ -167,7 +171,8 @@ export async function gather(opts: AcceptOptions): Promise<AcceptData> {
   const wall = (performance.now() - t0) / 1000;
   return {
     mode, seeds, hours, runs,
-    chain: (byKey.chain as PrestigeChainResult) ?? null,
+    chain: chains[0] ?? null,
+    chains,
     offline: (byKey.offline as OfflineResult) ?? null,
     difficulty: diffJobs.length ? aggregateDifficulty(mode === 'quick' ? QUICK_DIFF : FULL_DIFF, diffJobs, wall) : null,
     determinism: runs['determinism-a'] && runs['determinism-b'] ? [runs['determinism-a'], runs['determinism-b']] : null,
@@ -206,29 +211,65 @@ export function testFirstWall(d: AcceptData): AcceptRow {
     notes: `${forecast ? 'UiState.forecast.recommended' : 'Forecast absent: computed §3 rule'}; computed rule ${runs.map((r) => r.computedRecommended?.wave ?? '—').join('/')}; Echo-rate peak ${runs.map((r) => r.echoPeak?.wave ?? '—').join('/')}; stop ${runs.map((r) => r.wallWave !== null ? `wall@${r.wallWave}` : r.stopReason).join(', ')}` };
 }
 
-export function testReclimb(d: AcceptData): AcceptRow {
-  const c = d.chain;
-  if (!c || !c.implemented || c.runs.length < 2) return { name: 'Reclimb', pass: false, skipped: 'prestige not implemented', value: '—', target: '25–40% of previous run time', notes: c?.notes.join('; ') ?? '' };
-  if (c.runs[0].deepestCleared < 20) return { name: 'Reclimb', pass: false, skipped: `run 1 reached only wave ${c.runs[0].deepestCleared} in budget (no Echoes below 20)`, value: '—', target: '25–40% of previous run time', notes: c.notes.join('; ') };
-  const ratios: number[] = [];
-  let best = c.runs[0].deepestCleared;
-  for (let i = 1; i < c.runs.length; i++) {
-    const t = timeToWave(c.runs[i], best);
-    ratios.push(t === null ? Infinity : t / Math.max(1, c.runs[i - 1].playSeconds));
-    best = Math.max(best, c.runs[i].deepestCleared);
+/** The chains that can be judged (Prestige implemented, ≥ 2 runs, run 1 reached wave 20), plus their notes. */
+function usableChains(d: AcceptData): { ok: PrestigeChainResult[]; notes: string[]; why: string } {
+  const cs = d.chains?.length ? d.chains : d.chain ? [d.chain] : [];
+  const ok: PrestigeChainResult[] = [];
+  const notes: string[] = [];
+  let why = 'prestige not implemented';
+  for (const c of cs) {
+    notes.push(...c.notes);
+    if (!c.implemented || c.runs.length < 2) continue;
+    if (c.runs[0].deepestCleared < 20) { why = `run 1 reached only wave ${c.runs[0].deepestCleared} in budget (no Echoes below 20)`; continue; }
+    ok.push(c);
   }
-  return { name: 'Reclimb', pass: ratios.every((r) => inRange(r, 0.25, 0.4)), value: ratios.map((r) => pct(r)).join(', '), target: '25–40% of previous run time', notes: c.notes.join('; ') };
+  return { ok, notes, why };
+}
+
+function chainSeed(c: PrestigeChainResult): string { return /-s(\d+)$/.exec(c.name)?.[1] ?? '?'; }
+
+/** Per-seed lists → per-Prestige medians across seeds. */
+function medianPerPrestige(lists: number[][]): number[] {
+  const n = Math.min(...lists.map((l) => l.length));
+  return Array.from({ length: n }, (_, i) => median(lists.map((l) => l[i])));
+}
+
+function chainBasis(d: AcceptData, n: number): string {
+  return d.mode === 'quick' ? `indicative (${n} seed, quick mode)` : `gated on the median of ${n} seed(s)`;
+}
+
+export function testReclimb(d: AcceptData): AcceptRow {
+  const target = '25–40% of previous run time (median over seeds)';
+  const { ok, notes, why } = usableChains(d);
+  if (!ok.length) return { name: 'Reclimb', pass: false, skipped: why, value: '—', target, notes: notes.join('; ') };
+  const per = ok.map((c) => {
+    const ratios: number[] = [];
+    let best = c.runs[0].deepestCleared;
+    for (let i = 1; i < c.runs.length; i++) {
+      const t = timeToWave(c.runs[i], best);
+      ratios.push(t === null ? Infinity : t / Math.max(1, c.runs[i - 1].playSeconds));
+      best = Math.max(best, c.runs[i].deepestCleared);
+    }
+    return ratios;
+  });
+  const med = medianPerPrestige(per);
+  return { name: 'Reclimb', pass: med.every((r) => inRange(r, 0.25, 0.4)), value: med.map((r) => pct(r)).join(', '), target,
+    notes: `${chainBasis(d, ok.length)}; per seed: ${ok.map((c, i) => `s${chainSeed(c)} ${per[i].map((r) => pct(r)).join('/')}`).join(', ')}; ${notes.join('; ')}` };
 }
 
 export function testPush(d: AcceptData): AcceptRow {
-  const c = d.chain;
-  if (!c || !c.implemented || c.runs.length < 2) return { name: 'Push', pass: false, skipped: 'prestige not implemented', value: '—', target: '+8–15 waves per Prestige (2–8)', notes: c?.notes.join('; ') ?? '' };
-  if (c.runs[0].deepestCleared < 20) return { name: 'Push', pass: false, skipped: `run 1 reached only wave ${c.runs[0].deepestCleared} in budget (no Echoes below 20)`, value: '—', target: '+8–15 waves per Prestige (2–8)', notes: c.notes.join('; ') };
-  const pushes: number[] = [];
-  let best = c.runs[0].deepestCleared;
-  for (let i = 1; i < c.runs.length; i++) { pushes.push(c.runs[i].deepestCleared - best); best = Math.max(best, c.runs[i].deepestCleared); }
-  return { name: 'Push', pass: pushes.every((p) => inRange(p, 8, 15)), value: pushes.map((p) => `+${p}`).join(', '), target: '+8–15 waves past previous best (Prestiges 2–8)',
-    notes: `depths ${c.runs.map((r) => r.deepestCleared).join(' → ')}` };
+  const target = '+8–15 waves past previous best (Prestiges 2–8, median over seeds)';
+  const { ok, notes, why } = usableChains(d);
+  if (!ok.length) return { name: 'Push', pass: false, skipped: why, value: '—', target, notes: notes.join('; ') };
+  const per = ok.map((c) => {
+    const pushes: number[] = [];
+    let best = c.runs[0].deepestCleared;
+    for (let i = 1; i < c.runs.length; i++) { pushes.push(c.runs[i].deepestCleared - best); best = Math.max(best, c.runs[i].deepestCleared); }
+    return pushes;
+  });
+  const med = medianPerPrestige(per);
+  return { name: 'Push', pass: med.every((p) => inRange(p, 8, 15)), value: med.map((p) => `+${round(p, 1)}`).join(', '), target,
+    notes: `${chainBasis(d, ok.length)}; per seed: ${ok.map((c, i) => `s${chainSeed(c)} ${per[i].map((p) => `+${p}`).join('/')} (depths ${c.runs.map((r) => r.deepestCleared).join('→')})`).join(', ')}` };
 }
 
 export function testForecast(d: AcceptData): AcceptRow {
@@ -325,8 +366,8 @@ export function testActiveEdge(d: AcceptData): AcceptRow {
   }
   const edge = ai > 0 ? 1 - aa / ai : NaN;
   const casts = act.reduce((s, r) => s + r.casts, 0), counters = act.reduce((s, r) => s + r.counters, 0), tells = act.reduce((s, r) => s + r.tells, 0);
-  return { name: 'Active edge', pass: inRange(edge, 0.15, 0.3) && behind.length === 0, value: `${pct(edge)} fewer attempts (${aa} vs ${ai})`,
-    target: '15–30% fewer attempts; idle clears every boss',
+  return { name: 'Active edge', pass: inRange(edge, 0.15, 0.4) && behind.length === 0, value: `${pct(edge)} fewer attempts (${aa} vs ${ai})`,
+    target: '15–40% fewer attempts; idle clears every boss',
     notes: `${behind.length ? `idle behind: ${behind.join(', ')}` : 'idle keeps up with every boss'}; active casts ${casts}, tells ${tells}, counters ${counters} (${pct(tells ? counters / tells : NaN)}); rejected: ${JSON.stringify(act[0]?.noops ?? {})}` };
 }
 
@@ -448,7 +489,21 @@ export function testDeterminism(d: AcceptData): AcceptRow {
     notes: `greedy/active, ${round(p[0].simSeconds / 60, 0)} sim-min, deepest ${p[0].deepestCleared}; separate processes` };
 }
 
+/** Quick mode cannot measure these: replace the row with a SKIP (full mode is unchanged). */
+const QUICK_SKIPS: Record<string, string> = {
+  'First wall': 'needs full run: quick climbs end before the first Prestige (recommended ~29 min of play)',
+  Forecast: 'needs full run: quick climbs end before the first Prestige',
+  'Active edge': 'needs full run: one seed and a handful of attempts is too few to judge',
+  'Directive gap': 'needs full run: one seed and a handful of attempts is too few to judge',
+};
+
 export function evaluate(d: AcceptData): AcceptRow[] {
+  const rows = evaluateAll(d);
+  if (d.mode !== 'quick') return rows;
+  return rows.map((r) => (QUICK_SKIPS[r.name] ? { ...r, pass: false, skipped: QUICK_SKIPS[r.name], notes: `not judged in quick mode (measured: ${r.value})` } : r));
+}
+
+function evaluateAll(d: AcceptData): AcceptRow[] {
   return [
     testCheckpointOdds(d), testCheckpointTime(d), testFirstWall(d), testReclimb(d), testPush(d), testForecast(d),
     testBuildHealth(d), testDoctrineHealth(d), testSpendEfficiency(d), testDefense(d), testActiveEdge(d), testDirectiveGap(d),
