@@ -397,3 +397,16 @@ explicitly because regeneration now needs it.
 - Active edge now passes at 15–40 % (the agreed band, docs/ACTIVE.md); it was 15–30 % in the harness.
 - `sim:accept --quick` reports First wall, Forecast, Active edge and Directive gap as SKIPPED (quick climbs end before the first Prestige; one seed and a few attempts cannot judge the edge). Full mode is unchanged.
 - Full mode runs the Prestige chain on every seed (1, 2, 3); Reclimb and Push are gated on the per-Prestige median across seeds, per-seed values are in Notes. Quick mode keeps one seed and marks them "indicative". Full run: Reclimb s1 39.8/54 %, s2 62/34 %, s3 44/40.7 % (median 44 %, 40.7 %: FAIL, band widening is the owner's call); Push +10/+11 on all seeds (PASS).
+
+## Acceptance targets re-set with the owner (2026-10-06)
+
+The balance round (simulator, master b28347a) proposed no game tuning: the remaining failures were targets that
+predate the onboarding goals. The owner decided:
+- **Checkpoints:** "Bosses at 10 and 20 can be hard." Broodheart (10) and Siege Engine (20) take 4–5 idle attempts and
+  are where the Active edge is earned; the checkpoint after each falls first try. *Checkpoint odds* now asks for: the
+  first boss first try, every checkpoint before the Prestige recommendation within 6 attempts, and at least one wall
+  (≥ 3). *Checkpoint time* asks for the first Prestige recommended at 25–40 min of play and no pre-Frontier checkpoint
+  over 20 min (skipped in quick mode). The old 15–30 / 40–60 / 70–90 % first-try odds and 8–20 min median are retired.
+- **Reclimb:** no published industry figure exists; familiar idle games land around a third to a half of the previous
+  run early on, falling as speed-up upgrades stack. Target: 25–50 % of the previous run's time, not rising from one
+  Prestige to the next (+5 points of noise), and never more than 20 min of play (medians over seeds).

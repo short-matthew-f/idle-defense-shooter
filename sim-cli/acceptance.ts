@@ -16,9 +16,9 @@
  *          3 archetypes of difficulty. ~90 s on 4 cores, ~3 min in-process.
  *
  * Interpretations (the table's wording leaves room; these are the definitions the numbers use)
- *  - Checkpoint odds: "attempt k" = attempts that played the segment between two checkpoints (the
- *    attempt that cleared the previous boss counts as #1). Reported cumulatively: P(new boss by
- *    attempt 1/2/3), over every checkpoint of the idle Generalist's first Prestige.
+ *  - Checkpoint odds: attempts per checkpoint before the Prestige recommendation (the attempt that
+ *    cleared the previous boss counts as #1), idle Generalist, first Prestige. Owner-approved targets
+ *    (2026-10-06): first boss first try, every pre-Frontier checkpoint ≤ 6 attempts, ≥ 1 wall (≥ 3).
  *  - First wall: the Forecast's first `recommended` wave; when UiState.forecast is absent, the
  *    computed §3 rule (Echo rate ≥ 15% below its peak for one full checkpoint cycle).
  *  - Forecast: |recommended wave − true Echo-rate-peak wave| / peak wave ≤ 10%. Skipped while the
@@ -185,18 +185,41 @@ export async function gather(opts: AcceptOptions): Promise<AcceptData> {
 // ---------------------------------------------------------------------------
 function series(d: AcceptData, prefix: string): RunResult[] { return d.seeds.map((s) => d.runs[`${prefix}-s${s}`]).filter(Boolean); }
 
-export function testCheckpointOdds(d: AcceptData): AcceptRow {
-  const o = checkpointOdds(series(d, 'generalist-idle'));
-  const pass = inRange(o.p1, 0.15, 0.3) && inRange(o.p2, 0.4, 0.6) && inRange(o.p3, 0.7, 0.9);
-  return { name: 'Checkpoint odds', pass, value: `${pct(o.p1)} / ${pct(o.p2)} / ${pct(o.p3)} (n=${o.n})`, target: '15–30% / 40–60% / 70–90% by attempt 1/2/3',
-    notes: `attempts per checkpoint: ${o.dist.join(',')}` };
+/** The checkpoints before the run's Prestige recommendation (past the Frontier, walls are the design). */
+function preFrontier(r: RunResult): RunResult['checkpoints'] {
+  const rec = gameRecommendation(r)?.wave ?? Infinity;
+  return r.checkpoints.filter((c) => c.checkpoint <= rec);
 }
 
+/**
+ * Owner 2026-10-06 ("Bosses at 10 and 20 can be hard"): the first boss falls on the first try, every checkpoint
+ * before the Frontier falls within 6 attempts, and at least one is a real wall (≥ 3 attempts). Replaces the old
+ * 15–30 / 40–60 / 70–90 % first-try odds, which predate the onboarding goals.
+ */
+export function testCheckpointOdds(d: AcceptData): AcceptRow {
+  const runs = series(d, 'generalist-idle');
+  const per = runs.map((r) => preFrontier(r).map((c) => c.attempts));
+  const firstTry = per.every((a) => a.length > 0 && a[0] === 1);
+  const worst = Math.max(0, ...per.flat());
+  const walls = per.every((a) => a.some((x) => x >= 3));
+  const all = per.flat();
+  return { name: 'Checkpoint odds', pass: firstTry && worst <= 6 && walls,
+    value: `first boss ${firstTry ? 'first try' : 'not first try'}; worst ${worst} attempts; ${pct(all.filter((x) => x === 1).length / Math.max(1, all.length))} first-try (n=${all.length})`,
+    target: 'first boss first try; every pre-Frontier checkpoint ≤ 6 attempts; at least one wall (≥ 3)',
+    notes: `attempts per pre-Frontier checkpoint: ${per.map((a) => a.join(',')).join(' | ')}` };
+}
+
+/** Owner-approved onboarding goal: the first Prestige is recommended after 25–40 min of play; no checkpoint over 20 min. */
 export function testCheckpointTime(d: AcceptData): AcceptRow {
-  const m = checkpointMinutes(series(d, 'generalist-idle'));
-  const med = median(m);
-  return { name: 'Checkpoint time', pass: inRange(med, 8, 20), value: `${round(med, 1)} min median (n=${m.length})`, target: '8–20 min median, first Prestige',
-    notes: `per checkpoint (min): ${m.map((x) => round(x, 1)).join(', ')}` };
+  const runs = series(d, 'generalist-idle');
+  const recMin = runs.map((r) => { const g = gameRecommendation(r); return g ? g.seconds / 60 : NaN; });
+  const cpMin = runs.flatMap((r) => preFrontier(r).map((c) => c.minutes));
+  const med = median(recMin.filter(Number.isFinite));
+  const slowest = Math.max(0, ...cpMin);
+  return { name: 'Checkpoint time', pass: recMin.every(Number.isFinite) && inRange(med, 25, 40) && slowest <= 20,
+    value: `first Prestige at ${Number.isFinite(med) ? round(med, 1) : '—'} min median; slowest checkpoint ${round(slowest, 1)} min`,
+    target: 'first Prestige recommended at 25–40 min of play; no pre-Frontier checkpoint over 20 min',
+    notes: `recommended at (min): ${recMin.map((x) => (Number.isFinite(x) ? round(x, 1) : 'never')).join(', ')}; per checkpoint (min): ${cpMin.map((x) => round(x, 1)).join(', ')}` };
 }
 
 export function testFirstWall(d: AcceptData): AcceptRow {
@@ -238,23 +261,31 @@ function chainBasis(d: AcceptData, n: number): string {
   return d.mode === 'quick' ? `indicative (${n} seed, quick mode)` : `gated on the median of ${n} seed(s)`;
 }
 
+/**
+ * Owner 2026-10-06: back to the previous best in 25–50 % of the previous run's time (median over seeds), never
+ * slower than the Prestige before (+5 points of noise allowed), and never more than 20 min of play.
+ */
 export function testReclimb(d: AcceptData): AcceptRow {
-  const target = '25–40% of previous run time (median over seeds)';
+  const target = '25–50% of previous run time, not rising Prestige to Prestige, ≤ 20 min (medians over seeds)';
   const { ok, notes, why } = usableChains(d);
   if (!ok.length) return { name: 'Reclimb', pass: false, skipped: why, value: '—', target, notes: notes.join('; ') };
   const per = ok.map((c) => {
-    const ratios: number[] = [];
+    const ratios: number[] = [], mins: number[] = [];
     let best = c.runs[0].deepestCleared;
     for (let i = 1; i < c.runs.length; i++) {
       const t = timeToWave(c.runs[i], best);
       ratios.push(t === null ? Infinity : t / Math.max(1, c.runs[i - 1].playSeconds));
+      mins.push(t === null ? Infinity : t / 60);
       best = Math.max(best, c.runs[i].deepestCleared);
     }
-    return ratios;
+    return { ratios, mins };
   });
-  const med = medianPerPrestige(per);
-  return { name: 'Reclimb', pass: med.every((r) => inRange(r, 0.25, 0.4)), value: med.map((r) => pct(r)).join(', '), target,
-    notes: `${chainBasis(d, ok.length)}; per seed: ${ok.map((c, i) => `s${chainSeed(c)} ${per[i].map((r) => pct(r)).join('/')}`).join(', ')}; ${notes.join('; ')}` };
+  const med = medianPerPrestige(per.map((p) => p.ratios));
+  const medMin = medianPerPrestige(per.map((p) => p.mins));
+  const falling = med.every((r, i) => i === 0 || r <= med[i - 1] + 0.05);
+  return { name: 'Reclimb', pass: med.every((r) => inRange(r, 0.25, 0.5)) && falling && medMin.every((m) => m <= 20),
+    value: `${med.map((r) => pct(r)).join(', ')} (${medMin.map((m) => `${round(m, 1)} min`).join(', ')})`, target,
+    notes: `${chainBasis(d, ok.length)}; per seed: ${ok.map((c, i) => `s${chainSeed(c)} ${per[i].ratios.map((r) => pct(r)).join('/')}`).join(', ')}; ${notes.join('; ')}` };
 }
 
 export function testPush(d: AcceptData): AcceptRow {
@@ -493,6 +524,7 @@ export function testDeterminism(d: AcceptData): AcceptRow {
 const QUICK_SKIPS: Record<string, string> = {
   'First wall': 'needs full run: quick climbs end before the first Prestige (recommended ~29 min of play)',
   Forecast: 'needs full run: quick climbs end before the first Prestige',
+  'Checkpoint time': 'needs full run: quick climbs end before the first Prestige',
   'Active edge': 'needs full run: one seed and a handful of attempts is too few to judge',
   'Directive gap': 'needs full run: one seed and a handful of attempts is too few to judge',
 };
