@@ -817,6 +817,8 @@ export const SAVE_VERSION = 3;
 export interface SaveState {
   version: number;
   savedAtMs: number;             // wall clock, main-thread only
+  /** Command journal (app/journal.ts): the highest journaled command seq inside this save. Worker-stamped UI bookkeeping, never read by the sim. */
+  journalSeq?: number;
   meta: MetaState;
   run: RunSave;                  // current run, restorable to the start of the current checkpoint
   trial: { id: TrialId; run: RunSave } | null;
@@ -859,7 +861,8 @@ export interface RunSave {
 // ---------------------------------------------------------------------------
 export type ToWorker =
   | { t: 'init'; save: SaveState | null; seedOverride?: number }
-  | { t: 'cmd'; cmd: Command }
+  /** `seq`: journal sequence of a journaled command (app/journal.ts); `replay`: re-sent from the journal on load (rejections stay silent). */
+  | { t: 'cmd'; cmd: Command; seq?: number; replay?: boolean }
   | { t: 'run'; running: boolean }
   | { t: 'tick_budget'; ticks: number }     // main thread paces the sim: run up to N ticks now
   | { t: 'want_snapshot' }

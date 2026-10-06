@@ -25,8 +25,9 @@ describe('SimClient', () => {
     const { c, w } = client();
     expect(w.sent[0]).toEqual({ t: 'init', save: null, seedOverride: 4 });
     c.send({ type: 'set_mode', mode: 'patrol' });
+    c.send({ type: 'set_speed', speed: 2 } as never);
     c.tickBudget(3);
-    expect(w.sent.slice(1)).toEqual([{ t: 'cmd', cmd: { type: 'set_mode', mode: 'patrol' } }, { t: 'tick_budget', ticks: 3 }]);
+    expect(w.sent.slice(1)).toEqual([{ t: 'cmd', cmd: { type: 'set_mode', mode: 'patrol' }, seq: 1 }, { t: 'cmd', cmd: { type: 'set_speed', speed: 2 } }, { t: 'tick_budget', ticks: 3 }]);
   });
 
   it('pairs inspector replies with requests in order and resolves saves', async () => {

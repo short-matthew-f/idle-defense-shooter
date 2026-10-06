@@ -82,6 +82,14 @@ body.shell-rail .boon-offer:not(.narrow) .bo-foot { position: static; background
 .boon-chip > .ico { color: var(--accent); }
 .boon-chip .count:empty { display: none; }
 
+/* below 340 px the foot's title and the buttons would not both fit one row (the title shrank to "Pic…"): the title takes its own row */
+@media (max-width: 339px) {
+  .bo-foot { flex-wrap: wrap; row-gap: 2px; }
+  .bo-heading { flex: 1 1 100%; flex-direction: row; flex-wrap: wrap; gap: 0 8px; padding-left: 4px; }
+  .bo-title { white-space: normal; }
+  .btn.bo-take, .btn.bo-reroll, .btn.bo-decline { min-width: 0; }
+}
+
 /* the overlay lanes (lanes.ts) keep the banners, toasts and the death card clear of the open card */
 
 /* landscape phone: the card sits bottom-right (the abilities are a column on the left), buttons in a column */

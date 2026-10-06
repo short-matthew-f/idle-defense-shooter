@@ -12,7 +12,8 @@
 .star.owned circle:not(.hit), .star.owned rect { fill: color-mix(in srgb, var(--star) 35%, var(--bg-3)); stroke: var(--star); }
 .star.maxed circle:not(.hit), .star.maxed rect { fill: var(--star); }
 .star.selected circle:not(.hit), .star.selected rect, .star:focus-visible circle:not(.hit), .star:focus-visible rect { stroke: var(--accent); stroke-width: 3.5; }
-.star text { fill: var(--text); font-size: 12px; text-anchor: middle; paint-order: stroke; stroke: #000; stroke-width: 3px; }
+.star text { fill: var(--text); font-size: 14px;   /* the real size is set in px of the map's own scale (constellation.ts fitScale) */
+  text-anchor: middle; paint-order: stroke; stroke: #000; stroke-width: 3px; }
 .star-detail { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
 .sd-name { font-weight: 700; font-size: 16px; }
 .sd-desc { margin: 0; font-size: 14px; color: var(--text-dim); }

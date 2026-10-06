@@ -19,6 +19,17 @@ const SYS = ['primary', 'ordnance', 'drones', 'blade', 'laser', 'gravitics'];
 
 export interface StarPos { x: number; y: number; r: number }
 
+/** The smallest touch target (css px) and the smallest node name (css px) on the map (N-14). */
+export const STAR_HIT_PX = 44;
+export const STAR_NAME_PX = 14;
+
+/** Which node a tap at (x, y) picks: the nearest centre within `hit` of the point, else null. Pure. */
+export function nearestStar(points: ReadonlyMap<string, { x: number; y: number }>, x: number, y: number, hit: number): string | null {
+  let best: string | null = null, bd = hit * hit;
+  for (const [id, p] of points) { const d = (p.x - x) ** 2 + (p.y - y) ** 2; if (d <= bd) { bd = d; best = id; } }
+  return best;
+}
+
 /** Deterministic layout for the graph (pure; exported for reuse). */
 export function layoutStars(nodes: readonly StarNodeDef[]): Map<string, StarPos> {
   const pos = new Map<string, StarPos>();
@@ -51,6 +62,10 @@ export class ConstellationPanel {
   shown = false;
   private readonly svg: SVGSVGElement;
   private readonly nodeEls = new Map<string, SVGGElement>();
+  private readonly hitEls: SVGCircleElement[] = [];
+  private readonly nameEls: SVGTextElement[] = [];
+  private readonly centres = new Map<string, { x: number; y: number }>();
+  private scale = 0;
   private readonly detail = h('div', { class: 'star-detail' });
   private readonly dName = h('div', { class: 'sd-name' });
   private readonly dDesc = h('p', { class: 'sd-desc' });
@@ -94,23 +109,41 @@ export class ConstellationPanel {
       const shape = document.createElementNS(SVGNS, n.kind2 === 'bridge' ? 'rect' : 'circle');
       if (n.kind2 === 'bridge') { shape.setAttribute('x', String(-p.r)); shape.setAttribute('y', String(-p.r)); shape.setAttribute('width', String(p.r * 2)); shape.setAttribute('height', String(p.r * 2)); shape.setAttribute('transform', 'rotate(45)'); }
       else shape.setAttribute('r', String(p.r));
-      // generous invisible hit area (44 px-ish at phone scale)
+      // an invisible hit area, 44 css px across at any map size (fitScale); where two overlap the nearest centre wins
       const hit = document.createElementNS(SVGNS, 'circle');
       hit.setAttribute('r', String(Math.max(22, p.r + 8)));
       hit.setAttribute('class', 'hit');
+      this.hitEls.push(hit);
+      this.centres.set(n.id, { x: p.x, y: p.y });
       g.append(hit, shape);
       if (n.kind2 === 'major') {
         const t = document.createElementNS(SVGNS, 'text');
+        t.dataset.r = String(p.r);
         t.setAttribute('y', String(p.r + 16));
         t.textContent = n.name;
+        this.nameEls.push(t);
         g.appendChild(t);
       }
-      const pick = (): void => this.select(n);
-      g.addEventListener('click', pick);
-      g.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });
+      g.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.select(n); } });
       this.svg.appendChild(g);
       this.nodeEls.set(n.id, g);
     }
+    // taps: the nearest node centre within its 44 px target (the per-node areas overlap on the dense outer ring); a click with
+    // no pointer position (a screen reader's activate, Enter on the focused node) picks the node it landed on
+    this.svg.addEventListener('click', (e) => {
+      const g = (e.target as Element).closest?.('g.star') ?? null;
+      const byEl = (): StarNodeDef | null => { for (const [id, el] of this.nodeEls) if (el === g) return STAR_NODES.find((x) => x.id === id) ?? null; return null; };
+      if (e.detail === 0 || (e.clientX === 0 && e.clientY === 0)) { const n = byEl(); if (n) this.select(n); return; }
+      const m = this.svg.getScreenCTM();
+      if (!m) { const n = byEl(); if (n) this.select(n); return; }
+      const pt = this.svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+      const q = pt.matrixTransform(m.inverse());
+      const sc = this.scale || m.a || 1;
+      const id = nearestStar(this.centres, q.x, q.y, STAR_HIT_PX / 2 / sc);
+      const n = id ? STAR_NODES.find((x) => x.id === id) ?? null : null;
+      if (n) this.select(n);
+    });
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => this.fitScale()).observe(this.svg);
     this.dBuy = button('Buy', () => { if (this.selected) ctx.host.send({ type: 'buy_star', node: this.selected.id }); }, { class: 'btn primary' });
     this.detail.append(h('div', { class: 'node-head' }, this.dName, this.dRank), this.dDesc, this.dBuy);
     this.ascendBtn = button([icon('ascension'), 'Ascend…'], async () => {
@@ -129,8 +162,24 @@ export class ConstellationPanel {
   }
 
   get isOpen(): boolean { return this.shown; }
+
+  /** Size the hit areas and names in css px, whatever the map's width: the viewBox is 480 units across. */
+  private fitScale(): void {
+    const w = this.svg.getBoundingClientRect().width;
+    if (!(w > 0)) return;
+    const sc = w / 480;
+    if (Math.abs(sc - this.scale) < 0.002) return;
+    this.scale = sc;
+    for (const c of this.hitEls) c.setAttribute('r', (STAR_HIT_PX / 2 / sc).toFixed(1));
+    for (const t of this.nameEls) {
+      t.setAttribute('style', `font-size:${(STAR_NAME_PX / sc).toFixed(1)}px;stroke-width:${(3 / sc).toFixed(1)}px`);
+      t.setAttribute('y', ((Number(t.dataset.r) || 17) + (4 + STAR_NAME_PX) / sc).toFixed(1));
+    }
+  }
+
   setShown(on: boolean): void {
     this.shown = on;
+    if (on) requestAnimationFrame(() => this.fitScale());
     const ui = this.ctx.state(); if (on && ui) this.update(ui);
   }
 

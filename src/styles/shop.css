@@ -16,11 +16,14 @@ body:not(.tab-upgrades) .btn.qty-chip { display: none; }
 
 /* Suggested: one line ("Suggested 3 · Buy all ◆53"); the chevron opens the chips (and, for the first purchases, a sentence) */
 .quick.suggest {
-  margin: 12px 0 10px; padding: 4px; min-width: 0;
+  margin: 4px 0 2px; padding: 0 2px; min-width: 0;
   background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px;
 }
 .sg-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
-.btn.sg-toggle { flex: 1 0 auto; justify-content: flex-start; gap: 8px; padding: 0 10px; font-size: 15px; font-weight: 700; color: var(--text); }
+.btn.sg-toggle { flex: 1 1 auto; min-width: 0; justify-content: flex-start; gap: 8px; padding: 0 10px; font-size: 15px; font-weight: 700; color: var(--text); white-space: nowrap; }
+/* collapsed: always one line ("Suggested 3 · Buy all ◆53"), even at 320 px (N-07) */
+.suggest.collapsed .sg-head { flex-wrap: nowrap; }
+@media (max-width: 360px) { .btn.sg-toggle { padding: 0 6px; gap: 6px; } .btn.sg-buyall { padding: 0 10px; gap: 4px; } }
 .btn.sg-toggle:hover:not(:disabled) { background: transparent; }
 .sg-chev { flex: none; color: var(--text-dim); transition: transform 0.15s; }
 .suggest.collapsed .sg-chev { transform: rotate(-90deg); }
@@ -56,7 +59,7 @@ body:not(.tab-upgrades) .btn.qty-chip { display: none; }
 
 .shop { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 /* the pinned part: the five categories as a segmented control (widths follow the labels so "Hardpoints" fits at 360 px) */
-.shop-head { flex: none; padding: 8px var(--gutter) 10px; }
+.shop-head { flex: none; padding: 3px var(--gutter) 4px; }
 .cat-tabs { display: flex; gap: 2px; padding: 2px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; }
 .cat-tabs .tab {
   position: relative; flex: 1 1 auto; justify-content: center; min-height: var(--touch); padding: 0 4px; border: 0; border-radius: 10px;
@@ -94,7 +97,7 @@ body.shell-rail .tree-chips.more { -webkit-mask-image: none; mask-image: none; p
 .decision-row .chev { color: var(--text-faint); }
 
 /* tree chips and the sort toggle: the head of the list (it scrolls with it) */
-.shop-sub { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; }
+.shop-sub { display: flex; align-items: center; gap: 8px; margin: 0; }
 .tree-chips { flex: 1; min-width: 0; }
 .tree-chips.more {
   -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
@@ -108,17 +111,17 @@ body.shell-rail .tree-chips.more { -webkit-mask-image: none; mask-image: none; p
 /* section heads: a quiet label, with the per-tree "Spend here" (and, without tree chips, the sort toggle) on the right */
 .sec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .sec-head .sec-title { flex: 1 1 auto; min-width: 0; }
-.sec-head > .sort-btn { margin-top: 8px; }
+.sec-head > .sort-btn { margin-top: 0; }
 .btn.spend-btn {
-  flex: none; flex-direction: column; align-items: flex-end; justify-content: center; gap: 0; min-height: 48px; max-width: 190px;
-  margin: 12px 0 6px; padding: 3px 12px; line-height: 1.2;
+  flex: none; flex-direction: row; align-items: center; justify-content: center; gap: 6px; min-height: var(--touch); max-width: 210px;
+  margin: 0; padding: 0 12px; line-height: 1.2;   /* one line (N-07): "Spend here ◆12" */
 }
 .spend-title { font-size: 14px; font-weight: 700; }
 .spend-line { font-size: 14px; font-weight: 600; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .btn.spend-btn:not(:disabled) .spend-line { color: var(--scrap); }
-.shop-section:first-child .sec-title { margin-top: 12px; }
+.shop-section:first-child .sec-title { margin-top: 0; margin-bottom: 0; }
 /* the Quartermaster card under a one-line summary (open while it is off; folded once on) */
-.qm-fold { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 4px; }
+.qm-fold { display: flex; flex-direction: column; gap: 8px; margin: 2px 0 0; }
 .qm-fold-btn .ico:first-child { color: var(--scrap); }
 .qmf-state { color: var(--text-dim); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .qm-fold-btn .fold-label { flex: none; }

@@ -15,9 +15,10 @@
  *    fresh game: that would autosave over the player's save). Every `inspector` request gets a reply.
  */
 import { Sim } from '../sim/index';
-import type { AudioDigest, FromWorker, RenderSnapshot, SaveState, SimEvent, ToWorker } from '../sim/core/types';
+import type { AudioDigest, Command, FromWorker, RenderSnapshot, SaveState, SimEvent, ToWorker } from '../sim/core/types';
 import { Ev, INSTANCE_FLOATS, FX_FLOATS, ProjFlag, ProjKind, TICK_RATE } from '../sim/core/types';
 import { StateBit } from '../sim/core/events';
+import { ReplayQueue, SeqTracker } from './seq';
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 const MAX_TICKS_PER_BUDGET = 240;
@@ -30,6 +31,9 @@ let running = true;
 let ticksSinceUi = 0;
 let ticksSinceSave = 0;
 let lastEventId = 0;
+/** Command journal bookkeeping (N-09): which journaled commands the sim has applied; replayed commands' rejections stay silent. */
+const seqs = new SeqTracker();
+const replays = new ReplayQueue<Command>();
 const freeInstances: Float32Array[] = [new Float32Array(INSTANCE_FLOATS * 4096), new Float32Array(INSTANCE_FLOATS * 4096)];
 const freeFx: Float32Array[] = [new Float32Array(FX_FLOATS * 1024), new Float32Array(FX_FLOATS * 1024)];
 
@@ -161,15 +165,24 @@ function postSave(): void {
   let save: SaveState;
   try { save = sim.save(); } catch (e) { reportError(e, 'save'); return; }
   save.savedAtMs = Date.now();
+  save.journalSeq = seqs.applied;
   if (!faulted) goodSave = save;
   post({ t: 'save', save });
 }
 
 /** Report a rejected player command to the UI. */
+/** This step ran a replayed command: rejections are the replay queue's business, never a toast. */
+let replayHead: { cmd: Command; seq: number } | null = null;
 function postCmdError(): void {
   if (!sim) return;
   const cmd = sim.lastErrorCommand;
   const message = sim.takeLastError();
+  if (replayHead) {   // a replayed command that no longer applies (offer gone, price changed): no toast; the queue decides retry or drop
+    const seq = replays.settle(message);
+    if (seq !== null) seqs.release(seq);
+    replayHead = null;
+    return;
+  }
   if (message !== null && cmd !== null) post({ t: 'cmd_error', message, cmd });
 }
 
@@ -209,9 +222,14 @@ function handle(msg: ToWorker): void {
       }
       lastEventId = 0; lastProjGen = 0; ticksSinceUi = 0; ticksSinceSave = 0;
       faulted = false; recoveries = 0; goodSave = msg.save; goodMeta = null;
+      seqs.reset(msg.save?.journalSeq ?? 0); replays.clear(); replayHead = null;
       post({ t: 'ready', ui: sim.uiState() });
       break;
-    case 'cmd': sim?.command(msg.cmd); break;
+    case 'cmd':
+      if (!sim) break;
+      if (msg.replay) { replays.push(msg.cmd, msg.seq); if (msg.seq !== undefined) seqs.hold(msg.seq); }   // handed to the sim one per tick (ReplayQueue)
+      else { sim.command(msg.cmd); seqs.note(msg.seq); }
+      break;
     case 'run': running = msg.running; break;
     case 'tick_budget': {
       if (!sim || !running) break;
@@ -219,8 +237,11 @@ function handle(msg: ToWorker): void {
       const n = Math.max(0, Math.min(MAX_TICKS_PER_BUDGET, Math.floor(msg.ticks)));
       let ran = 0;
       for (let i = 0; i < n; i++) {
+        replayHead = replays.next();
+        if (replayHead) { sim.command(replayHead.cmd); seqs.note(replayHead.seq); }
         try { sim.step(); }
         catch (e) { faulted = true; reportError(e, 'step'); break; }
+        seqs.stepped();
         ran++;
         postCmdError();
         if (++ticksSinceUi >= UI_EVERY) { ticksSinceUi = 0; postUi(); }

@@ -1,8 +1,9 @@
 /**
  * Game glue (WP7): loads the save, starts the SimClient worker, paces it from the rAF loop,
  * routes snapshots to the renderer and UiState to the DOM UI (≤ 10 Hz), wires taps / hold-aim,
- * autosaves (every 30 s, at checkpoints, when hidden, and ~2 s after any purchase or choice; a synchronous backup
- * snapshot on pagehide / hidden: app/autosave.ts, app/storage.ts) and credits offline time. A new version never
+ * autosaves (every 30 s while visible, at checkpoints, when hidden, and ~2 s after any purchase or choice; a synchronous
+ * backup snapshot on pagehide / hidden: app/autosave.ts, app/storage.ts; and a command journal in localStorage that a
+ * cold start replays on top of the loaded save, so a purchase is never lost: app/journal.ts) and credits offline time. A new version never
  * reloads the page under the player: it waits for a Restart tap (Game.applyUpdate / UiHost.applyUpdate) or the next
  * cold start, and installs on its own only while the page is hidden and nothing is open or pending.
  *
@@ -23,6 +24,7 @@ import { FieldOverlay } from './overlay';
 import { parseCal } from './touch-cal';
 import type { Command } from '@sim/core/types';
 import { clearBackup, clearSave, exportToString, importFromString, loadSave, parkSave, storeSave, writeBackup } from './storage';
+import { clearJournal, readJournal, selectReplay, trimJournal } from './journal';
 import { Debouncer, SAVE_DEBOUNCE_MS, savesAfter, updateBlocker } from './autosave';
 import { canInstall, initInstallPrompt, promptInstall, onUpdateReady } from './pwa';
 import { GameUi } from '@ui/index';
@@ -68,6 +70,7 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
 
   let client = new SimClient(save);
   let ready = false;
+  let replayed = false;
   let paused = false;
   let resetting = false;
   let latestUi: UiState | null = null;
@@ -137,6 +140,7 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
       resetting = true;
       saveSoon.cancel();
       clearBackup();
+      clearJournal();
       await storeSave(s);
       location.reload();
     },
@@ -144,6 +148,7 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
       resetting = true;
       saveSoon.cancel();
       await clearSave();
+      clearJournal();
       resetPrefs();
       location.reload();
     },
@@ -182,6 +187,15 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
       syncSector(s);
       ui.onReady(s);
       c.wantSnapshot();
+      // N-09: re-send the journaled commands the loaded save does not contain (an old save without journalSeq discards them)
+      if (!replayed) {
+        replayed = true;
+        try {
+          const entries = readJournal();
+          const todo = selectReplay(entries, save?.journalSeq, !save);
+          if (todo.length) c.replay(todo); else if (!save || save.journalSeq === undefined) clearJournal();
+        } catch { /* never break boot */ }
+      }
       // cold-start offline credit
       if (save && save.savedAtMs > 0) {
         const secs = (Date.now() - save.savedAtMs) / 1000;
@@ -201,7 +215,7 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
       s.savedAtMs = Date.now();
       lastSave = s;
       try { lastSaveText = exportToString(s); } catch { /* keep the previous backup text */ }
-      storeSave(s).catch((e) => console.warn('[save] store failed:', e));
+      storeSave(s).then(() => trimJournal(s.journalSeq), (e) => console.warn('[save] store failed:', e));
     };
     let lastErr = '';
     let lastCmdErr = '', lastCmdErrAt = 0;
@@ -225,6 +239,7 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
         const bad = save; save = null;
         void parkSave(bad, 'broken').then(() => {
           c.terminate();
+          clearJournal();   // the journal belonged to the broken save
           client = new SimClient(null);
           wire(client);
           ui.toast('Your save could not be loaded. A backup was kept; starting fresh.', 'warn');
@@ -285,7 +300,7 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
   /** Hidden / pagehide: the synchronous backup of the latest stored save, then an async fresh save. */
   function onLeave(): void {
     if (resetting) return;
-    if (lastSaveText) writeBackup(lastSaveText);
+    if (lastSaveText && writeBackup(lastSaveText)) trimJournal(lastSave?.journalSeq);
     saveSoon.cancel();
     if (ready) client.requestSave();
   }
@@ -312,7 +327,7 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
     applying = true;
     saveSoon.cancel();
     try {
-      if (ready) { const s = await client.requestSave(); s.savedAtMs = Date.now(); try { writeBackup(exportToString(s)); } catch { /* best effort */ } await storeSave(s); }
+      if (ready) { const s = await client.requestSave(); s.savedAtMs = Date.now(); try { if (writeBackup(exportToString(s))) trimJournal(s.journalSeq); } catch { /* best effort */ } await storeSave(s); trimJournal(s.journalSeq); }
     } catch (e) { console.warn('[update] save before reload failed:', e); }
     await apply();
   }
