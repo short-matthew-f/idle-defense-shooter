@@ -74,6 +74,11 @@ export interface AcceptData {
   seeds: number[];
   hours: number;
   runs: Record<string, RunResult>;
+  /**
+   * Seeds for the idle / active / directive comparison rows (Active edge, Directive gap): full mode adds three
+   * more Generalist seeds, since those rows compare a handful of attempts per seed (owner, 2026-10-07).
+   */
+  edgeSeeds?: number[];
   /** The first seed's chain (kept for single-chain readers). */
   chain: PrestigeChainResult | null;
   /** One chain per chain seed (full: every seed; quick: the first seed only). */
@@ -92,11 +97,22 @@ const FINALES = [20, 40, 60, 80, 100];
 
 function inRange(x: number, lo: number, hi: number): boolean { return Number.isFinite(x) && x >= lo && x <= hi; }
 
+/** The idle / active / directive comparison seeds: full mode adds three more beyond the main seeds. */
+export function edgeSeedsFor(mode: Mode, seeds: number[]): number[] {
+  if (mode === 'quick') return seeds;
+  const top = Math.max(0, ...seeds);
+  return [...seeds, top + 1, top + 2, top + 3];
+}
+
 export function plan(mode: Mode, seeds: number[], hours: number): Plan[] {
   const quick = mode === 'quick';
   const H = hours * 3600;
   const out: Plan[] = [];
   const att = (key: string, cfg: Omit<RunConfig, 'name'>): void => { out.push({ key, job: { kind: 'attempt', cfg: { stopAtWave: 100, ...cfg, name: key } } }); };
+  // extra comparison seeds: only the three Generalist policies the edge rows read
+  for (const seed of edgeSeedsFor(mode, seeds).filter((x) => !seeds.includes(x))) {
+    for (const policy of ['idle', 'active', 'directive'] as const) att(`generalist-${policy}-s${seed}`, { seed, agent: 'generalist', policy, maxSimSeconds: H });
+  }
   for (const seed of seeds) {
     att(`generalist-idle-s${seed}`, { seed, agent: 'generalist', policy: 'idle', maxSimSeconds: H });
     att(`generalist-active-s${seed}`, { seed, agent: 'generalist', policy: 'active', maxSimSeconds: H });
@@ -180,7 +196,7 @@ export async function gather(opts: AcceptOptions): Promise<AcceptData> {
   const diffJobs = dj.map((job, i) => ({ job, res: dres[i] }));
   const wall = (performance.now() - t0) / 1000;
   return {
-    mode, seeds, hours, runs,
+    mode, seeds, hours, runs, edgeSeeds: edgeSeedsFor(mode, seeds),
     chain: chains[0] ?? null,
     chains,
     offline: (byKey.offline as OfflineResult) ?? null,
@@ -194,6 +210,8 @@ export async function gather(opts: AcceptOptions): Promise<AcceptData> {
 // Rows
 // ---------------------------------------------------------------------------
 function series(d: AcceptData, prefix: string): RunResult[] { return d.seeds.map((s) => d.runs[`${prefix}-s${s}`]).filter(Boolean); }
+/** The comparison rows' runs: the main seeds plus full mode's extra edge seeds. */
+function edgeSeries(d: AcceptData, prefix: string): RunResult[] { return (d.edgeSeeds ?? d.seeds).map((s) => d.runs[`${prefix}-s${s}`]).filter(Boolean); }
 
 /** The checkpoints before the run's Prestige recommendation (past the Frontier, walls are the design). */
 function preFrontier(r: RunResult): RunResult['checkpoints'] {
@@ -407,7 +425,7 @@ export function testDefense(d: AcceptData): AcceptRow {
 function commonCp(runs: RunResult[]): number { return Math.min(...runs.map((r) => r.checkpoint)); }
 
 export function testActiveEdge(d: AcceptData): AcceptRow {
-  const idle = series(d, 'generalist-idle'), act = series(d, 'generalist-active');
+  const idle = edgeSeries(d, 'generalist-idle'), act = edgeSeries(d, 'generalist-active');
   let ai = 0, aa = 0;
   const behind: string[] = [];
   for (let i = 0; i < Math.min(idle.length, act.length); i++) {
@@ -423,7 +441,7 @@ export function testActiveEdge(d: AcceptData): AcceptRow {
 }
 
 export function testDirectiveGap(d: AcceptData): AcceptRow {
-  const idle = series(d, 'generalist-idle'), act = series(d, 'generalist-active'), dir = series(d, 'generalist-directive');
+  const idle = edgeSeries(d, 'generalist-idle'), act = edgeSeries(d, 'generalist-active'), dir = edgeSeries(d, 'generalist-directive');
   let ai = 0, aa = 0, ad = 0;
   for (let i = 0; i < Math.min(idle.length, act.length, dir.length); i++) {
     const c = commonCp([idle[i], act[i], dir[i]]);
@@ -432,7 +450,7 @@ export function testDirectiveGap(d: AcceptData): AcceptRow {
   const gap = ai - aa;
   const closed = gap > 0 ? (ai - ad) / gap : NaN;
   return { name: 'Directive gap', pass: inRange(closed, 0.4, 0.7), value: gap > 0 ? `closes ${pct(closed)}` : `no idle→active gap (idle ${ai}, active ${aa}, directive ${ad})`,
-    target: 'Directive policy closes 40–70% of the idle→active gap', notes: `attempts idle ${ai}, directive ${ad}, active ${aa}; directive casts ${dir.reduce((s, r) => s + r.casts, 0)}` };
+    target: 'Directive policy closes 40–70% of the idle→active gap', notes: `${idle.length} seeds; attempts idle ${ai}, directive ${ad}, active ${aa}; directive casts ${dir.reduce((s, r) => s + r.casts, 0)}` };
 }
 
 export function testFormationFairness(d: AcceptData): AcceptRow {
