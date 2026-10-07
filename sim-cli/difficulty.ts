@@ -55,7 +55,12 @@ export interface DifficultyResult {
 }
 export interface DiffOptions { bands: number[]; archetypes: Archetype[]; seedsPerCell: number; maxWaveSeconds: number; templates?: FormationId[] }
 
-export const FULL_DIFF: DiffOptions = { bands: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], archetypes: [...ARCHETYPES], seedsPerCell: 2, maxWaveSeconds: 150 };
+/**
+ * Full grid. 10 waves per (template, archetype, band) cell: with 2, single-wave noise alone pushed 3 of 52
+ * template-bands past the 1.5× fairness line (worst ×1.68); with 6 and 10 the same builds show none
+ * (worst ×1.48 and ×1.36). See docs/BALANCE.md "Spend efficiency and formation fairness".
+ */
+export const FULL_DIFF: DiffOptions = { bands: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], archetypes: [...ARCHETYPES], seedsPerCell: 10, maxWaveSeconds: 150 };
 export const QUICK_DIFF: DiffOptions = { bands: [0, 2], archetypes: ['ballistics', 'fire', 'ordnance'], seedsPerCell: 1, maxWaveSeconds: 90 };
 
 export function probeWave(band: number): number { return 10 * band + 7; }

@@ -39,7 +39,10 @@
  *    wave by more than 10%. The notes add the noise floor: the mean raise of boons whose `needs` the Generalist
  *    never meets (they do nothing for it, so that raise is chaos at the walls). Quick mode forces QUICK_BOONS.
  *  - Spend efficiency: judged on damage trees only (Bastion, Reactor, ability ranks buy survival /
- *    utility, not damage share); over every idle agent run.
+ *    utility, not damage share); over every idle agent run. Damage share is by srcTag, with Fusion damage split
+ *    over its elements (metrics.damageBySpendTree). Full mode confirms each flagged system with the spend
+ *    counterfactual (counterfactual.ts): it stays an offender only if removing its ranks also costs < 10% of the
+ *    build's summed contribution (Caliber scales other systems' damage, hardpoints carry element procs).
  */
 import type { AnomalyId, BoonId, DoctrineId, TreeId } from '../src/sim/core/ids';
 import { allTrees } from '../src/sim/core/content';
@@ -135,7 +138,14 @@ export function plan(mode: Mode, seeds: number[], hours: number): Plan[] {
   // Difficulty phase 1: archetype climbs (phase 2 — one job per archetype × band — runs after)
   const dopts = quick ? QUICK_DIFF : FULL_DIFF;
   for (const a of dopts.archetypes) out.push({ key: `diffclimb-${a}`, job: { kind: 'diffclimb', archetype: a, bands: dopts.bands } });
+  // Spend efficiency (full mode): the judged runs also measure the counterfactual contribution of each damage tree
+  if (!quick) for (const x of out) if (x.job.kind === 'attempt' && isSpendRun(x.key, s0)) x.job.cfg.spendProbe = true;
   return out;
+}
+
+/** The runs the Spend efficiency row judges: every idle agent climb on the first seed (no Anomaly / Doctrine probes). */
+function isSpendRun(key: string, s0: number): boolean {
+  return key.endsWith(`-idle-s${s0}`) && !key.startsWith('anomaly-') && !key.startsWith('doctrine-');
 }
 
 export async function gather(opts: AcceptOptions): Promise<AcceptData> {
@@ -365,18 +375,27 @@ export function testDoctrineHealth(d: AcceptData): AcceptRow {
 
 export function testSpendEfficiency(d: AcceptData): AcceptRow {
   const s0 = d.seeds[0];
-  const offenders: string[] = [];
+  const offenders: string[] = [], cleared: string[] = [];
   let n = 0;
   for (const [k, r] of Object.entries(d.runs)) {
-    if (!k.endsWith(`-idle-s${s0}`) || k.startsWith('anomaly-') || k.startsWith('doctrine-')) continue;
+    if (!isSpendRun(k, s0)) continue;
     n++;
+    const cf = r.spendContribution;
+    let cfTotal = 0;
+    if (cf) for (const v of Object.values(cf)) cfTotal += Math.max(0, v);
     for (const x of spendVsEffect(r)) {
       if (NON_DAMAGE_TREES.has(x.system)) continue;
-      if (x.spendShare >= 0.2 && x.damageShare < 0.1) offenders.push(`${r.agent}: ${x.system} spend ${pct(x.spendShare)} dmg ${pct(x.damageShare)}`);
+      if (!(x.spendShare >= 0.2 && x.damageShare < 0.1)) continue;
+      const msg = `${r.agent}: ${x.system} spend ${pct(x.spendShare)} dmg ${pct(x.damageShare)}`;
+      // Confirmed by the counterfactual (counterfactual.ts) when its ranks also give < 10% of the build's summed contribution
+      const share = cf && cfTotal > 0 ? Math.max(0, cf[x.system] ?? 0) / cfTotal : NaN;
+      if (Number.isFinite(share) && share >= 0.1) cleared.push(`${msg}, but its ranks give ${pct(share)} of the counterfactual`);
+      else offenders.push(`${msg}${Number.isFinite(share) ? `, counterfactual ${pct(share)}` : ''}`);
     }
   }
-  return { name: 'Spend efficiency', pass: offenders.length === 0, value: `${offenders.length} offenders in ${n} runs`, target: 'no system with ≥ 20% of spend gives < 10% of damage',
-    notes: offenders.slice(0, 12).join('; ') || 'none' };
+  return { name: 'Spend efficiency', pass: offenders.length === 0, value: `${offenders.length} offenders in ${n} runs`,
+    target: 'no system with ≥ 20% of spend gives < 10% of damage (by share, confirmed by the counterfactual in full mode)',
+    notes: `${offenders.slice(0, 12).join('; ') || 'none'}${cleared.length ? `; cleared by the counterfactual: ${cleared.join('; ')}` : ''}` };
 }
 
 export function testDefense(d: AcceptData): AcceptRow {
