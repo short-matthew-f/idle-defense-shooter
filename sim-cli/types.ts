@@ -58,6 +58,8 @@ export interface RunConfig {
   mode?: 'push' | 'patrol';
   /** Record per-wave event hashes (default true). */
   hashes?: boolean;
+  /** After the climb, measure each damage tree's counterfactual contribution (sim-cli/counterfactual.ts; Spend efficiency). */
+  spendProbe?: boolean;
   /**
    * Active policy: use the active-edge pieces (tap-to-assist, salvage, Overcharge; default true). false = the pre-active-edge
    * policy; a list (e.g. ['assist']) uses only those pieces (measuring each one's share of the edge).
@@ -130,6 +132,8 @@ export interface RunResult {
   waves: WaveRecord[];
   checkpoints: CheckpointRecord[];
   spendByTree: Record<string, number>;
+  /** With cfg.spendProbe: per damage tree, 1 − t_full / t_without its ranks at the deepest wave (counterfactual.ts). */
+  spendContribution?: Record<string, number>;
   damageBySrc: Record<string, number>;
   towerDamage: number;
   scrapEarned: number;

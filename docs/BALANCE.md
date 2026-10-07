@@ -410,3 +410,40 @@ predate the onboarding goals. The owner decided:
 - **Reclimb:** no published industry figure exists; familiar idle games land around a third to a half of the previous
   run early on, falling as speed-up upgrades stack. Target: 25–50 % of the previous run's time, not rising from one
   Prestige to the next (+5 points of noise), and never more than 20 min of play (medians over seeds).
+
+## Spend efficiency and formation fairness (2026-10-07)
+
+The two rows that still failed after the balance round (simulator, full `npm run sim:accept`, seeds 1–3, master 7336b12).
+
+**Formation fairness: measurement noise (harness fix).** Each template × archetype × band cell was measured on 2
+waves. Re-measured on the same archetype builds with 6 and 10 waves per cell, no template-band is unfair (worst ×1.48
+and ×1.36, both kamikaze_ring band 1 laser); synchronized_burst b2 gravitics fell from ×1.68 to ×1.32–1.39.
+`sim-cli/difficulty.ts FULL_DIFF.seedsPerCell` 2 → 10. Before 3/52 unfair, worst ×1.681; after 0/52, worst ×1.362.
+
+**Spend efficiency: two attribution artifacts and one real weakness.**
+- *Fusion damage* was credited to the `fusion` spend key (one cheap rank) although it is made of the elements'
+  stacks: Toxic Combustion detonates the Poison it consumes. The spend comparison now splits Fusion / Triad damage
+  evenly over the Fusion's elements (`metrics.damageBySpendTree`; the per-system damage report is unchanged).
+  Elemental poison: 1.8% → 7.5% of damage.
+- *Scaling and carrier trees.* Caliber (ballistics.damage) scales Poison, Burn, Fusions and abilities; hardpoint
+  hits apply the attuned elements, whose damage is credited to the element. A share alone cannot judge them. Full
+  mode now confirms each flagged system with a counterfactual (`sim-cli/counterfactual.ts`): from the end-of-run save,
+  6 waves at the deepest cleared wave (enemy HP ×4 so the fight is damage-limited) are fought with the full build and
+  without that system's Scrap-bought ranks; contribution = 1 − t_full / t_without. A flagged system stays an offender
+  when its ranks give < 10% of the build's summed contribution. Random ballistics: 18.5% (cleared); Optimizer
+  ordnance: 58%, its most valuable tree (cleared); Elemental poison: 2.4% (confirmed).
+- *Poison under Toxic Combustion is a real weakness.* With Toxic Combustion off, Poison gives 12.1% of the
+  Elemental agent's damage; with it, 7.5%. Burn applied to 5+ stacks consumes them for ×0.5 of their remaining damage
+  at rank 1, so the Fusion destroys half the Poison it touches. **Proposed (owner approval needed):**
+  `data/base-stats.ts 'fusion.toxic_combustion'` 0.25 → 1.75 (rank 1 ×0.5 → ×2.0, +0.25 per rank; the 15% max-HP cap
+  per target is unchanged, so bosses still take at most 15% per explosion). Elemental poison 7.5% → 12.2%; depth 29 in
+  every variant tried (×1.0: 9.5%, ×1.5: 10.1%, ×2.0: 12.2%).
+
+| Row | Before | Harness fixes | + tuning |
+| --- | --- | --- | --- |
+| Spend efficiency | FAIL, 3 offenders | FAIL, 1 (elemental poison) | PASS, 0 |
+| Formation fairness | FAIL, 3/52, worst ×1.681 | PASS, 0/52, worst ×1.362 | PASS |
+| Every other row | — | identical to before | identical to before (Determinism 143e1846) |
+
+Directive gap (closes 75%, target 40–70%) still fails; it was not part of this pass. Full `sim:accept` wall time
+438 s → ~720 s (the counterfactual and the larger difficulty grid).

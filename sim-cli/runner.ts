@@ -32,12 +32,15 @@ import { makeAgent } from './agents/index';
 import { makeCtx, totalSpent, type Agent, type AgentCtx } from './agents/base';
 import { makePolicy, type Policy } from './policies';
 import type { CheckpointRecord, EchoSample, OfflineResult, PrestigeChainResult, RunConfig, RunResult, WaveRecord } from './types';
+import { spendContribution } from './counterfactual';
+import { NON_DAMAGE_TREES } from './metrics';
 
 export const DEFAULTS = { maxSimSeconds: 4 * 3600, wallMinutes: 40 } as const;
 
 interface Acc { dmg: Map<string, number>; tower: number }
 
 /** Wrap WorldImpl.recordShare / damageTower on this instance (observation only). */
+
 export function instrument(w: WorldImpl): Acc {
   const acc: Acc = { dmg: new Map(), tower: 0 };
   const anyW = w as unknown as Record<string, unknown> & { __wp10?: Acc };
@@ -343,7 +346,13 @@ export class Climber {
 
 /** One Prestige climb from a fresh game (or `cfg.prestigeMeta`). */
 export function runAttempt(cfg: RunConfig): RunResult {
-  return new Climber(newSim(cfg), cfg).run();
+  const sim = newSim(cfg);
+  const r = new Climber(sim, cfg).run();
+  if (cfg.spendProbe) {
+    const systems = Object.keys(r.spendByTree).filter((k) => !NON_DAMAGE_TREES.has(k) && r.spendByTree[k] > 0);
+    r.spendContribution = spendContribution(sim.save(), r.deepestCleared, systems);
+  }
+  return r;
 }
 
 // ---------------------------------------------------------------------------

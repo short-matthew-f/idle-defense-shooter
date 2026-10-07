@@ -4,6 +4,7 @@
  * recommendation, Counter success, depth-at-time.
  */
 import type { RunResult } from './types';
+import { FUSIONS, TRIADS } from '../src/sim/data/fusions';
 
 export function median(v: number[]): number {
   if (v.length === 0) return NaN;
@@ -61,10 +62,30 @@ export function damageByLinkage(r: RunResult): Record<string, number> {
   return out;
 }
 
+const FUSION_ELEMENTS: Record<string, readonly string[]> = Object.fromEntries([...FUSIONS, ...TRIADS].map((f) => [f.id, f.elements]));
+
+/**
+ * Damage share per tree for the spend comparison. Like damageBySystem, except that Fusion / Triad damage is
+ * split evenly over the Fusion's elements: a Fusion node is one cheap rank (the 'fusion' spend key), while
+ * its damage is made of the elements' stacks (Toxic Combustion detonates the Poison it consumes, Plasma
+ * and Thermal Shock scale with the element hits). Crediting all of it to 'fusion' showed Poison at 1.8%
+ * of the Elemental agent's damage although its stacks fed the 11% Toxic Combustion explosions.
+ */
+export function damageBySpendTree(r: RunResult): Record<string, number> {
+  const m: Record<string, number> = {};
+  for (const k in r.damageBySrc) {
+    const v = r.damageBySrc[k];
+    const els = tagSystem(k) === 'fusion' ? FUSION_ELEMENTS[k.slice(k.indexOf('.') + 1)] : undefined;
+    if (els && els.length) for (const e of els) m[e] = (m[e] ?? 0) + v / els.length;
+    else { const s = tagSystem(k); m[s] = (m[s] ?? 0) + v; }
+  }
+  return shares(m);
+}
+
 export interface SpendRow { system: string; spendShare: number; damageShare: number }
 /** Spend share vs damage share per tree (Bastion/Reactor/abilities are non-damage trees: reported, not judged). */
 export function spendVsEffect(r: RunResult): SpendRow[] {
-  const sp = shares(r.spendByTree), dm = damageBySystem(r);
+  const sp = shares(r.spendByTree), dm = damageBySpendTree(r);
   const keys = new Set([...Object.keys(sp), ...Object.keys(dm)]);
   return [...keys].map((system) => ({ system, spendShare: sp[system] ?? 0, damageShare: dm[system] ?? 0 }))
     .sort((a, b) => b.spendShare - a.spendShare);
