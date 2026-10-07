@@ -32,3 +32,11 @@ body .pshop .coach-banner.ps-guide:not([hidden]) { display: flex; }
 /* UX Phase 2: the Forecast verdict on the first-Prestige modal */
 .cer-verdict { display: flex; gap: 6px; align-items: center; margin: 4px 0 0; font-size: 0.875rem; color: var(--text-dim); }
 .cer-verdict.rec { color: var(--ok); }
+
+/* UX Phase 4: the first-Prestige rebuild beat (ceremony.ts playRebuildBeat). A transparent full-screen tap target over
+   Battle (any tap skips); the label sits below the tower, clear of the HUD and the bottom controls. */
+.rebuild-skip { position: fixed; inset: 0; z-index: 90; margin: 0; padding: 0; border: 0; background: transparent; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; }
+.rebuild-skip-label { margin-top: min(52vh, 420px); padding: 8px 14px; border-radius: 999px;
+  font-size: 0.875rem; color: var(--text, #fff); background: color-mix(in srgb, var(--bg-1, #000) 78%, transparent); border: 1px solid var(--line, #333); }
+.rebuild-skip:focus-visible .rebuild-skip-label { outline: 2px solid var(--accent, #fff); outline-offset: 2px; }

@@ -72,3 +72,14 @@ describe('splitDesc (the headline effect a row shows before it is unfolded)', ()
     expect(splitDesc('Hardpoint cooldowns (reloads, pulses) and ability cooldowns −1% per rank.').headline).toBe('Hardpoint cooldowns (reloads, pulses) and ability cooldowns −1% per rank');
   });
 });
+
+import { fmtAmount } from '../../src/ui/format';
+describe('fmtAmount (B-18: amounts read like the pinned wallet)', () => {
+  it('is exact below a million, compact above', () => {
+    expect(fmtAmount(5000)).toBe('5,000');
+    expect(fmtAmount(9600)).toBe('9,600');
+    expect(fmtAmount(999999.9)).toBe('999,999');
+    expect(fmtAmount(1.5e6)).toBe('1.5M');
+    expect(fmtAmount(0)).toBe('0');
+  });
+});

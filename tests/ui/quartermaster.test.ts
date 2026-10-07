@@ -25,7 +25,7 @@ describe('Quartermaster card (pure parts)', () => {
     expect(qmSummary({ on: false, boughtThisRun: 0, scrapSpentThisRun: 0 })).toMatch(/Off/);
     expect(qmSummary({ on: true, boughtThisRun: 0, scrapSpentThisRun: 0 })).toMatch(/Nothing bought yet/);
     expect(qmSummary({ on: true, boughtThisRun: 1, scrapSpentThisRun: 950 })).toBe('Bought 1 rank this run · 950 Scrap');
-    expect(qmSummary({ on: true, boughtThisRun: 12, scrapSpentThisRun: 3456 })).toBe('Bought 12 ranks this run · 3.4K Scrap');
+    expect(qmSummary({ on: true, boughtThisRun: 12, scrapSpentThisRun: 3456 })).toBe('Bought 12 ranks this run · 3,456 Scrap');
   });
   it('the HUD bank chip shows only while it is unlocked, on and holding Scrap', () => {
     expect(qmBankChip(ui({ bank: 3456 }))).toBe('3.4K');

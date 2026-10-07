@@ -13,7 +13,7 @@ import type { QuartermasterUi, UiState } from '@sim/core/types';
 import { attr, button, clear, h, show, text } from './dom';
 import { icon } from './icons';
 import { TREE_LABEL } from './content';
-import { fmtNum, fmtRate } from './format';
+import { fmtAmount, fmtRate } from './format';
 import { RateMeter } from './hud';
 import type { UiCtx } from './ctx';
 
@@ -27,7 +27,7 @@ export const QM_BUYS_WHEN = 'Buys when it can afford the cheapest enabled stat';
 /** One-line status under the switches ("Bought 12 ranks this run · 3.4K Scrap"). Pure (tests). */
 export function qmSummary(q: Pick<QuartermasterUi, 'on' | 'boughtThisRun' | 'scrapSpentThisRun'>): string {
   if (q.boughtThisRun <= 0) return q.on ? 'Nothing bought yet this run.' : 'Off. Switch it on to let it buy.';
-  return `Bought ${q.boughtThisRun} rank${q.boughtThisRun === 1 ? '' : 's'} this run · ${fmtNum(q.scrapSpentThisRun)} Scrap`;
+  return `Bought ${q.boughtThisRun} rank${q.boughtThisRun === 1 ? '' : 's'} this run · ${fmtAmount(q.scrapSpentThisRun)} Scrap`;
 }
 
 /** Label for the share control ("Quartermaster takes 50% of new Scrap"). Pure (tests). */
@@ -88,11 +88,11 @@ export class QuartermasterPanel {
     if (this.master.checked !== q.on) this.master.checked = q.on;
     this.el.classList.toggle('off', !q.on);
     this.el.classList.toggle('idle', q.on && q.idle);
-    text(this.bankVal, fmtNum(q.bank));
+    text(this.bankVal, fmtAmount(q.bank));
     const rate = this.rate.push(ui.run.playSeconds, q.bank);
     text(this.bankRate, q.on && !q.idle && rate > 0 ? fmtRate(rate) : '');
     text(this.bankNote, !q.on ? 'Off: all your income is yours.' : q.idle ? QM_IDLE : QM_BUYS_WHEN);
-    attr(this.bank, 'aria-label', `Quartermaster bank: ${fmtNum(q.bank)} Scrap`);
+    attr(this.bank, 'aria-label', `Quartermaster bank: ${fmtAmount(q.bank)} Scrap`);
     QM_SHARE_CHOICES.forEach((r, i) => {
       const b = this.segBtns[i];
       b.classList.toggle('active', r === q.share);

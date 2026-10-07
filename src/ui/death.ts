@@ -114,7 +114,7 @@ export class DeathCard {
     this.bossId = ui.wave.isBoss ? ui.wave.bossId : null;
     // the sim names the killer; older events without a payload fall back to the wave's boss
     const boss = this.bossId ? BOSS_BY_ID.get(this.bossId as never)?.name ?? null : null;
-    const hd = deathHeadline(wave, ui.run.checkpoint, killerName(data) ?? boss);
+    const hd = deathHeadline(wave, ui.run.checkpoint, killerName(data, boss) ?? boss);
     text(this.title, hd.title);
     text(this.sub, hd.sub);
     this.showCause(ui);
@@ -154,7 +154,7 @@ export class DeathCard {
     this.stall.hidden = !this.stalled;
     text(this.stall, `The ${this.stallName} wasn't taking damage. Buy Damage${f.abilities ? ', or slot its Counter ability' : ''}.`);
     // …and only cross-system buys whose parts this Prestige offers (progression.ts content pool)
-    const pool = contentPool(ui, { unlockAll: f.unlockAll });
+    const pool = contentPool(ui, { content: f.allContent });
     const offered = poolShop(ui.shop, pool);
     const canAttune = f.elements && pool.elements.some((e) => !ui.build.attunements.includes(e));
     const canMount = f.hardpoints && pool.hardpoints.some((x) => !ui.build.hardpoints.includes(x) && !ui.mountBlocked?.[x]);

@@ -306,3 +306,27 @@ describe('doctrines rung', () => {
     expect(VERB_COACH.has('doctrines')).toBe(true);
   });
 });
+
+describe('B-13: screens and content are separate switches', () => {
+  it('screens alone: every feature, but the content pool stays on the Prestige ladder', () => {
+    const s = state(0);
+    const f = features(s, { screens: true });
+    expect(on(f)).toEqual([...FEATURE_IDS]);
+    expect(f.unlockAll).toBe(true);
+    expect(f.allContent).toBe(false);
+    expect(contentPool(s, { screens: true }).elements.length).toBeLessThan(ELEMENTS.length);
+  });
+  it('content alone: the whole pool, but the tabs and controls still follow progress', () => {
+    const s = state(0);
+    const f = features(s, { content: true });
+    expect(f.unlockAll).toBe(false);
+    expect(f.allContent).toBe(true);
+    expect(on(f)).not.toEqual([...FEATURE_IDS]);
+    expect(contentPool(s, { content: true })).toEqual({ elements: [...ELEMENTS], hardpoints: [...HARDPOINTS] });
+  });
+  it('the legacy unlockAll opt (and ?showall=1) means both', () => {
+    const f = features(state(0), { unlockAll: true });
+    expect(f.unlockAll && f.allContent).toBe(true);
+    expect(features(state(0)).allContent).toBe(false);
+  });
+});

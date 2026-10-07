@@ -8,8 +8,7 @@ import '../styles/feed.css';
 import { Ev, type SimEvent, type UiState } from '@sim/core/types';
 import { button, h } from './dom';
 import { icon } from './icons';
-import { titleCase } from './format';
-import { boonName } from './boons';
+import { codexEntryName } from './codex';
 import { BOSS_BY_ID } from './content';
 import type { ToastKind } from './ctx';
 import type { Features } from './progression';
@@ -34,6 +33,11 @@ export const SUMMARY_SHOW_MS = 5000;
 export const CORE_EXPLAIN_DELAY_MS = 2200;
 export const CORE_EXPLAINER = 'Cores: rare. Spend them on rerolls and refits later.';
 
+/** The Codex discovery toast: names the entry ("Codex: 3-link chain"); null while the Codex is not yet revealed (progression.ts). */
+export function codexToastText(src: string, revealed: boolean): string | null {
+  return revealed ? `Codex: ${codexEntryName(src)}` : null;
+}
+
 /** The summary line from its parts in arrival order (duplicates dropped). */
 export function summaryText(parts: readonly string[]): string {
   return [...new Set(parts)].join(' · ');
@@ -47,6 +51,8 @@ export class Feed {
   onChange: (() => void) | null = null;
   private items: Item[] = [];
   private limit = FEED_MAX_SHOWN;
+  /** The Codex is revealed (progression.ts): discovery toasts stay silent until then (the entry is still recorded). */
+  private codexOn = true;
   private lastDraft = '';
   private lastRec = false;
   private lastGate = false;
@@ -184,7 +190,7 @@ export class Feed {
       if (e.type === Ev.Checkpoint) beat.push(`Checkpoint: wave ${e.a}`);
       else if (e.type === Ev.CoreDrop) cores += e.a || 1;
       else if (e.type === Ev.CounterScored) this.toast('Counter! Weak point open', 'good');
-      else if (e.type === Ev.Codex) this.toast(`Codex: ${e.src.startsWith('boon.') ? `${boonName(e.src)} (boon)` : titleCase(e.src)}`, 'codex');
+      else if (e.type === Ev.Codex) { const t = codexToastText(e.src, this.codexOn); if (t) this.toast(t, 'codex'); }
       else if (e.type === Ev.BossKilled) { beat.unshift('Boss destroyed'); this.bossClearAt = performance.now(); }
       else if (e.type === Ev.Prestige) this.toast('Prestige complete: a new machine begins', 'good');
       else if (e.type === Ev.Ascend) this.toast('Ascension complete', 'good');
@@ -221,7 +227,8 @@ export class Feed {
   }
 
   /** State edges: draft ready, Prestige recommended. Slot toasts wait for their category to be revealed (progression.ts). */
-  update(ui: UiState, f?: Pick<Features, 'elements' | 'hardpoints'>): void {
+  update(ui: UiState, f?: Pick<Features, 'elements' | 'hardpoints' | 'codex'>): void {
+    if (f) this.codexOn = f.codex;
     if (ui.wave.bossId) this.bossName = (BOSS_BY_ID.get(ui.wave.bossId)?.name ?? 'boss').replace(/^The /, '');
     const d = ui.run.pendingDraft ? ui.run.pendingDraft.join(',') : '';
     // at a boss clear the draft presents itself after the beat (attention.ts): no separate toast then

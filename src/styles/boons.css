@@ -52,6 +52,9 @@
 .btn.ctl.bo-change::after { inset: -7px -4px; }
 .bo-rep-inline { color: var(--warn); }
 .bo-desc .btn.ctl.bo-change { display: inline-flex; vertical-align: middle; margin-left: 6px; }
+/* B-15: three cards across a 375 px phone leave ~97 px of text: the longest effect lines ("Cooldowns −15%, damage taken +20%") need a 4th line, not an ellipsis */
+@media (max-width: 420px) { .bo-short { -webkit-line-clamp: 4; } }
+@media (max-width: 339px) { .bo-short { -webkit-line-clamp: 6; } }   /* ~80 px columns: a long effect line takes five */
 /* short phones (iPhone SE, 360×740): a tighter card so it stays near a third of the arena */
 @media (max-height: 800px) {
   .bo-card { padding: 3px 6px 4px; gap: 1px; border-top-width: 2px; }
@@ -88,6 +91,11 @@ body.shell-rail .boon-offer:not(.narrow) .bo-foot { position: static; background
   .bo-heading { flex: 1 1 100%; flex-direction: row; flex-wrap: wrap; gap: 0 8px; padding-left: 4px; }
   .bo-title { white-space: normal; }
   .btn.bo-take, .btn.bo-reroll, .btn.bo-decline { min-width: 0; }
+  /* B-15: at 320 px "Take" was squeezed to 43 px and clipped by Reroll's word: Reroll keeps its icon + price (its aria-label has the words) */
+  .bo-lbl { display: none; }
+  .bo-ico-alt { display: inline-block; }
+  .btn.bo-reroll, .btn.bo-decline { padding: 0 8px; }
+  .btn.bo-take { flex: 1 1 72px; }
 }
 
 /* the overlay lanes (lanes.ts) keep the banners, toasts and the death card clear of the open card */

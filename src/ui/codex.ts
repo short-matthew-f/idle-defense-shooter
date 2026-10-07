@@ -12,7 +12,7 @@ import type { UiState } from '@sim/core/types';
 import { h, text, clear } from './dom';
 import { icon } from './icons';
 import { ANOMALIES, BOONS, BOSSES, CHASSIS_LINKAGES, FUSIONS, INFUSIONS, TRIADS, WEAPON_LINKAGES } from './content';
-import { titleCase } from './format';
+import { plainDesc, titleCase } from './format';
 
 export interface CodexEntry { id: string; name: string; desc: string; alt?: string[] }
 export interface CodexGroup { name: string; entries: CodexEntry[] }
@@ -21,17 +21,31 @@ export const CODEX_BONUS_PER_ENTRY = 0.0025;
 
 export function codexGroups(): CodexGroup[] {
   return [
-    { name: 'Fusions', entries: FUSIONS.map((f) => ({ id: `fusion.${f.id}`, name: f.name, desc: f.desc })) },
-    { name: 'Triads', entries: TRIADS.map((f) => ({ id: `triad.${f.id}`, name: f.name, desc: f.desc })) },
-    { name: 'Linkages', entries: [...WEAPON_LINKAGES, ...CHASSIS_LINKAGES].map((l) => ({ id: l.id, name: l.name, desc: l.desc })) },
-    { name: 'Infusions', entries: INFUSIONS.map((i) => ({ id: i.id, name: i.name, desc: i.desc })) },
-    { name: 'Anomalies', entries: ANOMALIES.map((a) => ({ id: `anomaly.${a.id}`, name: a.name, desc: a.desc, alt: [a.id] })) },
+    { name: 'Fusions', entries: FUSIONS.map((f) => ({ id: `fusion.${f.id}`, name: f.name, desc: plainDesc(f.desc) })) },
+    { name: 'Triads', entries: TRIADS.map((f) => ({ id: `triad.${f.id}`, name: f.name, desc: plainDesc(f.desc) })) },
+    { name: 'Linkages', entries: [...WEAPON_LINKAGES, ...CHASSIS_LINKAGES].map((l) => ({ id: l.id, name: l.name, desc: plainDesc(l.desc) })) },
+    // the full node text (what the Upgrades row says, with its numbers), not the sim's one-to-four-word tag line
+    { name: 'Infusions', entries: INFUSIONS.map((i) => ({ id: i.id, name: i.name, desc: plainDesc(i.node.desc || i.desc) })) },
+    { name: 'Anomalies', entries: ANOMALIES.map((a) => ({ id: `anomaly.${a.id}`, name: a.name, desc: plainDesc(a.desc), alt: [a.id] })) },
     // the sim records a boss Counter under its Ev.BossCounter src: `counter.boss.<id>`
-    { name: 'Counters', entries: BOSSES.map((b) => ({ id: `counter.${b.id}`, name: `Countered ${b.name}`, desc: b.tell.desc, alt: [`counter.boss.${b.id}`] })) },
-    { name: 'Chains', entries: [3, 5, 8, 12].map((n) => ({ id: `chain.${n}`, name: `Chain of ${n}`, desc: `A kill chain ${n} links long.` })) },
+    { name: 'Counters', entries: BOSSES.map((b) => ({ id: `counter.${b.id}`, name: `Countered ${b.name.replace(/^The /, 'the ')}`, desc: plainDesc(b.tell.desc), alt: [`counter.boss.${b.id}`] })) },
+    { name: 'Chains', entries: [3, 5, 8, 12].map((n) => ({ id: `chain.${n}`, name: `${n}-link chain`, desc: `A single kill caused by ${n} different effects in a row.` })) },
     // Boons: the first pick of each boon (or its first firing) records `boon.<id>`
-    { name: 'Boons', entries: BOONS.map((b) => ({ id: `boon.${b.id}`, name: b.name, desc: b.desc })) },
+    { name: 'Boons', entries: BOONS.map((b) => ({ id: `boon.${b.id}`, name: b.name, desc: plainDesc(b.desc) })) },
   ];
+}
+
+let nameIndex: Map<string, string> | null = null;
+/** The display name of a Codex entry id for the discovery toast ("3-link chain", "Broodheart's counter"); a readable fallback for unknown ids. */
+export function codexEntryName(id: string): string {
+  if (!nameIndex) {
+    nameIndex = new Map();
+    for (const g of codexGroups()) for (const e of g.entries) { nameIndex.set(e.id, e.name); for (const a of e.alt ?? []) nameIndex.set(a, e.name); }
+  }
+  const hit = nameIndex.get(id);
+  if (hit) return hit;
+  if (id.startsWith('trial.')) return `${titleCase(id.slice(6))} trial`;
+  return titleCase(id.replace(/^[a-z]+\./, ''));
 }
 
 export class CodexPanel {

@@ -24,7 +24,7 @@ import { Ev, type ShopEntry, type SimEvent, type UiState } from '@sim/core/types
 import { button, h, holdRepeat, text, disable, show, attr } from './dom';
 import { buyLabel, buyLabelText, bulkToast, nextQty, parseQty, qtyLabel, rowBuy, type BuyLabel, type BuyQty } from './bulk';
 import { icon } from './icons';
-import { fmtNum, fmtStatChange, splitDesc, substituteDesc, titleCase } from './format';
+import { fmtAmount, fmtStatChange, splitDesc, substituteDesc, titleCase } from './format';
 import { CHASSIS, ELEMENTS, ELEMENT_BLURB, HARDPOINTS, HARDPOINT_BLURB, NODE_BY_ID, TREE_BY_ID, TREE_LABEL } from './content';
 import { confirmDialog, openModal, type ModalHandle } from './modal';
 import { CrumbMenu, crumbButton, crumbGap, crumbLine, crumbSep, paintCrumb, slideIn, stepStop, wireSwipe, type Crumb, type NavStop } from './crumbs';
@@ -112,7 +112,7 @@ function paintBuy(countEl: HTMLElement, price: HTMLElement, l: BuyLabel, currenc
   text(countEl, l.count ?? '');
   show(countEl, !!l.count);
   const key = `${currency}|${l.price}`;
-  if (price.dataset.v !== key) { price.dataset.v = key; price.replaceChildren(icon(currency === 'cores' ? 'cores' : 'scrap', 'ico tiny'), fmtNum(l.price)); }
+  if (price.dataset.v !== key) { price.dataset.v = key; price.replaceChildren(icon(currency === 'cores' ? 'cores' : 'scrap', 'ico tiny'), fmtAmount(l.price)); }
   price.className = `price ${currency}`;
 }
 
@@ -209,8 +209,8 @@ class NodeRow {
     else paintBuy(this.bcount, this.price, l, e.currency);
     disable(this.btn, maxed || !!e.locked || l.disabled);
     const what = l.count ? `${l.count.replace('×', '')} ranks of ${e.name}` : e.name;
-    attr(this.btn, 'aria-label', maxed ? `${e.name}: max rank` : `Buy ${what} for ${fmtNum(l.price)} ${cur}${e.locked ? ` (locked: ${e.locked})` : l.disabled ? ' (not enough)' : ''}`);
-    this.btn.title = e.locked ?? (l.disabled ? `Need ${fmtNum(l.price)} ${cur}` : q === 1 ? 'Hold to buy repeatedly' : `Buy ${buyLabelText(l)} ${cur}`);
+    attr(this.btn, 'aria-label', maxed ? `${e.name}: max rank` : `Buy ${what} for ${fmtAmount(l.price)} ${cur}${e.locked ? ` (locked: ${e.locked})` : l.disabled ? ' (not enough)' : ''}`);
+    this.btn.title = e.locked ?? (l.disabled ? `Need ${fmtAmount(l.price)} ${cur}` : q === 1 ? 'Hold to buy repeatedly' : `Buy ${buyLabelText(l)} ${cur}`);
   }
 }
 
@@ -397,8 +397,8 @@ export class Shop {
     this.qm.update(this.ui);
   }
 
-  /** What this Prestige offers (progression.ts content pool; Unlock everything offers all). */
-  private pool(ui: UiState): ContentPool { return contentPool(ui, { unlockAll: this.f.unlockAll }); }
+  /** What this Prestige offers (progression.ts content pool; "Offer all content" offers all). */
+  private pool(ui: UiState): ContentPool { return contentPool(ui, { content: this.f.allContent }); }
   /** The sim's shop without cross-system entries whose parts the pool does not offer yet. */
   private pooled(ui: UiState): ShopEntry[] { return poolShop(ui.shop, this.pool(ui)); }
 
@@ -968,11 +968,11 @@ export class Shop {
     const wrap = h('div', { class: 'slot-picker', data: { hint: 'slot-picker' } },
       h('p', { class: 'note', text: isEl ? 'Attunements lock for the rest of this Prestige.' : 'Mounts lock for this Prestige (a Refit costs 3 Cores). At most four systems ever: one always sits out.' }));
     // "New" until first seen here: a system the latest Prestige added to the pool (listed first)
-    const fresh = new Set(this.f.unlockAll ? [] : newInPool(this.pool(ui), new Set(prefs().contentSeen)));
+    const fresh = new Set(this.f.allContent ? [] : newInPool(this.pool(ui), new Set(prefs().contentSeen)));
     const offered = this.pickList(ui, isEl);   // what this Prestige offers (progression.ts content pool)
     const list = [...offered.filter((id) => fresh.has(id)), ...offered.filter((id) => !fresh.has(id))];
     if (!list.length) {
-      const later = !this.f.unlockAll && (ui.meta.prestigeCount | 0) < POOL_COMPLETE_AT;
+      const later = !this.f.allContent && (ui.meta.prestigeCount | 0) < POOL_COMPLETE_AT;
       wrap.appendChild(h('p', { class: 'note', text: later ? `Nothing else to ${isEl ? 'attune' : 'mount'} yet: new ${isEl ? 'elements' : 'weapon systems'} join with later Prestiges.` : `Every ${isEl ? 'element' : 'weapon system'} is already in use.` }));
     }
     const seenNow = list.filter((id) => fresh.has(id));

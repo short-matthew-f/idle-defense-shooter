@@ -6,6 +6,12 @@
 // silhouette rim (55–85 % of the radius) and the ring just outside it (outline + knockout zone), skipping points
 // that fall on other enemies. "Over effects" = enemies whose wider surroundings are lit by player effects.
 // Pass: median ≥ 1.6, ≥ 30 % of enemies ≥ 2:1, and median over effects ≥ 1.5, on both viewports.
+// Tell frame (UX Phase 4, C-18; skip with --no-tell, or run alone with --tell-only): on the phone viewport a boosted build pushes into the next boss
+// wave; when a boss tell goes live the sim and visual time freeze and the same frame is captured with the tell layer
+// (render/moments.ts) fully on, with the fade only, and off. Marker pixels = pixels that change between "on" and "fade
+// only" and carry the marker's amber stroke; fade pixels = pixels that change between "fade only" and "off". Robust under
+// headless software GL because all three captures are the same frozen frame. Pass: a marker is drawn, ≥ 150 marker
+// pixels, their median WCAG contrast against what they cover ≥ 3:1, and the fade pixels are darker on average.
 // Environment: PLAYWRIGHT_DIR, CHROMIUM as in tests/e2e/e2e.mjs.
 import { createRequire } from 'node:module';
 import { spawn, execSync } from 'node:child_process';
@@ -132,10 +138,90 @@ async function measure(vpName) {
   return summary;
 }
 
+async function measureTell(vpName) {
+  const tellSave = join(OUT, 'save-tell.json');
+  if (!existsSync(tellSave)) execSync(`npx tsx tests/render/gen-save.ts 64 ${tellSave}`, { cwd: ROOT, stdio: 'inherit' });
+  const ctx = await browser.newContext(VIEWPORTS[vpName]);
+  const page = await ctx.newPage();
+  const save = JSON.parse(readFileSync(tellSave, 'utf8'));
+  save.savedAtMs = Date.now();
+  save.run.scrap = 5e7;   // a boosted build: heavy player effects, and the run reaches the boss quickly
+  save.run.mode = 'push';
+  await page.goto(BASE + 'icons/icon-192.png');
+  await page.evaluate(async (save) => {
+    localStorage.setItem('citadel.prefs.v1', JSON.stringify({ onboarded: true, revealInit: true, contentInit: true, pointerHints: false, buyCoach: 3, qmSeen: true }));
+    localStorage.setItem('citadel.gfx.v1', JSON.stringify({ quality: 'high', auto: false }));
+    await new Promise((res, rej) => {
+      const r = indexedDB.open('citadel', 1);
+      r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('saves')) r.result.createObjectStore('saves'); };
+      r.onsuccess = () => { const t = r.result.transaction('saves', 'readwrite'); t.objectStore('saves').put(save, 'main'); t.oncomplete = () => { r.result.close(); res(); }; t.onerror = () => rej(t.error); };
+      r.onerror = () => rej(r.error);
+    });
+  }, save);
+  await page.goto(BASE + '?fast=16');
+  await page.waitForFunction(() => !!window.__citadel?.game?.ready, null, { timeout: 60000 });
+  await page.evaluate(() => {
+    const c = window.__citadel, u = c.game.latestUi();
+    for (let k = 0; k < 4; k++) for (const t of new Set(u.shop.map((e) => e.tree))) c.game.client.send({ type: 'buy_cheapest', tree: t, count: 50 });
+    c.app.renderPaused = true;   // headless software GL: let the sim run ahead undrawn until the tell
+  });
+  const decide = setInterval(() => page.evaluate(() => {
+    const c = window.__citadel; if (!c?.game?.ready) return;
+    const u = c.game.latestUi();
+    if (u?.run.boonOffer?.length) c.game.client.send({ type: 'decline_boon' });
+    if (u?.run.pendingDraft?.length) c.game.client.send({ type: 'pick_anomaly', anomaly: null });
+  }).catch(() => {}), 1500);
+  const live = await page.waitForFunction(() => {
+    const c = window.__citadel; if (!c?.game?.ready) return false;
+    const u = c.game.latestUi();
+    if (u && u.wave.tellActive && u.wave.tellTicksLeft > 30) { c.game.client.setRunning(false); c.app.renderPaused = false; return true; }
+    return false;
+  }, null, { timeout: 600000, polling: 30 }).then(() => true).catch(() => false);
+  clearInterval(decide);
+  if (!live) { await ctx.close(); return { viewport: vpName, tell: null, pass: false, note: 'no boss tell within 10 min' }; }
+  await page.waitForTimeout(1500);   // the fade ramps in (real time) on the frozen sim frame
+  const info = await page.evaluate(() => { const c = window.__citadel; c.app.frozen = true; const u = c.game.latestUi(); return { tell: u.wave.tellActive, boss: u.wave.bossId, kind: c.app.renderer.moments.marker.kind }; });
+  await page.waitForTimeout(400);
+  const on = await page.screenshot();
+  await page.screenshot({ path: join(OUT, `readability-tell-${vpName}-on.png`) });
+  await page.evaluate(() => { window.__citadel.app.renderer.moments.markersOn = false; });   // the fade alone
+  await page.waitForTimeout(400);
+  const fadeOnly = await page.screenshot();
+  await page.evaluate(() => { window.__citadel.app.renderer.moments.tellsOn = false; });     // neither
+  await page.waitForTimeout(400);
+  const off = await page.screenshot();
+  await page.screenshot({ path: join(OUT, `readability-tell-${vpName}-off.png`) });
+  const px = await page.evaluate(async ({ a, f, b }) => {
+    const load = async (b64) => { const im = new Image(); im.src = 'data:image/png;base64,' + b64; await im.decode(); const cv = document.createElement('canvas'); cv.width = im.width; cv.height = im.height; const g = cv.getContext('2d'); g.drawImage(im, 0, 0); return g.getImageData(0, 0, im.width, im.height).data; };
+    const A = await load(a), F = await load(f), B = await load(b);
+    const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    const L = (D, k) => 0.2126 * lin(D[k]) + 0.7152 * lin(D[k + 1]) + 0.0722 * lin(D[k + 2]);
+    const diff = (X, Y, k) => Math.abs(X[k] - Y[k]) + Math.abs(X[k + 1] - Y[k + 1]) + Math.abs(X[k + 2] - Y[k + 2]);
+    const ratios = [];
+    let fadeN = 0, fadeOn = 0, fadeOff = 0;
+    for (let k = 0; k < A.length; k += 4) {
+      // marker pixels: on vs fade-only, amber; contrast against what they cover (the fade-only frame)
+      if (diff(A, F, k) >= 60 && A[k] > 190 && A[k + 1] > 110 && A[k + 1] < 215 && A[k + 2] < 110) {
+        const la = L(A, k), lf = L(F, k);
+        ratios.push((Math.max(la, lf) + 0.05) / (Math.min(la, lf) + 0.05));
+      }
+      // fade pixels: fade-only vs neither
+      if (diff(F, B, k) >= 30) { fadeN++; fadeOn += L(F, k); fadeOff += L(B, k); }
+    }
+    ratios.sort((x, y) => x - y);
+    return { markerPx: ratios.length, markerMedian: ratios.length ? +ratios[Math.floor(ratios.length / 2)].toFixed(2) : null, fadePx: fadeN, fadeOn: fadeN ? +(fadeOn / fadeN).toFixed(4) : null, fadeOff: fadeN ? +(fadeOff / fadeN).toFixed(4) : null };
+  }, { a: on.toString('base64'), f: fadeOnly.toString('base64'), b: off.toString('base64') });
+  await ctx.close();
+  const r = { viewport: vpName, ...info, ...px };
+  r.pass = !!info.kind && px.markerPx >= 150 && (px.markerMedian ?? 0) >= 3 && (px.fadePx === 0 || px.fadeOn < px.fadeOff);
+  return r;
+}
+
 let failed = false;
 const all = [];
 try {
-  for (const vp of ['desktop', 'phone']) { const s = await measure(vp); all.push(s); console.log(`${s.pass ? 'PASS' : 'FAIL'} readability ${JSON.stringify(s)}`); if (!s.pass) failed = true; }
+  if (!process.argv.includes('--tell-only')) for (const vp of ['desktop', 'phone']) { const s = await measure(vp); all.push(s); console.log(`${s.pass ? 'PASS' : 'FAIL'} readability ${JSON.stringify(s)}`); if (!s.pass) failed = true; }
+  if (!process.argv.includes('--no-tell')) { const t = await measureTell('phone'); all.push(t); console.log(`${t.pass ? 'PASS' : 'FAIL'} readability tell ${JSON.stringify(t)}`); if (!t.pass) failed = true; }
 } finally {
   await browser.close();
   server?.kill();

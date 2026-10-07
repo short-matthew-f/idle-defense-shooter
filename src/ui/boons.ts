@@ -20,7 +20,7 @@ import { boonCategoryIcon, icon, rarityIcon } from './icons';
 import { BOON_BY_ID, ELEMENTS, FUSIONS, HARDPOINTS, TREE_LABEL } from './content';
 import type { Features } from './progression';
 import { openModal, type ModalHandle } from './modal';
-import { titleCase } from './format';
+import { plainDesc, titleCase } from './format';
 import type { UiCtx } from './ctx';
 
 /** How long the Undo toast after a landscape Decline stays (ms). */
@@ -71,7 +71,7 @@ export function boonView(id: BoonId, build: NeedsBuild | null): BoonView {
   const category = d?.category ?? 'surge', rarity = d?.rarity ?? 'common';
   return {
     id, name: d?.name ?? titleCase(id), category, categoryLabel: CATEGORY_LABEL[category], rarity, rarityLabel: RARITY_LABEL[rarity],
-    short: d?.short ?? '', desc: d?.desc ?? '', needs: boonNeeds(id, build),
+    short: d?.short ?? '', desc: plainDesc(d?.desc ?? ''), needs: boonNeeds(id, build),
   };
 }
 

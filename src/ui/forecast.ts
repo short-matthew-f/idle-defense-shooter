@@ -7,7 +7,7 @@ import '../styles/forecast.css';
 import type { UiState } from '@sim/core/types';
 import { button, h, show, text, attr } from './dom';
 import { icon } from './icons';
-import { echoesFor, fmtDuration, fmtNum } from './format';
+import { echoesFor, fmtAmount, fmtDuration, fmtNum } from './format';
 import { chartGeometry } from './chart';
 import type { UiCtx } from './ctx';
 import { markInfo } from './info';
@@ -62,10 +62,10 @@ export function wallTarget(shop: UiState['shop']): { name: string; tree: string;
 export function wallGaugeLines(seconds: number | null | undefined, target: ReturnType<typeof wallTarget>): { val: string; sub: string; warn: boolean } {
   if (seconds === null || seconds === undefined) {
     return target
-      ? { val: 'No income', sub: `Next: ${target.name}${target.tree ? ` (${target.tree})` : ''} ◆${fmtNum(target.cost)}`, warn: true }
+      ? { val: 'No income', sub: `Next: ${target.name}${target.tree ? ` (${target.tree})` : ''} ◆${fmtAmount(target.cost)}`, warn: true }
       : { val: 'None in reach', sub: 'Only stat ranks remain', warn: true };
   }
-  const what = target ? `${target.name}${target.tree ? ` (${target.tree})` : ''} ◆${fmtNum(target.cost)}` : 'the next new behaviour';
+  const what = target ? `${target.name}${target.tree ? ` (${target.tree})` : ''} ◆${fmtAmount(target.cost)}` : 'the next new behaviour';
   return { val: seconds <= 0 ? 'Now' : `In ${fmtDuration(seconds)}`, sub: what, warn: false };
 }
 
@@ -125,7 +125,7 @@ export class ForecastPanel {
     show(this.banner, !!f?.recommended);
     // Onboarding pass (docs/BALANCE.md): name the wall. Past the Frontier enemies harden fast; a Prestige moves it.
     text(this.bannerText, f?.frontier !== undefined && f.nextFrontier !== undefined && ui.run.deepestCleared >= f.frontier - 2
-      ? `Prestige recommended: past wave ${f.frontier} (the Frontier) enemies harden fast. Prestige for ${fmtNum(f.echoesNow)} Echoes and the Frontier moves to wave ${f.nextFrontier}.`
+      ? `Prestige recommended: past wave ${f.frontier} (the Frontier) enemies harden fast. Prestige for ${fmtAmount(f.echoesNow)} Echoes and the Frontier moves to wave ${f.nextFrontier}.`
       : 'Prestige recommended: your Echo rate has passed its peak.');
     const ft = frontierText(ui);
     text(this.frontier, ft ?? '');
@@ -136,12 +136,12 @@ export class ForecastPanel {
     show(this.chartWrap, !!f && f.curve.length > 1);
     const est = echoesFor(ui.run.deepestCleared, ui.run.threatDial);
     text(this.locked, early ? `Echoes are paid from wave 20 on: the Forecast becomes meaningful once you clear wave 20 (deepest this Prestige: ${ui.run.deepestCleared}).` : 'Forecast data is not available yet.');
-    text(this.echoesNow.val, fmtNum(f?.echoesNow ?? est));
+    text(this.echoesNow.val, fmtAmount(f?.echoesNow ?? est));
     text(this.echoesNow.sub, `Deepest cleared: wave ${ui.run.deepestCleared}${f?.frontier !== undefined && f.frontier <= 100 ? ` · Frontier: wave ${f.frontier}` : ''}`);
     text(this.rate.val, f ? `${fmtNum(f.echoRate)}/h` : '—');
     text(this.rate.sub, f ? `Peak ${fmtNum(f.peakRate)}/h` : '');
-    text(this.next.val, f ? `+${fmtNum(Math.max(0, f.nextBossEchoes - f.echoesNow))}` : '—');
-    text(this.next.sub, f ? `${fmtNum(f.nextBossEchoes)} total · ${fmtNum(f.nextBossRate)}/h` : '');
+    text(this.next.val, f ? `+${fmtAmount(Math.max(0, f.nextBossEchoes - f.echoesNow))}` : '—');
+    text(this.next.sub, f ? `${fmtAmount(f.nextBossEchoes)} total · ${fmtNum(f.nextBossRate)}/h` : '');
     text(this.reclimb.val, f ? fmtDuration(f.reclimbSeconds) : '—');
     text(this.reclimb.sub, f ? `vs ${fmtDuration(ui.run.playSeconds)} this run` : '');
     const wg = f?.wallGaugeSeconds ?? ui.wallGaugeSeconds;

@@ -10,7 +10,7 @@ import { button, h } from './dom';
 import { icon, rarityIcon } from './icons';
 import { ANOMALY_BY_ID, TREE_LABEL } from './content';
 import { openModal, type ModalHandle } from './modal';
-import { titleCase } from './format';
+import { plainDesc, titleCase } from './format';
 import type { UiCtx } from './ctx';
 import type { Features } from './progression';
 import { walletChip } from './wallet';
@@ -34,7 +34,7 @@ export function anomalyCard(id: AnomalyId, ui: UiState | null, extra?: HTMLEleme
   return h('div', { class: `anomaly-card r-${rarity}` },
     h('div', { class: 'an-rarity' }, rarityIcon(rarity, 'ico'), RARITY_LABEL[rarity]),
     h('div', { class: 'an-name', text: a?.name ?? titleCase(id) }),
-    h('p', { class: 'an-desc', text: a?.desc ?? '' }),
+    h('p', { class: 'an-desc', text: plainDesc(a?.desc ?? '') }),
     needs.length ? h('div', { class: 'an-needs' }, ...needs) : null,
     extra ?? null);
 }

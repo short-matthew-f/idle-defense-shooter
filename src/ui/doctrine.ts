@@ -25,7 +25,7 @@ import { icon } from './icons';
 import { NODE_BY_ID, TREE_BY_ID, TREE_LABEL } from './content';
 import { confirmDialog } from './modal';
 import { walletChip } from './wallet';
-import { fmtNum, nextRankCost } from './format';
+import { fmtAmount, nextRankCost } from './format';
 
 /** The sim's lock on a Doctrine change outside the checkpoint window (economy/shop.ts CHECKPOINT_LOCK): it can be queued. */
 export const QUEUE_LOCK = 'Change at next checkpoint';
@@ -47,8 +47,8 @@ export function doctrineTradeoff(tree: TreeId, doctrine: DoctrineId): string {
   const from = nodes.length ? Math.min(...nodes.map((n) => nextRankCost(n.cost, 0))) : 0;
   const cap = d.nodes.find((n) => n.id === d.capstone);
   const others = t.doctrines.filter((x) => x.id !== doctrine).map((x) => x.name);
-  const parts = [nodes.length ? `${nodes.length} node${nodes.length === 1 ? '' : 's'} from ${fmtNum(from)} Scrap` : null,
-    cap ? `capstone ${fmtNum(nextRankCost(cap.cost, 0))}` : null, others.length ? `instead of ${others.join(', ')}` : null];
+  const parts = [nodes.length ? `${nodes.length} node${nodes.length === 1 ? '' : 's'} from ${fmtAmount(from)} Scrap` : null,
+    cap ? `capstone ${fmtAmount(nextRankCost(cap.cost, 0))}` : null, others.length ? `instead of ${others.join(', ')}` : null];
   return parts.filter(Boolean).join(' · ');
 }
 import type { UiCtx } from './ctx';

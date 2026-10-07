@@ -13,7 +13,7 @@
 //                     is assigned from its picker and cast, and two enemies are designated (HUD "2/2"), one cleared by a re-tap
 //   phone onboard     (progressive reveal, src/ui/progression.ts) a fresh save: no tab bar, one Upgrade button that buys,
 //                     a coach banner; saves at waves 5 / 6 / 10: the tab bar appears with Battle + Upgrades ("New"), Elements
-//                     appears, Build + More appear; Settings → Unlock everything shows every tab, switching it off hides them;
+//                     appears, Build + More appear; Settings → Show every screen and control shows every tab, switching it off hides them;
 //                     a pointer ring (src/ui/pointer.ts) surrounds the stage-0 Upgrade button and clears after the purchase
 //   phone touch       (docs/TOUCH.md) More → Help → Touch test: the canvas marker lands on the tap; calibration with honest
 //                     taps says "accurate" and stores nothing; a synthetic 40 px pointer offset (taps read 40 px below the
@@ -853,24 +853,24 @@ async function onboard() {
   await page.screenshot({ path: `${OUT}/phone-onboard-stage3-build.png` });
   check('onboard: Build at wave 10 shows only Hardpoints, Attunements and Doctrines (no Abilities / Boons / Anomalies / Cores / Frame), landing on the empty hardpoint slot',
     b3.pages === 'hardpoints,attunements,doctrines' && !b3.frame && (!b3.emptyHp || (b3.sec === 'hardpoints' && b3.mount)) && !/Cores|Anomal|Boon|Echo/.test(b3.text), { ...b3, text: b3.text.slice(0, 200) });
-  // 5. Settings → Unlock everything: every tab at once; switching it off hides them again (More / Settings stay)
+  // 5. Settings → Show every screen and control (B-13): every tab at once; switching it off hides them again (More / Settings stay)
   const unlockSwitch = async () => {
     await tapTab('more');
     if (!(await page.locator('.more-sub .sub-title', { hasText: 'Settings' }).isVisible())) await page.locator('.menu-item', { hasText: 'Settings' }).tap();
     await page.waitForTimeout(300);
-    await page.locator('.set-row', { hasText: 'Unlock everything' }).locator('input[type="checkbox"]').evaluate((el) => el.click());
+    await page.locator('.set-row', { hasText: 'Show every screen and control' }).locator('input[type="checkbox"]').evaluate((el) => el.click());
     await page.waitForTimeout(500);
   };
   await unlockSwitch();
   const v4 = await view();
   const onPrestige = await tapTab('prestige');
-  check('onboard: Unlock everything shows every tab (Prestige opens)', v4.tabs.join() === 'battle,upgrades,build,prestige,more' && onPrestige, v4.tabs);
+  check('onboard: Show every screen and control shows every tab (Prestige opens)', v4.tabs.join() === 'battle,upgrades,build,prestige,more' && onPrestige, v4.tabs);
   await tapTab('build');
   const b4 = await page.evaluate(() => document.querySelector('.screen.s-build .crumb-page').dataset.pages);
-  check('onboard: with Unlock everything Build lists every section', b4 === 'hardpoints,attunements,abilities,doctrines,boons,anomalies,cores,frame', b4);
+  check('onboard: with every screen shown Build lists every section', b4 === 'hardpoints,attunements,abilities,doctrines,boons,anomalies,cores,frame', b4);
   await unlockSwitch();
   const v5 = await view();
-  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('citadel.prefs.v1') || '{}').unlockAll);
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('citadel.prefs.v1') || '{}').showAllScreens);
   check('onboard: switching it off hides what is not earned again, Settings stays open', v5.tabs.join() === 'battle,upgrades,build,more' && v5.body.includes('tab-more') && stored === false, { tabs: v5.tabs, stored });
   check('onboard: zero console errors', errors.length === 0, errors);
   await ctx.close();

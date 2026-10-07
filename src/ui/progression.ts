@@ -111,20 +111,29 @@ export interface ProgressState {
   activeTrial?: UiState['activeTrial'];
 }
 
-/** `unlockAll` (alias `showEverything`): the master switch was on, so every feature is. */
-export type Features = Record<FeatureId, boolean> & { unlockAll: boolean; showEverything: boolean };
+/**
+ * `unlockAll` (alias `showEverything`): "Show every screen and control" is on, so every feature is.
+ * `allContent`: "Offer all content" is on, so the pickers offer the whole CONTENT_POOL ladder (weapons, elements).
+ * The two are separate switches (HANDBOOK-EVAL B-13); the URL flag ?showall=1 turns on both.
+ */
+export type Features = Record<FeatureId, boolean> & { unlockAll: boolean; showEverything: boolean; allContent: boolean };
 
 export interface FeatureOpts {
   /**
-   * The single global master switch: Settings → "Unlock everything (for experienced players)" (prefs.unlockAll,
-   * or ?showall=1 for a session). Every feature on, every content id offered.
+   * Both switches at once (tests, ?showall=1): every feature on, every content id offered. Same as `screens` + `content`.
    */
   unlockAll?: boolean;
   /** Alias of unlockAll. */
   showEverything?: boolean;
+  /** Settings → "Show every screen and control" (prefs.showAllScreens): every tab and control, no tutorial. */
+  screens?: boolean;
+  /** Settings → "Offer all content" (prefs.offerAllContent): the pickers offer every element and weapon system. */
+  content?: boolean;
 }
 
-const masterOn = (o: FeatureOpts): boolean => !!(o.unlockAll || o.showEverything);
+const bothOn = (o: FeatureOpts): boolean => !!(o.unlockAll || o.showEverything);
+const screensOn = (o: FeatureOpts): boolean => bothOn(o) || !!o.screens;
+const contentOn = (o: FeatureOpts): boolean => bothOn(o) || !!o.content;
 
 /** Best wave cleared, ever. */
 export function bestWave(s: ProgressState): number {
@@ -167,7 +176,7 @@ export function affordableRows(shop: readonly ShopEntry[], f: Pick<Features, 'ch
 
 /** Every feature on or off for this state. Monotone in the best wave and in prestigeCount. */
 export function features(s: ProgressState, opts: FeatureOpts = {}): Features {
-  const all = masterOn(opts);
+  const all = screensOn(opts);
   const best = bestWave(s);
   const pc = s.meta.prestigeCount | 0;
   const f = {} as Features;
@@ -177,6 +186,7 @@ export function features(s: ProgressState, opts: FeatureOpts = {}): Features {
   }
   f.unlockAll = all;
   f.showEverything = all;
+  f.allContent = contentOn(opts);
   if (all) return f;
 
   // ---- never hide what the player owns, uses, or has pending
@@ -266,16 +276,16 @@ export function poolShop<T extends Pick<ShopEntry, 'node' | 'rank'>>(shop: reado
 
 /** Whether a Blueprint's systems are all offered at Prestige count `pc` (it is loaded at the next Prestige start). */
 export function blueprintInPool(bp: { hardpoints: readonly string[]; attunements: readonly string[] }, pc: number, opts: FeatureOpts = {}): boolean {
-  if (masterOn(opts)) return true;
+  if (contentOn(opts)) return true;
   const pool = contentPool({ run: { deepestCleared: 0 }, meta: { deepestEver: 0, prestigeCount: pc } });
   return bp.hardpoints.every((h) => (pool.hardpoints as string[]).includes(h)) && bp.attunements.every((e) => (pool.elements as string[]).includes(e));
 }
 
-/** Which element and hardpoint ids the slot pickers offer (data order). unlockAll offers everything. */
+/** Which element and hardpoint ids the slot pickers offer (data order). `content` (or unlockAll) offers everything. */
 export function contentPool(s: ProgressState, opts: FeatureOpts = {}): ContentPool {
   const els = Object.keys(CONTENT_POOL.elements) as ElementId[];
   const hps = Object.keys(CONTENT_POOL.hardpoints) as HardpointId[];
-  if (masterOn(opts)) return { elements: els, hardpoints: hps };
+  if (contentOn(opts)) return { elements: els, hardpoints: hps };
   const pc = s.meta.prestigeCount | 0;
   const b = s.build ?? {};
   const ownedEl = new Set<string>((b.attunements ?? []).filter((x): x is ElementId => !!x));

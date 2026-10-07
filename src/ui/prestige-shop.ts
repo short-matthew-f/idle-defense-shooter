@@ -11,7 +11,7 @@ import type { UiState } from '@sim/core/types';
 import type { PrestigeNodeDef } from '@sim/data/schema';
 import { button, h, holdRepeat, text, disable, show, attr } from './dom';
 import { icon } from './icons';
-import { fmtNum, nextRankCost, splitDesc } from './format';
+import { fmtAmount, nextRankCost, splitDesc } from './format';
 import { PRESTIGE_NODES } from './content';
 import type { UiCtx } from './ctx';
 import { ECHO_GUIDE_TEXT, echoGuideDone, echoGuideSuggested, echoGuideSuggestedText, echoGuideOn, echoGuidePicks, endEchoGuide } from './ceremony';
@@ -124,7 +124,7 @@ export class PrestigeShop {
       const maxed = rank >= r.def.maxRank;
       const cost = nextRankCost(r.def.cost, rank);
       text(r.rank, r.def.maxRank > 1 ? `${rank}/${r.def.maxRank}` : rank > 0 ? 'Owned' : '');
-      const label = maxed ? 'Max' : fmtNum(cost);
+      const label = maxed ? 'Max' : fmtAmount(cost);
       if (r.price.dataset.v !== label) { r.price.dataset.v = label; r.price.replaceChildren(icon(maxed ? 'check' : 'echo', 'ico tiny'), label); }
       const can = open && !maxed && m.echoes >= cost;
       disable(r.btn, !can);
@@ -133,7 +133,7 @@ export class PrestigeShop {
       r.el.classList.toggle('suggested', r.def.id === sugId);
       r.el.classList.toggle('maxed', maxed);
       r.maxed = maxed;
-      attr(r.btn, 'aria-label', maxed ? `${r.def.name}: max rank` : `Buy ${r.def.name} for ${fmtNum(cost)} Echoes`);
+      attr(r.btn, 'aria-label', maxed ? `${r.def.name}: max rank` : `Buy ${r.def.name} for ${fmtAmount(cost)} Echoes`);
     }
     // folds: a layer not open yet shows one line; an open layer folds its maxed rows (the guided picks never fold)
     for (const L of this.layerEls) {

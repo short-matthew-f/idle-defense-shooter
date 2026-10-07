@@ -157,14 +157,46 @@ export function openCeremony(ctx: UiCtx): void {
   const go = button([icon('prestige'), fx.cta], () => {
     const frames = ui.meta.unlockedFrames.length ? ui.meta.unlockedFrames : ['standard' as const];
     const cmd: Extract<Command, { type: 'prestige' }> = { type: 'prestige', frame: frames.includes(ui.build.frame) ? ui.build.frame : frames[0] };
+    // UX Phase 4 (C-19): the rebuild beat copies the old tower from the current snapshot, so it starts before the send
+    const beatMs = ctx.host.rebuildBeat?.() ?? 0;
     ctx.host.send(cmd);
     ctx.host.saveNow();
     setPref('echoGuide', true);
     m.close();
-    ctx.open('prestige_shop');
+    if (beatMs > 0) playRebuildBeat(ctx, beatMs, () => ctx.open('prestige_shop'));
+    else ctx.open('prestige_shop');
   }, { class: 'btn primary wide cer-go' });
   const m = openModal({ title: CEREMONY_TITLE, body, footer: go, className: 'ceremony-modal',
     wallet: walletChip(['echoes'], ui, echoesAfter(fx.echoes)) });
+}
+
+/** The rebuild beat's skip layer (tests): a full-screen tap target over Battle while the beat plays. */
+export const REBUILD_SKIP_CLASS = 'rebuild-skip';
+
+/**
+ * UX Phase 4 (C-19): after the first Prestige, Battle shows for ~2.5 s while the old tower dissolves and the new hull
+ * assembles (render/moments.ts; a short crossfade under reduced motion), then `then` runs (the Echo guide). A tap
+ * anywhere, Esc or Enter skips it. The renderer started the beat already (host.rebuildBeat); this is the UI side.
+ */
+export function playRebuildBeat(ctx: UiCtx, ms: number, then: () => void): void {
+  ctx.open('battle');
+  let done = false;
+  const skip = h('button', { class: REBUILD_SKIP_CLASS, attrs: { type: 'button', 'aria-label': 'Skip the rebuild' } },
+    h('span', { class: 'rebuild-skip-label', text: 'Rebuilding the machine · tap to skip' }));
+  const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); finish(); } };
+  const finish = (): void => {
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
+    document.removeEventListener('keydown', onKey, true);
+    skip.remove();
+    ctx.host.endRebuildBeat?.();
+    then();
+  };
+  skip.addEventListener('click', finish);
+  document.addEventListener('keydown', onKey, true);
+  document.body.appendChild(skip);
+  const timer = window.setTimeout(finish, ms + 120);
 }
 
 // ---------------------------------------------------------------- post-Prestige coach lines (index.ts feeds CoachBanner)
@@ -178,8 +210,11 @@ export function newContentCoach(ids: readonly string[]): CoachExtra | null {
   const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
   const els = ids.some(isElementId), hps = ids.some((id) => !isElementId(id));
   const verb = els && hps ? 'attune or mount' : els ? 'attune' : 'mount';
-  return { id: `pool:${ids.join('+')}`, icon: els ? 'bolt' : 'plus', text: `New: ${list} ${ids.length === 1 ? 'joins' : 'join'} your arsenal. Look for the New tag when you ${verb}.` };
+  return { id: `pool:${ids.join('+')}`, icon: els ? 'bolt' : 'plus', text: `New: ${list} ${ids.length === 1 ? 'joins' : 'join'} your arsenal. Look for the New tag when you ${verb}.`,
+    short: `New: ${list} (look for the New tag).` };
 }
 
 export const QM_COACH_ID = 'qm-on';
+/** The Quartermaster's entry in the merged post-Prestige card (coach.ts postPrestigeDigest). */
+export const QM_COACH_SHORT = 'Quartermaster: buys your stat upgrades, never your choices.';
 export const QM_COACH_TEXT = 'Quartermaster: it banks a share of your new Scrap and buys your stat upgrades with it, never your choices.';

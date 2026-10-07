@@ -4,6 +4,7 @@ import { BOONS } from '../../src/sim/data/boons';
 import {
   activeSummary, arrivesAsChip, attemptKey, boonName, needRevealed, boonNeeds, boonView, offerHeading, pickCommand, replacedBy, rerollState, CATEGORY_LABEL,
 } from '../../src/ui/boons';
+import { plainDesc } from '../../src/ui/format';
 import { tabBadges, type BadgeState } from '../../src/ui/shell-logic';
 
 const build = (o: Partial<{ hardpoints: string[]; attunements: string[]; ranks: Record<string, number> }> = {}) =>
@@ -17,7 +18,7 @@ describe('boon UI helpers', () => {
       expect(v.categoryLabel).toBe(CATEGORY_LABEL[b.category]);
       expect(v.rarityLabel).toMatch(/^(Common|Rare)$/);
       expect(v.short).toBe(b.short);
-      expect(v.desc).toBe(b.desc);
+      expect(v.desc).toBe(plainDesc(b.desc));
     }
     expect(boonView('nope' as BoonId, null).name).toBe('Nope');
   });

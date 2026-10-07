@@ -40,7 +40,7 @@ describe('buy button label', () => {
     expect(buyLabel(entry('a', costs, 1e6), 10)).toEqual({ count: '×10', price: sum(10), disabled: false, send: 10 });
     const few = buyLabel(entry('a', costs, sum(7) + 5), 10);
     expect(few).toEqual({ count: '×7', price: sum(7), disabled: false, send: 10 });
-    expect(buyLabelText(few)).toBe("×7 · 1.2K");
+    expect(buyLabelText(few)).toBe("×7 · 1,292");
   });
 
   it('×10 near maxRank shows the ranks left', () => {
@@ -52,7 +52,7 @@ describe('buy button label', () => {
   it('Max uses the sim preview (affordableRanks / affordableTotal) and sends count 0', () => {
     const e = entry('a', costs, 1e6, { affordableRanks: 14, affordableTotal: 9000 });
     expect(buyLabel(e, 0)).toEqual({ count: 'Max ×14', price: 9000, disabled: false, send: 0 });
-    expect(buyLabelText(buyLabel(e, 0))).toBe('Max ×14 · 9K');
+    expect(buyLabelText(buyLabel(e, 0))).toBe('Max ×14 · 9,000');
   });
 
   it('is disabled when nothing is affordable, and shows what the quantity would cost', () => {
@@ -76,6 +76,6 @@ describe('bulk toast', () => {
   it('summarises two or more Purchase events and stays quiet for one', () => {
     expect(bulkToast([ev('a', 100), ev('a', 200), ev('b', 500)], 'in Ballistics')).toBe('Bought 3 ranks in Ballistics for ♦800');
     expect(bulkToast([ev('a', 100)], 'in Ballistics')).toBeNull();
-    expect(bulkToast([ev('a', 600), ev('b', 600)], null)).toBe('Bought 2 ranks for ♦1.2K');
+    expect(bulkToast([ev('a', 600), ev('b', 600)], null)).toBe('Bought 2 ranks for ♦1,200');
   });
 });

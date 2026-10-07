@@ -31,3 +31,12 @@ body.shell-phone:not(.tab-battle) .coach-banner, body.shell-rail:not(.tab-battle
   .coach-banner:has(.coach-act:not([hidden])) .coach-text { flex: 1 1 calc(100% - 44px); }
   .coach-banner:has(.coach-act:not([hidden])) .coach-act { flex: 1 1 0; margin-left: 42px; }
 }
+
+/* UX Phase 4: the merged post-Prestige card (coach.ts postPrestigeDigest): a title and a short list */
+.coach-digest-title { display: block; }
+.coach-digest { margin: 2px 0 0; padding: 0 0 0 16px; font-weight: 500; }
+.coach-digest li { margin: 1px 0; }
+.coach-banner.compact .coach-digest { display: inline; padding: 0; }
+.coach-banner.compact .coach-digest li { display: inline; }
+.coach-banner.compact .coach-digest li + li::before { content: ' · '; }
+.coach-banner.compact .coach-digest-title { display: inline; margin-right: 4px; }

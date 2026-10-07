@@ -22,3 +22,9 @@ kbd { display: inline-block; font: 0.875rem var(--mono); padding: 1px 7px; borde
 .help .keys.gloss { grid-template-columns: 1fr; row-gap: 0; }
 .help .keys.gloss dt { margin-top: 10px; color: var(--text); }
 .help .keys.gloss dd { line-height: 1.4; }
+
+/* import preview (A-21): the four facts before the confirm, and the note for a string that is not a save */
+.import-preview .ip-rows { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0 0 12px; font-size: 0.9375rem; }
+.import-preview dt { color: var(--text-dim); }
+.import-preview dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.import-note { color: var(--warn); margin: 6px 0 0; }

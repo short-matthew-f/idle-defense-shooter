@@ -1,5 +1,5 @@
 /**
- * Settings (a More sub-screen): Clarity slider, bloom, Auto-Prestige, Unlock everything (progressive reveal
+ * Settings (a More sub-screen): Clarity slider, bloom, Auto-Prestige, Show every screen and control + Offer all content (progressive reveal
  * master switch), export / import save, Start over (hard reset, double confirm), install PWA. Help (another
  * sub-screen): gestures, keyboard shortcuts, the coach tips unlocked so far (and replay them), about.
  */
@@ -9,6 +9,7 @@ import type { UiState } from '@sim/core/types';
 import { button, h } from './dom';
 import { icon } from './icons';
 import { confirmDialog } from './modal';
+import { importConfirmBody, savePreviewRows } from './import-preview';
 import { unlockedCoach } from './coach';
 import { prefs, setPref } from './prefs';
 import { graphicsSettings, motionRow, segmented } from './graphics-settings';
@@ -84,10 +85,16 @@ export function settingsPanel(ctx: UiCtx): HTMLElement {
   }, { class: 'btn' });
 
   const importArea = h('textarea', { class: 'save-text', attrs: { rows: '3', placeholder: 'Paste a save string (CITADEL1:…)', 'aria-label': 'Save string to import' } }) as HTMLTextAreaElement;
+  const importNote = h('p', { class: 'dim small import-note', attrs: { role: 'alert' } });
+  importNote.hidden = true;
   const importBtn = button('Import', async () => {
     const s = importArea.value.trim();
     if (!s) return;
-    if (!(await confirmDialog('Import this save?', 'Your current progress is replaced. Export it first if you want to keep it.', 'Import', { danger: true }))) return;
+    // A-21: read it first (nothing is stored), say what it holds, and refuse a bad string before the confirm
+    let rows;
+    try { rows = savePreviewRows(ctx.host.parseSave(s)); } catch (e) { importNote.textContent = `Not imported: ${e instanceof Error ? e.message : 'that is not a Citadel save string'}.`; importNote.hidden = false; return; }
+    importNote.hidden = true;
+    if (!(await confirmDialog('Import this save?', importConfirmBody(rows), 'Import', { danger: true }))) return;
     try { await ctx.host.importSave(s); } catch (e) { ctx.toast(`Import failed: ${e instanceof Error ? e.message : String(e)}`, 'warn'); }
   }, { class: 'btn' });
 
@@ -101,10 +108,14 @@ export function settingsPanel(ctx: UiCtx): HTMLElement {
   install.hidden = !ctx.host.canInstall();
 
   const autonomy = ((ui?.meta.prestigeRanks['prestige.autonomy'] ?? 0) | 0) > 0;
-  // the progressive reveal's master switch (progression.ts unlockAll); GameUi applies it on the next UiState
-  const unlock = toggle('Unlock everything', prefs().unlockAll, (v) => {
-    setPref('unlockAll', v);
-    ctx.toast(v ? 'Everything unlocked: every tab and control shows' : 'Unlocks follow your progress again', 'info');
+  // the progressive reveal's two switches (B-13; progression.ts screens / content); GameUi applies them on the next UiState
+  const showScreens = toggle('Show every screen and control', prefs().showAllScreens, (v) => {
+    setPref('showAllScreens', v);
+    ctx.toast(v ? 'Every tab and control shows' : 'Screens and controls follow your progress again', 'info');
+  });
+  const offerContent = toggle('Offer all content', prefs().offerAllContent, (v) => {
+    setPref('offerAllContent', v);
+    ctx.toast(v ? 'Every weapon system and element is offered' : 'Content follows your Prestiges again', 'info');
   });
   const textSize = segmented<'100' | '115' | '130'>('Text size', [['100', '100 %'], ['115', '115 %'], ['130', '130 %']], String(textScaleOf(prefs().textScale)) as '100' | '115' | '130', (v) => {
     const s: TextScale = textScaleOf(Number(v));
@@ -121,7 +132,8 @@ export function settingsPanel(ctx: UiCtx): HTMLElement {
     ...assistSettingRows(ctx, row, toggle),
     h('h3', { class: 'sec-title', text: 'Game' }),
     row('Clarity', h('div', { class: 'range-wrap' }, slider, val), 'Spectacle ↔ Clarity: player effects fade, enemies never do', true),
-    row('Unlock everything', unlock, 'For experienced players: every tab, control and choice from the start, instead of one at a time as you climb.'),
+    row('Show every screen and control', showScreens, 'For experienced players: every tab and control from the start, instead of one at a time as you climb.'),
+    row('Offer all content', offerContent, 'Every weapon system and element in the pickers from the start, instead of a few more with each Prestige.'),
     row('Show pointer hints', toggle('Show pointer hints', prefs().pointerHints !== false, (v) => setPref('pointerHints', v)), 'A soft ring on the control a tip is about'),
     row('Auto-Prestige', toggle('Auto-Prestige', !!ui?.meta.settings.autoPrestige, (v) => ctx.host.send({ type: 'set_setting', key: 'autoPrestige', value: v })), autonomy ? 'Lets a Prestige Directive fire' : `${gateText('autonomy', ui?.meta.deepestEver ?? 0) ?? 'Needs Autonomy'}, then add a Prestige Directive`),
     ...graphicsSettings(ctx, row, toggle),
@@ -129,7 +141,7 @@ export function settingsPanel(ctx: UiCtx): HTMLElement {
     h('h3', { class: 'sec-title', text: 'Save' }),
     h('p', { class: 'dim small', text: 'Saves to this device about 2 s after every change, and at every checkpoint.' }),
     h('div', { class: 'row gap wrap' }, exportBtn, downloadBtn), exportArea,
-    importArea, h('div', { class: 'row gap wrap' }, importBtn),
+    importArea, importNote, h('div', { class: 'row gap wrap' }, importBtn),
     h('h3', { class: 'sec-title', text: 'App' }),
     h('div', { class: 'row gap wrap' }, install),
     h('p', { class: 'dim small', text: 'Start over erases this device\'s progress and plays the opening again from the beginning, one unlock at a time.' }),

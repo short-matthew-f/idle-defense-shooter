@@ -28,6 +28,12 @@ export function fmtNum(n: number): string {
   return (neg ? '-' : '') + s + SUFFIXES[i];
 }
 
+/**
+ * An amount of a currency (Scrap, Echoes, Cores, Stars) shown next to the pinned wallet: exact below a million ("9,600",
+ * like the wallet's "505,033 Scrap"), compact above ("1.2M"). One format per screen: amounts use this, rates use fmtRate / fmtNum.
+ */
+export function fmtAmount(n: number): string { return Math.abs(n) < 1e6 ? Math.floor(n).toLocaleString('en-US') : fmtNum(n); }
+
 /** "+1.2K/s"; tiny rates keep one decimal. */
 export function fmtRate(perSecond: number, unit = '/s'): string {
   if (!Number.isFinite(perSecond) || perSecond === 0) return '0' + unit;
@@ -79,6 +85,17 @@ export function splitDesc(desc: string): { headline: string; more: boolean } {
 /** snake_case / dotted ids → "Title Case" (fallback names). */
 export function titleCase(id: string): string {
   return id.replace(/^[a-z]+\./, '').replace(/[_.+-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim();
+}
+
+/**
+ * Plain wording for content text from the data tables: drops the "NEW." marker and code names that leaked into prose,
+ * and fixes "a 80-unit" → "an 80-unit". Never changes a number.
+ */
+export function plainDesc(s: string): string {
+  return s.replace(/^NEW\.\s*/, '')
+    .replace(/\s*See TELL_COUNTERS\.?/, '')
+    .replace(/\s*\(graftSources\(wave\)\); counter per TELL_COUNTERS\./, '; answer each with its own counter.')
+    .replace(/\ba (?=(?:8|11|18)\d*\b)/g, 'an ');
 }
 
 /** Echoes paid by a Prestige (design §17), used when the sim's Forecast is not available. */

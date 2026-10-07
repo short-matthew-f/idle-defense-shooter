@@ -113,13 +113,18 @@ export function suggestPurchases(s: AdviceState, rate: number, n = 3): Suggestio
   return out;
 }
 
+/** "The Broodheart's" / "The Warden's" from a boss name with or without its "The". */
+export function possessive(name: string): string { return `${/^the /i.test(name) ? name : `The ${name}`}'s`; }
+
 function article(name: string): string { return /^[AEIOU]/i.test(name) ? `An ${name}` : `A ${name}`; }
 
 /**
  * Who dealt the killing blow, from the Ev.TowerDeath payload ({ killer, boss?, bossPhase? }, sim S3):
  * "The Breaker (phase 2 of 3)", "A Brute", "A hazard zone", "Your own explosions"; null when unknown.
+ * The payload has no hazard owner (only `killer: 'hazard'`), but the only hazards that hurt the tower are boss-made (sim/core/hazards.ts),
+ * so the caller passes the wave's boss as `hazardOwner` ("The Warden's hazard zone").
  */
-export function killerName(data: SimEvent['data'] | undefined): string | null {
+export function killerName(data: SimEvent['data'] | undefined, hazardOwner?: string | null): string | null {
   const k = data && typeof data.killer === 'string' ? data.killer : null;
   if (!k || k === 'enemy') return null;
   if (data!.boss) {
@@ -128,7 +133,7 @@ export function killerName(data: SimEvent['data'] | undefined): string | null {
     const phase = typeof data!.bossPhase === 'number' ? data!.bossPhase : -1;
     return def && def.phases.length > 1 && phase >= 0 ? `${name} (phase ${phase + 1} of ${def.phases.length})` : name;
   }
-  if (k === 'hazard') return 'A hazard zone';
+  if (k === 'hazard') return hazardOwner ? `${possessive(hazardOwner)} hazard zone` : 'A hazard zone';
   if (k === 'self') return 'Your own explosions';
   return article(ENEMY_NAME.get(k) ?? k);
 }
@@ -136,7 +141,7 @@ export function killerName(data: SimEvent['data'] | undefined): string | null {
 /** Display name of an attemptDamageTaken source ('boss' uses the wave's boss when known). */
 export function damageSourceName(src: string, bossId: string | null): string {
   if (src === 'boss') return (bossId && BOSS_BY_ID.get(bossId as BossId)?.name) || 'The boss';
-  if (src === 'hazard') return 'Hazard zones';
+  if (src === 'hazard') { const o = bossId && BOSS_BY_ID.get(bossId as BossId)?.name; return o ? `${possessive(o)} hazard zones` : 'Hazard zones'; }
   if (src === 'self') return 'Your own explosions';
   if (src === 'enemy') return 'Enemy fire';
   return ENEMY_NAME.get(src) ?? src;

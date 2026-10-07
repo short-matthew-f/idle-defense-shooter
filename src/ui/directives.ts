@@ -181,7 +181,7 @@ export class DirectivesPanel {
       kindSel.addEventListener('change', () => { d.action = defaultAction(kindSel.value as ActKind) as DirectiveAction; renderAct(); changed(); });
       // a weapon-system picker offers the primary and what this Prestige's content pool offers (progression.ts)
       const u = this.ctx.state();
-      const pool = u ? contentPool(u, { unlockAll: this.ctx.features().unlockAll }).hardpoints as string[] : null;
+      const pool = u ? contentPool(u, { content: this.ctx.features().allContent }).hardpoints as string[] : null;
       const allowSystem = (v: string): boolean => !pool || v === 'primary' || pool.includes(v);
       act.append(h('span', { class: 'kw do', text: 'DO' }), kindSel, ...ACTIONS[a.kind].params.map((p) => paramInput(p, (a as unknown as Record<string, unknown>)[p.key], (v) => { (a as unknown as Record<string, unknown>)[p.key] = v; changed(); }, 'Action', p.key === 'system' ? allowSystem : undefined)));
     };

@@ -120,7 +120,7 @@ describe('Doctrine fork model', () => {
     const card = forkModel(sim.uiState(), 'ballistics')!.cards.find((c) => c.doctrine === 'piercing')!;
     expect(card.capstone).toBe('Last Rites');
     expect(card.capstoneDesc).toMatch(/×4 damage/);
-    expect(card.tradeoff).toBe('3 nodes from 300 Scrap · capstone 9.6K · instead of Multishot, Ricochet, Heavy Rounds');
+    expect(card.tradeoff).toBe('3 nodes from 300 Scrap · capstone 9,600 · instead of Multishot, Ricochet, Heavy Rounds');
     expect(doctrineTradeoff('ballistics', 'piercing')).toBe(card.tradeoff);
     expect(QUEUE_LOCK).toBe(CHECKPOINT_LOCK);
     expect(DOCTRINES_REVEAL_WAVE).toBe(10);

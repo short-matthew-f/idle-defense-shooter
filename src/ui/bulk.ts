@@ -5,7 +5,7 @@
  */
 import type { ShopEntry, SimEvent } from '@sim/core/types';
 import { Ev } from '@sim/core/types';
-import { fmtNum } from './format';
+import { fmtAmount } from './format';
 
 /** Ranks per tap: 1, 10, or 0 = Max (the sim's `count: 0`). */
 export type BuyQty = 1 | 10 | 0;
@@ -60,12 +60,12 @@ export function buyLabel(e: ShopEntry, q: BuyQty): BuyLabel {
 }
 
 /** Accessible / plain-text form of a label: "Max ×7 · 800". */
-export function buyLabelText(l: BuyLabel): string { return l.count ? `${l.count} · ${fmtNum(l.price)}` : fmtNum(l.price); }
+export function buyLabelText(l: BuyLabel): string { return l.count ? `${l.count} · ${fmtAmount(l.price)}` : fmtAmount(l.price); }
 
 /** Toast after a bulk buy, from the Purchase events it produced; null for 0–1 ranks (single buys stay quiet). Quartermaster buys (data.via) never count. */
 export function bulkToast(events: readonly SimEvent[], where: string | null): string | null {
   let n = 0, total = 0;
   for (const e of events) if (e.type === Ev.Purchase && e.data?.via !== 'quartermaster') { n++; total += e.b; }
   if (n < 2) return null;
-  return `Bought ${n} ranks${where ? ` ${where}` : ''} for ♦${fmtNum(total)}`;
+  return `Bought ${n} ranks${where ? ` ${where}` : ''} for ♦${fmtAmount(total)}`;
 }

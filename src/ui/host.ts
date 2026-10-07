@@ -1,5 +1,5 @@
 /** What the UI needs from the app shell (main.ts implements it). The UI never touches the worker directly. */
-import type { Command, SimEvent } from '@sim/core/types';
+import type { Command, SaveState, SimEvent } from '@sim/core/types';
 import type { ProbeSample } from '@app/input';
 import type { TouchCal } from '@app/touch-cal';
 
@@ -46,6 +46,8 @@ export interface UiHost {
   setBloom(on: boolean): void;
   bloomOn(): boolean;
   exportSave(): Promise<string>;
+  /** Parse and migrate a save string without storing anything (the import preview); throws a readable error for a bad string. */
+  parseSave(text: string): SaveState;
   importSave(text: string): Promise<void>;
   hardReset(): Promise<void>;
   /** Screen space the UI covers (px), so the camera keeps the arena clear. */
@@ -56,6 +58,13 @@ export interface UiHost {
   install(): Promise<boolean>;
   /** Save to IndexedDB now (after major actions such as Prestige). */
   saveNow(): void;
+  /**
+   * UX Phase 4: start the first-Prestige rebuild beat on the canvas (call just before sending the Prestige; the old tower
+   * is copied from the current snapshot). Returns its length in ms (shorter under reduced motion). Optional (tests).
+   */
+  rebuildBeat?(): number;
+  /** Cut the rebuild beat short (a tap skips it). */
+  endRebuildBeat?(): void;
   /** UX Phase 1: a new version is waiting ("Update ready · Restart" chip; window event 'citadel:update-ready' fires once). Optional. */
   updateReady?(): boolean;
   /** UX Phase 1: the Restart tap: save, activate the waiting version, reload. Optional. */

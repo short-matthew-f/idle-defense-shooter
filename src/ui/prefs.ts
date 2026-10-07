@@ -31,10 +31,14 @@ export interface Prefs {
   /** Tap calibration (More → Help → Touch test); null = identity. Validated with parseCal on use. */
   touchCal: TouchCal | null;
   /**
-   * Progressive reveal master switch (progression.ts `unlockAll`, alias showEverything): Settings → "Unlock everything
-   * (for experienced players)". Every tab, control and content id, as before the unlock ladder. Survives reloads.
+   * Legacy master switch (before B-13): the old "Unlock everything". Read only to migrate: a stored `true` with neither
+   * new switch stored sets both (prefs()). Nothing else reads it.
    */
   unlockAll: boolean;
+  /** Settings → "Show every screen and control" (progression.ts `screens`): every tab and control, no tutorial. Survives reloads. */
+  showAllScreens: boolean;
+  /** Settings → "Offer all content" (progression.ts `content`): pickers offer every element and weapon system (the CONTENT_POOL ladder). */
+  offerAllContent: boolean;
   /** Coach banners already read (coach.ts ids). Presentation only: never decides what is revealed. */
   coachSeen: string[];
   /** Tabs opened at least once (a newly revealed tab carries a "New" badge until then). */
@@ -76,7 +80,7 @@ export interface Prefs {
 const KEY = 'citadel.prefs.v1';
 const DEFAULTS: Prefs = { onboarded: false, bloom: true, affordableFirst: false, panelOpen: true, shopCategory: 'chassis', shopTree: 'ballistics', buildSection: '', activeTrial: null, buyCoach: 0, buyQty: 1, suggestExpanded: false,
   soundMaster: 0.71, soundSfx: 0.8, soundMusic: 0.55, soundMuted: false, musicOn: true, touchCal: null,
-  unlockAll: false, coachSeen: [], tabsVisited: [], revealInit: false, contentSeen: [], contentInit: false, echoGuide: false,
+  unlockAll: false, showAllScreens: false, offerAllContent: false, coachSeen: [], tabsVisited: [], revealInit: false, contentSeen: [], contentInit: false, echoGuide: false,
   pointerHints: true, hintsDone: [], hintsInit: false, coreExplained: false, qmSeen: false,
   textScale: 100, leftHand: false, holdDelayMs: 0, overchargeAssist: false, tellAssist: false, hapticCues: false, srAnnounce: true };
 
@@ -87,6 +91,8 @@ export function prefs(): Prefs {
   let stored: Partial<Prefs> = {};
   try { stored = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<Prefs>; } catch { /* private mode / blocked */ }
   cache = { ...DEFAULTS, ...stored };
+  // B-13: the old single switch becomes both new ones (until the player stores either)
+  if (stored.unlockAll === true && stored.showAllScreens === undefined && stored.offerAllContent === undefined) { cache.showAllScreens = true; cache.offerAllContent = true; }
   for (const k of ['coachSeen', 'tabsVisited', 'contentSeen', 'hintsDone'] as const) if (!Array.isArray(cache[k])) cache[k] = [];
   return cache;
 }

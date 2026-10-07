@@ -20,6 +20,7 @@ import { compileProgram, uniforms, type UniformMap } from './gl-util';
 import { LAYER_COUNT } from './layer-sort';
 import { SECTOR_PALETTES, type SectorPalette } from './palette';
 import type { Particles } from './particles';
+import type { Moments } from './moments';
 import { FramePrep, type FrameOptions } from './frame-prep';
 import {
   FrameMonitor, TIERS, gfxRuntime, gfxSettings, lowerTier, minTier, motionScales, onGfxChange, reducedMotion, systemReducedMotion,
@@ -76,6 +77,16 @@ export class Renderer {
   /** CPU frame (particles, juice, sort, animation); see frame-prep.ts. */
   readonly prep = new FramePrep();
   get particles(): Particles { return this.prep.particles; }
+  /** Tell markers, hull mark and the rebuild beat (moments.ts). */
+  get moments(): Moments { return this.prep.moments; }
+  /** UX Phase 4: the live boss tell's Counter (UiState.wave.tellActive) and the Prestige count (hull mark). */
+  setMoment(tellCounter: string | null, prestigeCount: number): void {
+    this.prep.moments.setTell(tellCounter);
+    this.prep.moments.prestigeCount = prestigeCount;
+  }
+  /** Start the first-Prestige rebuild beat from `snap` (the pre-Prestige snapshot). Returns its length in ms. */
+  startRebuild(snap: RenderSnapshot | null): number { return this.prep.moments.startRebuild(snap, this.frameOpts.motion.idle <= 0); }
+  endRebuild(): void { this.prep.moments.endRebuild(); }
 
   // graphics settings (quality.ts): chosen tier, session auto cap, derived frame options
   private gfx: GfxSettings = gfxSettings();
@@ -320,7 +331,7 @@ export class Renderer {
     camera.update(dt, snap.cameraShake * o.motion.shake);
     if (juice.shake > 0) { camera.addShake(juice.shake); juice.shake = 0; }
     // the punch zoom kick lives on the camera so pointer math (camera.toWorld) matches this frame exactly
-    camera.punch = juice.punch;
+    camera.punch = juice.punch + prep.moments.zoomKick;   // + the rebuild beat's push-in (moments.ts)
     const s = camera.drawScale;
     o.minR = this.minEnemyPx / Math.max(1e-6, s);
     o.pxPerUnit = s;

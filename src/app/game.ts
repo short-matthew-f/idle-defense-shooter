@@ -135,8 +135,11 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
     setBloom: (on) => app.renderer.setBloom(on),
     bloomOn: () => app.renderer.bloomOn,
     exportSave: async () => { const s = await client.requestSave(); s.savedAtMs = Date.now(); return exportToString(s); },
+    parseSave: (text) => importFromString(text),
     importSave: async (text) => {
       const s = importFromString(text);
+      // N-13: the time between the export and now was not played on this device: no offline credit for it
+      s.savedAtMs = Date.now();
       resetting = true;
       saveSoon.cancel();
       clearBackup();
@@ -157,6 +160,8 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
     canInstall,
     install: promptInstall,
     saveNow: () => { if (ready) client.requestSave(); },
+    rebuildBeat: () => app.renderer.startRebuild(app.snapshot),
+    endRebuildBeat: () => app.renderer.endRebuild(),
     updateReady: () => updateApply !== null,
     applyUpdate: () => { void applyUpdate(); },
     touch,
@@ -285,6 +290,9 @@ export async function startGame(app: RenderApp, uiRoot: HTMLElement): Promise<Ga
     const live = snap && snap.instances.buffer.byteLength > 0 ? snap : null;
     const on = overlay.build(live ? live.instances : null, live ? live.instanceCount : 0, app.camera.scale, now / 1000, aiming ? aimAngle : null);
     app.renderer.setOverlay(overlay.buf, on);
+    // UX Phase 4 (render/moments.ts): the live tell's marker and fade, the hull's Prestige mark
+    const lu = latestUi;
+    app.renderer.setMoment(lu && lu.wave.isBoss && lu.wave.tellActive && lu.wave.tellTicksLeft > 0 ? lu.wave.tellActive : null, lu ? lu.meta.prestigeCount | 0 : 0);
     if (!ready || paused || document.hidden) return;
     const n = pacer.step(dt, (latestUi?.run.speedMultiplier ?? 1) * fast);
     if (n > 0) client.tickBudget(n);

@@ -5,7 +5,7 @@
  * lock text is built here from the data (src/sim/data/prestige.ts), so the wave and the price cannot drift from the game.
  */
 import { PRESTIGE_NODES } from '@sim/data/index';
-import { fmtNum, nextRankCost } from './format';
+import { fmtAmount, nextRankCost } from './format';
 
 export interface EchoTier { layer: 1 | 2 | 3 | 4; roman: 'I' | 'II' | 'III' | 'IV'; name: string; wave: number; blurb: string }
 
@@ -48,7 +48,7 @@ export function nodeGate(node: string, deepestEver: number): Gate | null {
   if (!def) return null;
   const wave = ECHO_TIERS[def.layer - 1]?.wave ?? 0;
   const cost = nextRankCost(def.cost, 0);
-  const price = `${fmtNum(cost)} Echoes`;
+  const price = `${fmtAmount(cost)} Echoes`;
   const waveMet = deepestEver >= wave;
   return {
     node: id, name: def.name, wave, cost, waveMet,

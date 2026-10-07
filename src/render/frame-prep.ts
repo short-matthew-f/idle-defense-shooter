@@ -16,6 +16,7 @@ import { INSTANCE_STRIDE, LAYER_COUNT, LAYER_OFFSET, countLayers, layerStarts, s
 import { Particles, PARTICLE_BUDGET } from './particles';
 import { Juice } from './juice';
 import { motionScales, type MotionScales } from './quality';
+import { Moments } from './moments';
 
 const TAU = 6.283185307179586;
 /** Composite parts fade out between these on-screen radii (CSS px). */
@@ -73,6 +74,8 @@ export const DEFAULT_FRAME_OPTIONS: FrameOptions = {
 export class FramePrep {
   readonly particles: Particles;
   readonly juice = new Juice();
+  /** Tell markers + fade, hull mark, rebuild beat (moments.ts). */
+  readonly moments = new Moments();
   /** Visual time (seconds): slowed by slow-mo, frozen when dt = 0. */
   time = 0;
   sorted = new Float32Array(0);
@@ -120,15 +123,22 @@ export class FramePrep {
     counts.fill(0);
     this.chainsLeft = o.chains ? o.chainMax : 0;
     const kept = this.countSnapshot(snap.instances, n, counts);
+    const towerCount = counts[0];
     parts.countLayers(counts);
     if (on) countLayers(this.overlay, on, counts);
-    const total = kept + parts.count + on;
+    const mo = this.moments;
+    mo.burst((k, x, y, r, g, b, size, count) => parts.spawnFx(k, x, y, r, g, b, size, count));
+    const mn = mo.build(snap, dt, { reduced: o.motion.idle <= 0, clarity: o.clarity, pxPerUnit: o.pxPerUnit });
+    if (mn) countLayers(mo.buf, mn, counts);
+    const total = kept + parts.count + on + mn;
     if (this.sorted.length < total * INSTANCE_STRIDE) this.sorted = new Float32Array(Math.max(total + 1024, (this.sorted.length / INSTANCE_STRIDE) * 1.5 | 0) * INSTANCE_STRIDE);
     layerStarts(counts, this.starts, this.cursors);
     this.chainsLeft = o.chains ? o.chainMax : 0;
     this.scatterSnapshot(snap.instances, n, o);
     parts.scatter(this.sorted, this.cursors);
     if (on) scatterInstances(this.overlay, on, this.sorted, this.cursors);
+    if (mn) scatterInstances(mo.buf, mn, this.sorted, this.cursors);
+    mo.post(this.sorted, this.starts, towerCount);
     this.total = total;
     return total;
   }

@@ -32,7 +32,7 @@ import { HintDriver, setArenaSource } from './pointer';
 import { OverlayLanes } from './lanes';
 import { Attention } from './attention';
 import { contentPool, features, newInPool, stageOf, type Features } from './progression';
-import { QM_COACH_ID, QM_COACH_TEXT, echoGuideOn, newContentCoach } from './ceremony';
+import { QM_COACH_ID, QM_COACH_SHORT, QM_COACH_TEXT, echoGuideOn, newContentCoach } from './ceremony';
 import type { CoachExtra } from './coach';
 import { tabsShown, TABS } from './shell-logic';
 import { prefs, setPref } from './prefs';
@@ -111,7 +111,7 @@ export class GameUi {
       toastAction: (m, k, ms, a, e) => this.feed.toastAction(m, k, ms, a, e),
       features: () => this.feats,
     };
-    this.feats = features({ run: { deepestCleared: 0 }, meta: { deepestEver: 0, prestigeCount: 0 } }, { unlockAll: this.unlockAll });
+    this.feats = features({ run: { deepestCleared: 0 }, meta: { deepestEver: 0, prestigeCount: 0 } }, { screens: this.showScreens, content: this.offerContent });
     mountModalLayer(root);
     mountA11y();
     mountAnnouncer();
@@ -224,12 +224,14 @@ export class GameUi {
     this.relayout();
   }
 
-  /** The master switch (Settings → Unlock everything, or ?showall=1). */
-  private get unlockAll(): boolean { return this.showAll || prefs().unlockAll; }
+  /** Settings → "Show every screen and control" (or ?showall=1, which turns on both switches). */
+  private get showScreens(): boolean { return this.showAll || prefs().showAllScreens; }
+  /** Settings → "Offer all content" (or ?showall=1). */
+  private get offerContent(): boolean { return this.showAll || prefs().offerAllContent; }
 
   /** Recompute what the unlock ladder reveals and hand it to every gated component. */
   private reveal(ui: UiState): void {
-    const f = features(ui, { unlockAll: this.unlockAll });
+    const f = features(ui, { screens: this.showScreens, content: this.offerContent });
     if (!prefs().revealInit) {
       // first run of the ladder on this device: an existing save has already seen what it has (no banner stack, no "New")
       setPref('revealInit', true);
@@ -242,7 +244,7 @@ export class GameUi {
     this.hud.setFeatures(f);
     this.abilities.setVisible(f.abilities);
     this.coach.update(f, { boonOffer: !!ui.run.boonOffer?.length, draft: !!ui.run.pendingDraft?.length, ...activeCoachLive(ui.active) },
-      this.postPrestigeCoach(ui, f), echoGuideOn() ? ['machine'] : []);
+      this.postPrestigeCoach(ui, f), echoGuideOn() ? ['machine'] : [], (ui.meta.prestigeCount | 0) >= 1);
   }
 
   /**
@@ -259,12 +261,13 @@ export class GameUi {
       setPref('contentSeen', [...new Set([...p.contentSeen, ...pool.elements, ...pool.hardpoints])]);
     }
     const out: CoachExtra[] = [];
-    const fresh = newContentCoach(newInPool(pool, new Set(prefs().contentSeen)));
+    // "Offer all content" offers every id at once: nothing is new
+    const fresh = f.allContent ? null : newContentCoach(newInPool(pool, new Set(prefs().contentSeen)));
     if (fresh) out.push(fresh);
     const q = ui.quartermaster;
     if (q?.on && !p.coachSeen.includes(QM_COACH_ID)) markCoachSeen([QM_COACH_ID]);   // switched on from its card: never re-offer
     else if (f.quartermaster && q?.unlocked && !q.on) {
-      out.push({ id: QM_COACH_ID, icon: 'blueprint', text: QM_COACH_TEXT, action: { label: 'Turn on', run: () => {
+      out.push({ id: QM_COACH_ID, icon: 'blueprint', text: QM_COACH_TEXT, short: QM_COACH_SHORT, digestAction: 'Turn on Quartermaster', action: { label: 'Turn on', run: () => {
         this.ctx.host.send({ type: 'set_quartermaster', on: true });
         this.feed.toast('Quartermaster on: its card is at the top of Upgrades', 'good');
       } } });
@@ -357,6 +360,7 @@ export class GameUi {
   open(s: ScreenId, arg?: unknown): void {
     switch (s) {
       case 'menu': this.shell.go('more'); break;
+      case 'battle': this.shell.go('battle'); break;
       case 'forecast': this.prestigeScreen.select('forecast'); this.shell.go('prestige'); break;
       case 'prestige': openPrestige(this.ctx); break;
       case 'prestige_shop': this.prestigeScreen.select('layers'); this.shell.go('prestige'); break;

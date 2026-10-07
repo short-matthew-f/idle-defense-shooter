@@ -8,7 +8,7 @@ import type { UiState } from '@sim/core/types';
 import type { StarNodeDef } from '@sim/data/schema';
 import { button, h, text, disable, show } from './dom';
 import { icon } from './icons';
-import { fmtNum, nextRankCost } from './format';
+import { fmtAmount, nextRankCost } from './format';
 import { STAR_NODES } from './content';
 import { confirmDialog } from './modal';
 import type { UiCtx } from './ctx';
@@ -149,8 +149,8 @@ export class ConstellationPanel {
     this.ascendBtn = button([icon('ascension'), 'Ascend…'], async () => {
       const ui = ctx.state(); if (!ui) return;
       const gain = starsFor(ui.run.deepestCleared, ui.meta.ascension);
-      const ok = await confirmDialog('Ascend?', `Ascension resets waves, Scrap, Cores, upgrades and Anomalies, and pays ${fmtNum(gain)} Stars. Echoes, Prestige upgrades, the Codex, Trial rewards, Frames and Stars stay; every Star spent in the Constellation is refunded (a free respec). Enemies grow stronger and new rules unlock.`, 'Ascend',
-        { danger: true, wallet: walletChip(['stars'], ui, (u) => (gain > 0 ? `+${fmtNum(gain)} → ${fmtExactish(u.meta.stars + gain)} after Ascending` : '')) });
+      const ok = await confirmDialog('Ascend?', `Ascension resets waves, Scrap, Cores, upgrades and Anomalies, and pays ${fmtAmount(gain)} Stars. Echoes, Prestige upgrades, the Codex, Trial rewards, Frames and Stars stay; every Star spent in the Constellation is refunded (a free respec). Enemies grow stronger and new rules unlock.`, 'Ascend',
+        { danger: true, wallet: walletChip(['stars'], ui, (u) => (gain > 0 ? `+${fmtAmount(gain)} → ${fmtExactish(u.meta.stars + gain)} after Ascending` : '')) });
       if (ok) { ctx.host.send({ type: 'ascend' }); ctx.host.saveNow(); }
     }, { class: 'btn primary wide' });
     this.ascendWrap.append(this.ascendText, this.ascendBtn);
@@ -214,7 +214,7 @@ export class ConstellationPanel {
       text(this.dName, s.name);
       text(this.dRank, `${rank}/${s.maxRank}`);
       text(this.dDesc, s.desc + (reqOk ? '' : ` Requires: ${(s.requires ?? []).map((r) => STAR_NODES.find((x) => x.id === r)?.name ?? r).join(' and ')}.`) + (region ? ` ${region}.` : ''));
-      text(this.dBuy, maxed ? 'Maxed' : region ? 'Locked' : `Buy · ${fmtNum(cost)} Stars`);
+      text(this.dBuy, maxed ? 'Maxed' : region ? 'Locked' : `Buy · ${fmtAmount(cost)} Stars`);
       disable(this.dBuy, maxed || !reqOk || !!region || m.stars < cost);
     }
     const can = ui.run.deepestCleared >= 100;

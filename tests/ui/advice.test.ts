@@ -75,6 +75,11 @@ describe('purchase advice', () => {
     expect(killerName({ killer: 'brute' })).toBe('A Brute');
     expect(killerName({ killer: 'artillery' })).toBe('An Artillery');
     expect(killerName({ killer: 'hazard' })).toBe('A hazard zone');
+    // C-13: the wave's boss owns the hazard (only boss hazards hurt the tower)
+    expect(killerName({ killer: 'hazard' }, 'Broodheart')).toBe("The Broodheart's hazard zone");
+    expect(killerName({ killer: 'hazard' }, 'The Warden')).toBe("The Warden's hazard zone");
+    expect(damageSourceName('hazard', 'warden')).toBe("The Warden's hazard zones");
+    expect(damageSourceName('hazard', null)).toBe('Hazard zones');
     expect(killerName({ killer: 'enemy' })).toBeNull();
     expect(killerName(undefined)).toBeNull();
     expect(deathHeadline(7, 5, killerName({ killer: 'brute' })).title).toBe('A Brute destroyed the tower on wave 7');

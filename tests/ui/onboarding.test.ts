@@ -155,3 +155,24 @@ describe('Quartermaster buys are not player feedback', () => {
     expect(bulkToast([buy(), buy(), buy('quartermaster')], null)).toBe('Bought 2 ranks for ♦200');
   });
 });
+
+describe('merged post-Prestige card (UX Phase 4, C-19)', async () => {
+  const { postPrestigeDigest } = await import('../../src/ui/coach');
+  const { features } = await import('../../src/ui/progression');
+  it('lists the lines a first Prestige reveals in one card, keeps reveal rules, and carries the QM action', () => {
+    const f = features({ run: { deepestCleared: 28 }, meta: { deepestEver: 28, prestigeCount: 1 } }, { unlockAll: false });
+    const before = features({ run: { deepestCleared: 28 }, meta: { deepestEver: 28, prestigeCount: 0 } }, { unlockAll: false });
+    // everything the wave-28 player had already read
+    const seen = new Set<string>(['start', 'checkpoint', 'elements', 'patrol', 'build', 'doctrines', 'abilities', 'boons', 'anomalies', 'bulk', 'prestige', 'cross', 'inspector', 'cores', 'salvage', 'overcharge']);
+    const qm = { id: 'qm-on', icon: 'blueprint', text: 'long', short: 'QM short', action: { label: 'Turn on', run: () => {} } };
+    const d = postPrestigeDigest(f, seen, [qm]);
+    expect(d).not.toBeNull();
+    expect(d!.ids).toEqual(expect.arrayContaining(['frame', 'exotics', 'machine', 'qm-on']));
+    expect(d!.items).toContain('QM short');
+    expect(d!.action?.label).toBe('Turn on');
+    // a single line is not merged; nothing before the reveal; Unlock everything shows none
+    expect(postPrestigeDigest(f, new Set([...seen, 'frame', 'exotics', 'machine']), [qm])).toBeNull();
+    expect(postPrestigeDigest(before, seen, [])?.ids.includes('machine') ?? false).toBe(false);
+    expect(postPrestigeDigest({ ...f, unlockAll: true }, seen, [qm])).toBeNull();
+  });
+});

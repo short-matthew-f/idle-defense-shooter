@@ -75,7 +75,7 @@ export class Shell {
   panelOpen: boolean;
   private badgeKey = '';
   /** What the unlock ladder reveals (GameUi sets it from every UiState; stage 0 until then). */
-  private feats: Features = featuresOf({ run: { deepestCleared: 0 }, meta: { deepestEver: 0, prestigeCount: 0 } }, { unlockAll: prefs().unlockAll });
+  private feats: Features = featuresOf({ run: { deepestCleared: 0 }, meta: { deepestEver: 0, prestigeCount: 0 } }, { screens: prefs().showAllScreens, content: prefs().offerAllContent });
   private shownKey = '';
   /** Called after the layout or insets changed. */
   onLayout: (() => void) | null = null;

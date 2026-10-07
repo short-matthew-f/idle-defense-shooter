@@ -29,3 +29,10 @@
 .rule-warn { margin: 6px 0 0; font-size: 0.875rem; line-height: 1.4; color: var(--warn); }
 .bp-head { display: flex; align-items: center; gap: 8px; }
 .bp-head .bp-name { flex: 1; min-width: 0; }
+
+/* N-08: four sub-tabs do not fit one row on a phone ("Upgrade Queue" and "Blueprints" were cut off behind the scroll fade): a 2 × 2 grid of 44 px targets with the full labels */
+@media (max-width: 559px) {
+  .automation > .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 4px; overflow: visible; padding-right: 0; -webkit-mask-image: none; mask-image: none; }
+  .automation > .tabs .tab { justify-content: center; min-width: 0; padding: 4px 6px; white-space: normal; text-align: center; line-height: 1.15; background: var(--bg-2); border-radius: 8px 8px 0 0; }
+  .automation > .tabs .tab.active { background: var(--bg-3); }
+}

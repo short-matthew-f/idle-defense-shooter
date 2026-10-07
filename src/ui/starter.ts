@@ -143,7 +143,7 @@ export class QuickBuyChip {
 
   update(ui: UiState, f: Features): void {
     const on = f.abilities && !starterVisible(f);
-    const p = on ? quickPick(ui, poolShop(ui.shop, contentPool(ui, { unlockAll: f.unlockAll }))) : null;
+    const p = on ? quickPick(ui, poolShop(ui.shop, contentPool(ui, { content: f.allContent }))) : null;
     this.pick = p;
     show(this.el, !!p);
     if (!p) return;

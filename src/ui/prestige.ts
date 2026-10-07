@@ -12,7 +12,7 @@ import type { AnomalyId, FrameId, TreeId } from '@sim/core/ids';
 import type { Command, UiState } from '@sim/core/types';
 import { button, h, text } from './dom';
 import { icon } from './icons';
-import { echoesFor, fmtNum } from './format';
+import { echoesFor, fmtAmount } from './format';
 import { ANOMALY_BY_ID, FRAME_BY_ID, FRAMES, TREES, TREE_LABEL } from './content';
 import type { FrameDef } from '@sim/data/schema';
 import { confirmDialog, openModal } from './modal';
@@ -27,7 +27,7 @@ export interface PrestigeChoices { echoes: number; frame: string; keepsake?: str
 
 /** The confirm step's summary of every choice (pure). */
 export function prestigeSummary(c: PrestigeChoices): string {
-  const parts = [`You gain ${fmtNum(c.echoes)} Echoes and start over at wave 1 with the ${c.frame} Frame.`];
+  const parts = [`You gain ${fmtAmount(c.echoes)} Echoes and start over at wave 1 with the ${c.frame} Frame.`];
   if (c.blueprint) parts.push(`Blueprint: ${c.blueprint}.`);
   if (c.keepsake !== undefined) parts.push(c.keepsake ? `Keepsake: ${c.keepsake} stays socketed.` : 'Keepsake: none (every Anomaly is lost).');
   if (c.dial !== undefined) parts.push(`Threat Dial: level ${c.dial}.`);
@@ -88,7 +88,7 @@ export function openPrestige(ctx: UiCtx): void {
     v.frontier ? h('div', { class: 'pr-verdict-line', text: v.frontier }) : null);
   const sections: HTMLElement[] = [
     verdict,
-    h('div', { class: 'pr-gain' }, icon('echo', 'ico'), h('span', { text: `+${fmtNum(echoes)} Echoes now` }), h('span', { class: 'dim', text: ` (deepest cleared: wave ${ui.run.deepestCleared})` })),
+    h('div', { class: 'pr-gain' }, icon('echo', 'ico'), h('span', { text: `+${fmtAmount(echoes)} Echoes now` }), h('span', { class: 'dim', text: ` (deepest cleared: wave ${ui.run.deepestCleared})` })),
   ];
   const frameSection: HTMLElement[] = [h('h3', { class: 'sec-title', text: 'Frame' }), frameCards];
   if (lockedFold) frameSection.push(lockedFold);
@@ -98,7 +98,7 @@ export function openPrestige(ctx: UiCtx): void {
     const sel = h('select', { class: 'select', attrs: { 'aria-label': 'Blueprint' } }, h('option', { attrs: { value: '' }, text: 'No blueprint' }),
       // content pool (progression.ts): a Blueprint naming a system the next Prestige does not offer yet cannot be loaded
       ...ui.meta.blueprints.map((b, i) => {
-        const ok = blueprintInPool(b, (ui.meta.prestigeCount | 0) + 1, { unlockAll: ctx.features().unlockAll });
+        const ok = blueprintInPool(b, (ui.meta.prestigeCount | 0) + 1, { content: ctx.features().allContent });
         return h('option', { attrs: { value: String(i), ...(ok ? {} : { disabled: '' }) }, text: `${b.name} (${FRAME_BY_ID.get(b.frame)?.name ?? b.frame})${ok ? '' : ' · needs a later Prestige'}` });
       }));
     sel.addEventListener('change', () => {

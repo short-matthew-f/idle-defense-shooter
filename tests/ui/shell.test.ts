@@ -150,13 +150,14 @@ const badgeState = (over: Partial<BadgeState> = {}): BadgeState => ({
 });
 
 describe('tab badges', () => {
-  it('counts affordable Scrap upgrades (not locked, maxed, Cores or Doctrine picks)', () => {
+  it('affordableCount counts affordable Scrap upgrades (not locked, maxed, Cores or Doctrine picks)', () => {
     const shop = [entry('a', 5), entry('b', 5, { affordable: false }), entry('c', 5, { locked: 'x' }), entry('d', 5, { rank: 10 }), entry('e', 1, { currency: 'cores' }), entry('f', 0, { kind: 'doctrine' }), entry('g', 9)];
     expect(affordableCount(shop)).toBe(2);
-    expect(tabBadges(badgeState({ shop })).upgrades).toMatchObject({ text: '2', kind: 'count' });
-    expect(tabBadges(badgeState()).upgrades).toBeNull();
+  });
+  it('B-20: Upgrades carries no standing count; only a decision or an unseen unlock badges', () => {
     const many = Array.from({ length: 120 }, (_, i) => entry(`n${i}`, 1));
-    expect(tabBadges(badgeState({ shop: many })).upgrades?.text).toBe('99+');
+    expect(tabBadges(badgeState({ shop: many })).upgrades).toBeNull();
+    expect(tabBadges(badgeState({ shop: many }), new Set(['upgrades'])).upgrades).toMatchObject({ text: 'New', kind: 'new', fresh: true });
   });
   it('flags a waiting draft, a new slot and an open Doctrine fork on Build', () => {
     expect(tabBadges(badgeState()).build).toBeNull();
@@ -178,7 +179,10 @@ describe('tab badges', () => {
     const f = { echoesNow: 1, echoRate: 1, peakRate: 1, nextBossEchoes: 1, nextBossRate: 1, reclimbSeconds: 1, wallGaugeSeconds: null, recommended: true, curve: [] };
     expect(tabBadges(badgeState({ forecast: f })).prestige).toMatchObject({ kind: 'alert', label: 'Prestige recommended' });
     expect(tabBadges(badgeState({ forecast: { ...f, recommended: false } })).prestige).toBeNull();
-    expect(tabBadges(badgeState({ run: { pendingDraft: null, hardpointSlotsOpen: 0, attunementSlotsOpen: 0, deepestCleared: 100 } })).prestige?.label).toBe('Ascension open');
+    const deep = badgeState({ run: { pendingDraft: null, hardpointSlotsOpen: 0, attunementSlotsOpen: 0, deepestCleared: 100 } });
+    expect(tabBadges(deep).prestige?.label).toBe('Ascension open');
+    // only the first Ascension is a new decision; afterwards the badge is gone
+    expect(tabBadges({ ...deep, meta: { ...deep.meta, ascension: 1 } }).prestige).toBeNull();
     expect(tabBadges(badgeState()).battle).toBeNull();
     expect(tabBadges(badgeState()).more).toBeNull();
   });

@@ -21,7 +21,7 @@ import type { UiState } from '@sim/core/types';
 import { gfxSettings, reducedMotion, systemReducedMotion } from '@render/quality';
 import { h, show, text, attr } from './dom';
 import { icon } from './icons';
-import { fmtNum } from './format';
+import { fmtAmount } from './format';
 import type { Features } from './progression';
 import type { TabId } from './shell-logic';
 
@@ -95,11 +95,11 @@ export function walletFigure(ui: WalletState, c: Currency): WalletFigure {
 }
 
 /** Exact below a million ("3,061"), else fmtNum: a dialog's "after" figure must not round a small gain away. */
-export function fmtExactish(n: number): string { return Math.abs(n) < 1e6 ? exactNum(n) : fmtNum(n); }
+export function fmtExactish(n: number): string { return fmtAmount(n); }
 
 /** "+61 → 3,061 after this Prestige": what the player keeps once a Prestige pays `gain` Echoes. */
 export function echoesAfter(gain: number): (ui: WalletState) => string {
-  return (ui) => (gain > 0 ? `+${fmtNum(gain)} → ${fmtExactish(ui.meta.echoes + gain)} after this Prestige` : '');
+  return (ui) => (gain > 0 ? `+${fmtAmount(gain)} → ${fmtExactish(ui.meta.echoes + gain)} after this Prestige` : '');
 }
 
 /** Scrap gains smaller than this share of the balance are income, not news (no flash). */

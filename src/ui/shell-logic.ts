@@ -59,7 +59,7 @@ export const DOCK_GAP = 8;
 
 // ---------------------------------------------------------------- badges
 
-export interface Badge { text: string; kind: 'count' | 'alert' | 'new'; label: string; /** a newly revealed tab (pulses until visited) */ fresh?: boolean }
+export interface Badge { text: string; kind: 'alert' | 'new'; label: string; /** a newly revealed tab (pulses until visited) */ fresh?: boolean }
 export type BadgeState = Pick<UiState, 'shop' | 'forecast'> & {
   /** `boonOffer`: Boons (optional so older call sites and tests need not set it). */
   run: Pick<UiState['run'], 'pendingDraft' | 'hardpointSlotsOpen' | 'attunementSlotsOpen' | 'deepestCleared'> & Partial<Pick<UiState['run'], 'boonOffer'>>;
@@ -100,9 +100,12 @@ export function openForkCount(s: BadgeState): number {
 /**
  * Badge per tab (null = none). Badges are the only UI text allowed under 14 px. `fresh` names tabs revealed by the
  * unlock ladder but never opened: they read "New" (an alert still wins).
+ *
+ * A badge marks a NEW DECISION or an unseen unlock that clears when the player acts: an Anomaly draft or Boon offer, an
+ * empty slot, an open Doctrine fork, Prestige recommended, the first Ascension, a tab not yet opened. It is never a
+ * standing count: the old Upgrades "N affordable" badge sat at 19 all game and told the player nothing (HANDBOOK-EVAL B-20).
  */
 export function tabBadges(s: BadgeState, fresh: ReadonlySet<TabId> = new Set()): Record<TabId, Badge | null> {
-  const n = affordableCount(s.shop);
   const slots = emptySlots(s);
   const forks = openForkCount(s);
   const draft = !!s.run.pendingDraft && s.run.pendingDraft.length > 0;
@@ -112,12 +115,13 @@ export function tabBadges(s: BadgeState, fresh: ReadonlySet<TabId> = new Set()):
     : slots > 0 ? { text: '+', kind: 'new', label: slots === 1 ? 'New slot open' : `${slots} slots open` }
     : forks > 0 ? { text: '+', kind: 'new', label: forks === 1 ? 'Doctrine fork open' : `${forks} Doctrine forks open` }
     : null;
-  const ascend = s.run.deepestCleared >= 100 && s.meta.ascension < 99;
+  // only the FIRST Ascension is a new decision; later ones are routine and would badge Prestige for good
+  const ascend = s.run.deepestCleared >= 100 && s.meta.ascension === 0;
   const prestige: Badge | null = s.forecast?.recommended ? { text: '!', kind: 'alert', label: 'Prestige recommended' }
     : ascend ? { text: '!', kind: 'alert', label: 'Ascension open' } : null;
   const out: Record<TabId, Badge | null> = {
     battle: null,
-    upgrades: n > 0 ? { text: n > 99 ? '99+' : String(n), kind: 'count', label: `${n} affordable` } : null,
+    upgrades: null,
     build,
     prestige,
     more: null,

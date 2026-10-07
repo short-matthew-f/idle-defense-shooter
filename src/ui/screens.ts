@@ -188,7 +188,7 @@ export const MORE_ITEMS: MoreItem[] = [
   { id: 'codex', label: 'Chain Codex', icon: 'codex', hint: 'Discovered interactions and rumours', reveal: 'codex' },
   { id: 'automation', label: 'Automation', icon: 'directives', hint: 'Directives, Targeting, Upgrade Queue, Blueprints', lock: (ui) => (pr(ui, 'directives') || pr(ui, 'blueprint_slots') ? null : earliestGate(['directives', 'blueprint_slots'], ui.meta.deepestEver)?.text ?? null), reveal: 'automation' },
   { id: 'trials', label: 'Trials', icon: 'trials', hint: 'Constraint runs with permanent rewards', lock: (ui) => gateText('trials', ui.meta.deepestEver, pr(ui, 'trials')), reveal: 'trials' },
-  { id: 'settings', label: 'Settings', icon: 'settings', hint: 'Clarity, sound, saves, unlock everything, start over' },
+  { id: 'settings', label: 'Settings', icon: 'settings', hint: 'Text size, clarity, sound, saves, show all screens, start over' },
   { id: 'help', label: 'Help & shortcuts', icon: 'info', hint: 'Tips, gestures, keys' },
 ];
 

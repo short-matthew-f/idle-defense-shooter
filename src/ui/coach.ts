@@ -11,7 +11,7 @@ import '../styles/coach.css';
 import { button, h, show, text } from './dom';
 import { icon } from './icons';
 import { prefs, setPref } from './prefs';
-import type { FeatureId, Features } from './progression';
+import { stageOfFeature, type FeatureId, type Features } from './progression';
 
 export type CoachId = 'start' | 'checkpoint' | 'elements' | 'patrol' | 'build' | 'abilities' | 'boons' | 'anomalies' | 'bulk' | 'prestige' | 'cross' | 'inspector'
   | 'cores' | 'frame' | 'exotics' | 'doctrines' | 'machine' | 'salvage' | 'overcharge';
@@ -125,7 +125,41 @@ export function initialSeen(f: Features, stage: number): CoachId[] {
  * ceremony.ts / index.ts). Shown after every unread ladder message, first unread first; read = its id in coachSeen.
  * `action` adds a button (e.g. "Turn on") that runs and then marks the line read.
  */
-export interface CoachExtra { id: string; icon: string; text: string; action?: { label: string; run: () => void } }
+export interface CoachExtra { id: string; icon: string; text: string; action?: { label: string; run: () => void };
+  /** UX Phase 4: the line's entry in the merged post-Prestige card (defaults to `text`), and its button label there. */
+  short?: string; digestAction?: string }
+
+/** UX Phase 4 (C-19): the one merged card after a Prestige (its id; reading it reads every line it lists). */
+export const DIGEST_ID = 'post-prestige';
+export const DIGEST_TITLE = 'A new machine. Open now:';
+/** Shorter entries for the ladder lines a Prestige reveals together (the card lists them; Help keeps the full text). */
+const DIGEST_SHORT: Partial<Record<CoachId, string>> = {
+  machine: 'Echoes: spend them under Prestige → Echo tiers.',
+  cores: 'Cores drop from bosses: Upgrades → Cores and Build.',
+  frame: 'Build → Frame: your machine\'s body, chosen at Prestige.',
+  exotics: 'Exotics: Core-priced upgrades in Upgrades → Cores.',
+};
+
+export interface CoachDigest { ids: string[]; items: string[]; action?: CoachExtra['action'] }
+
+/**
+ * After a Prestige (prestigeCount ≥ 1), the unread lines a Prestige reveals (stage 7) and the unread post-Prestige extras
+ * come as ONE card with a short list instead of a queue of banners (one per wave clear). Null when fewer than two are
+ * due. The reveal rules are unchanged: only revealed features' lines (and the extras index.ts offers) are listed. At most
+ * one extra's action button (the Quartermaster's "Turn on") rides on the card. Pure (tests).
+ */
+export function postPrestigeDigest(f: Features, seen: ReadonlySet<string>, extras: readonly CoachExtra[]): CoachDigest | null {
+  if (f.unlockAll) return null;
+  // only the lines a Prestige reveals (stage 7); earlier unread lines keep the normal queue after the card
+  const lines = COACH.filter((m) => f[m.feature] && !seen.has(m.id) && !EVENT_COACH.has(m.id) && stageOfFeature(m.feature) === 7);
+  const xs = extras.filter((x) => !seen.has(x.id));
+  if (lines.length + xs.length < 2) return null;
+  return {
+    ids: [...lines.map((m) => m.id), ...xs.map((x) => x.id)],
+    items: [...lines.map((m) => DIGEST_SHORT[m.id] ?? m.text), ...xs.map((x) => x.short ?? x.text)],
+    action: (() => { const x = xs.find((e) => e.action); return x?.action ? { label: x.digestAction ?? x.action.label, run: x.action.run } : undefined; })(),
+  };
+}
 
 /**
  * An info-only line (no action button) shrinks to its compact form (up to two lines) once it has been on screen on Battle
@@ -151,6 +185,8 @@ export class CoachBanner {
   private readonly act: HTMLButtonElement;
   private cur: CoachMsg | null = null;
   private extra: CoachExtra | null = null;
+  /** The ids the merged post-Prestige card lists (all read on "Got it"), or null. */
+  private digestIds: string[] | null = null;
   /** Shrunk (info-only lines): the overlay lanes give it the compact height (lanes.ts). */
   shrunk = false;
   /** Called when the banner changes (a new line, shown / hidden, shrunk / expanded): the overlay lanes re-fit. */
@@ -217,9 +253,21 @@ export class CoachBanner {
   }
 
   /** `extras` wait behind the ladder; `hold` ids count as read for now (e.g. 'machine' while the Echo guide runs). */
-  update(f: Features, live: CoachLive, extras: readonly CoachExtra[] = [], hold: readonly string[] = []): void {
-    const seen = new Set([...prefs().coachSeen, ...hold]);
+  update(f: Features, live: CoachLive, extras: readonly CoachExtra[] = [], hold: readonly string[] = [], afterPrestige = false): void {
+    const read = new Set(prefs().coachSeen);
+    const seen = new Set([...read, ...hold]);
     let next = pendingCoach(f, seen, live);
+    // UX Phase 4: after a Prestige, the lines it revealed come as one card (it waits while a hold runs, e.g. the Echo guide)
+    const digest = afterPrestige ? postPrestigeDigest(f, read, extras) : null;
+    if (digest) {
+      const urgent = next && isEventCoach(next.id) ? next : null;
+      if (!urgent) {
+        if (hold.length) { if (this.cur || this.extra) this.showExtra(null); return; }
+        const items = digest.items;
+        this.showExtra({ id: DIGEST_ID, icon: 'prestige', text: `${DIGEST_TITLE} ${items.join(' ')}`, action: digest.action }, { ids: digest.ids, items });
+        return;
+      }
+    } else if (this.digestIds) this.showExtra(null);
     // the queue: at most one new line per wave clear (a line already up stays; an urgent explainer may jump in)
     if (next && next.id !== this.cur?.id && !mayIntroduce(this.introducedAt, this.wave, next.id)) {
       if (this.cur && !seen.has(this.cur.id)) next = this.cur;
@@ -246,10 +294,11 @@ export class CoachBanner {
     this.fresh();
   }
 
-  private showExtra(x: CoachExtra | null): void {
+  private showExtra(x: CoachExtra | null, digest: { ids: string[]; items: string[] } | null = null): void {
     this.cur = null;
     if (x?.id === this.extra?.id && x?.text === this.extra?.text) { if (x && !this.want) { this.want = true; this.sync(); } return; }
     this.extra = x;
+    this.digestIds = digest ? digest.ids : null;
     this.want = !!x;
     this.sync();
     this.act.hidden = !x?.action;
@@ -257,7 +306,10 @@ export class CoachBanner {
     this.introducedAt = this.wave;
     text(this.act, x.action?.label ?? '');
     this.ico.replaceChildren(icon(x.icon, 'ico'));
-    text(this.msg, x.text);
+    if (digest) this.msg.replaceChildren(h('span', { class: 'coach-digest-title', text: DIGEST_TITLE }),
+      h('ul', { class: 'coach-digest' }, ...digest.items.map((t) => h('li', { text: t }))));
+    else text(this.msg, x.text);
+    this.el.classList.toggle('digest', !!digest);
     this.el.dataset.coach = x.id;
     this.el.classList.remove('in'); void this.el.offsetWidth; this.el.classList.add('in');
     this.fresh();
@@ -274,7 +326,7 @@ export class CoachBanner {
   expand(): void { this.fresh(); }
 
   dismiss(): void {
-    if (this.extra) { markCoachSeen([this.extra.id]); this.extra = null; this.act.hidden = true; this.want = false; this.sync(); this.fresh(); return; }
+    if (this.extra) { markCoachSeen(this.digestIds ? [...this.digestIds, this.extra.id] : [this.extra.id]); this.extra = null; this.digestIds = null; this.act.hidden = true; this.want = false; this.sync(); this.fresh(); return; }
     const id = this.cur?.id;
     if (!id) return;
     markCoachSeen(staleWith(id));
