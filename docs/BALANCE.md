@@ -447,3 +447,45 @@ and ×1.36, both kamikaze_ring band 1 laser); synchronized_burst b2 gravitics fe
 
 Directive gap (closes 75%, target 40–70%) still fails; it was not part of this pass. Full `sim:accept` wall time
 438 s → ~720 s (the counterfactual and the larger difficulty grid).
+
+## Directive gap: measure the real automation (2026-10-07)
+
+**Problem.** The Directive gap row compared fresh-start climbs. Without `prestige.directives` or `prestige.autocast`
+the directive policy fell back to an emulated caster ("one affordable ability at the largest group every 3 s"), so the
+game's Directive engine and Autocast never ran (1 Counter in 6 seeds).
+
+**Fix (harness only, `sim-cli/`).** The row now starts all three climbs from the same state (`runner.ts
+automationStart`): the Generalist's real first Prestige (climb to the recommendation, `prestige`, Echoes spent by
+`spendEchoes`, i.e. Prestige 2 of the chain) plus Autocast rank 1 and Directives rank 1. Idle and active leave the
+automation off (Autocast off for every ability, no Directives); the directive policy slots Repulsor Pulse and
+Bombardment and installs a 3-rule set (`policies.ts AUTOMATION_DIRECTIVES`: designate an open weak point on boss
+waves; Repulsor Pulse at 5+ in the inner ring; Bombardment into groups of 10+). Full mode, 6 edge seeds; quick mode
+skips it. The old fresh-start row is kept as **Lazy caster (reference)**, reported, never gating.
+
+- *Ranks are an idealisation.* Autocast is a Prestige II node (80 Echoes, opens at deepest-ever wave 40) and Directives a
+  Prestige III node (1500 Echoes, opens at wave 60); a real owner of both is several Prestiges in. The first Prestige pays
+  ~43 Echoes at wave 28, so the layer gates are bypassed on purpose: the row measures the automation on the same
+  checkpoints the Active edge row uses, not a wave-60 player's whole meta.
+- *No Counters.* Without Autonomy (Prestige IV, 50,000 Echoes) no rule can read a boss tell (`boss_tell_active` is an
+  Adept condition), so rules and Autocast spend CE blind and are rarely ready inside a 1–1.5 s tell window; Autocast's
+  Hunter Mark skips a boss that is already marked. Measured: 0 Counters in 495 tells. The engine's Counter path itself works
+  (`tests/accept/automation.test.ts`: with Autonomy, a `boss_tell_active` rule scores at 50%).
+
+| Row (full `sim:accept`, seeds 1–3, edge seeds 1–6) | Value |
+| --- | --- |
+| Directive gap (real automation) | FAIL, closes 37.9% (attempts idle 117, directive 106, active 88; directive casts 1598, Counters 0/495) |
+| Lazy caster (reference) | closes 53.8% (idle 156, lazy 135, active 117), the old row's value |
+| Every other row | identical to master 148be94 (Determinism 993e9175) |
+
+Other rule sets on seeds 1–2 (attempts to wave 60, idle 78, active 65): this set 75; designations only + Autocast 54;
+Hunter Mark + Repulsor sets 74–81; Hunter Mark + Bombardment 67. Per-seed noise is several attempts, so the set was not
+picked on these numbers.
+
+## Spend efficiency on seeds 7–12: Elemental Poison (2026-10-07)
+
+`sim:accept --seeds 7,…` judges Spend efficiency on seed 7 only. The offender is the Elemental agent's Poison: spend 27.4%,
+damage 9.7%, counterfactual 3.2% of the build's contribution (6 waves; 8.1% on 12 other waves). Re-measured on seeds 1–3
+and 7–12 (simulator): Poison takes 21–28% of spend everywhere; its damage share is 5.7–15.5% (under 10% on seeds 3, 7, 8)
+and its counterfactual share 3.2–11.3% (under 10% on 7 of 9 seeds). Not a measurement bug and not a one-seed fluke:
+Poison ranks are still weak for their cost after the Toxic Combustion change; seed 1 (the default gate) sits just above
+the line. Toxic Bloom boon damage (a % of max HP, not scaled by Poison ranks) is not credited to Poison, correctly.

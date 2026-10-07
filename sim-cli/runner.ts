@@ -28,6 +28,7 @@ import { echoesFor, nodeCost } from '../src/sim/economy/curves';
 import { nodeInfo } from '../src/sim/core/content';
 import { PRESTIGE_NODES } from '../src/sim/data/index';
 import { QM_DEFAULT_SHARE } from '../src/sim/directives/quartermaster';
+import { ABILITY_IDS } from '../src/sim/systems/abilities';
 import { makeAgent } from './agents/index';
 import { makeCtx, totalSpent, type Agent, type AgentCtx } from './agents/base';
 import { makePolicy, type Policy } from './policies';
@@ -438,6 +439,42 @@ export function runPrestige(cfg: RunConfig, n: number): PrestigeChainResult {
     out.notes.push(`prestige ${i + 1} (run stopped: ${out.runs[i].stopReason}): deepest ${deep}, echoes +${p.paid} (bank ${Math.floor(sim.world.meta.echoes)} after buying ${bought.length} nodes)`);
   }
   return out;
+}
+
+/**
+ * Directive gap start state (acceptance, docs/ACTIVE.md): the automation a player owns a few Prestiges in.
+ * Autocast is a Prestige II node (80 Echoes, opens at deepest-ever wave 40), Directives a Prestige III node (1500 Echoes,
+ * opens at wave 60); rank 1 of each is the first thing a player who wants automation buys. Both are granted on top of the
+ * Generalist's real first Prestige (climb to the recommendation, `prestige`, Echoes spent by spendEchoes, exactly like
+ * Prestige 2 of the chain), so the comparison runs on the same checkpoints as the Active edge row. The layer gates are
+ * bypassed on purpose: the row measures the automation, not the rest of a wave-60 player's meta.
+ */
+export const AUTOMATION_RANKS: Readonly<Record<string, number>> = { 'prestige.autocast': 1, 'prestige.directives': 1 };
+
+/**
+ * The Sim at the start of Prestige 2 with AUTOMATION_RANKS owned. `automation` false: the player leaves it unused
+ * (Autocast switched off for every ability, no Directives), the idle / active baselines; true: Autocast on, and the
+ * directive policy installs its Directive set (policies.ts AUTOMATION_DIRECTIVES).
+ */
+export function automationStart(seed: number, automation: boolean): Sim {
+  const cfg: RunConfig = { name: `automation-base-s${seed}`, seed, agent: 'generalist', policy: 'idle', stopAtRecommendation: true, hashes: false };
+  const sim = newSim(cfg);
+  new Climber(sim, cfg).run();
+  const p = prestigeOnce(sim, 'standard');
+  if (!p.ok) throw new Error(`automationStart: prestige failed (${p.err ?? 'no state change'})`);
+  spendEchoes(sim);
+  const w = sim.world;
+  for (const [id, r] of Object.entries(AUTOMATION_RANKS)) w.meta.prestigeRanks[id] = Math.max(r, w.meta.prestigeRanks[id] | 0);
+  w.meta.directives = [];
+  w.meta.settings.autocastOff = automation ? 0 : (1 << ABILITY_IDS.length) - 1;
+  w.rebuildStats();
+  return sim;
+}
+
+/** One climb from automationStart (Directive gap rows): idle and active leave the automation off, directive uses it. */
+export function runAutomationAttempt(cfg: RunConfig): RunResult {
+  const sim = automationStart(cfg.seed, cfg.policy === 'directive');
+  return new Climber(sim, cfg).run();
 }
 
 /**

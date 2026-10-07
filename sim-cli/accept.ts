@@ -4,7 +4,7 @@
  *
  * Runs every §19 acceptance test, prints the table, writes sim-out/accept[-quick].{json,md},
  * sim-out/difficulty.{json,md} and one JSON per run under sim-out/accept/, and exits non-zero when
- * any test fails (skipped tests do not fail the gate).
+ * any test fails (skipped and reference rows do not fail the gate).
  */
 import { parseArgs, list, num } from './args';
 import { runAcceptance } from './acceptance';
@@ -30,9 +30,10 @@ async function main(): Promise<void> {
   if (d.chain) writeJson('chain', d.chain, join(out, `accept${suffix}`));
   if (d.difficulty) { writeJson(`difficulty${suffix}`, d.difficulty, out); writeText(`difficulty${suffix}.md`, difficultyMarkdown(d.difficulty), out); }
   console.log(acceptMarkdown(rep.rows));
-  const failed = rep.rows.filter((r) => !r.pass && !r.skipped);
-  const skipped = rep.rows.filter((r) => r.skipped);
-  console.log(`\n${rep.rows.length - failed.length - skipped.length} passed, ${failed.length} failed, ${skipped.length} skipped · ${Math.round((performance.now() - t0) / 1000)} s`);
+  const failed = rep.rows.filter((r) => !r.pass && !r.skipped && !r.reference);
+  const skipped = rep.rows.filter((r) => r.skipped && !r.reference);
+  const refs = rep.rows.filter((r) => r.reference);
+  console.log(`\n${rep.rows.length - failed.length - skipped.length - refs.length} passed, ${failed.length} failed, ${skipped.length} skipped, ${refs.length} reference · ${Math.round((performance.now() - t0) / 1000)} s`);
   process.exitCode = failed.length ? 1 : 0;
 }
 

@@ -2,8 +2,8 @@
  * Player policies (design §10, §11, §19): what the "player" does in combat besides buying.
  *
  *  idle       no commands at all (the purchase agent still buys and answers drafts).
- *  directive  with `prestige.directives` owned: installs a default Directive set once per Prestige
- *             (`set_directives`) and lets the sim run it. With `prestige.autocast` owned: slots
+ *  directive  with `prestige.directives` owned: slots AUTOMATION_SLOTS, installs AUTOMATION_DIRECTIVES once per
+ *             Prestige (`set_directives`) and lets the sim's engine and Autocast run them (the Directive gap row). With `prestige.autocast` owned: slots
  *             abilities and lets the sim Autocast. Otherwise it emulates Autocast: every 3 s it casts
  *             one affordable slotted ability at the largest group, with a 0.6 s reaction delay.
  *  active     oracle-ish human: 0.2 s reaction; casts the boss's Counter when `bossTell` matches a
@@ -37,16 +37,22 @@ export interface PolicyStats { casts: number; designations: number; directivesIn
 
 interface Pending { at: number; cmd: Command }
 
-/** Default Directive set (§11 examples plus survival and designation rules). */
-export const DEFAULT_DIRECTIVES: Directive[] = [
-  { enabled: true, conditions: [{ kind: 'tower_hp_below', pct: 30 }], action: { kind: 'cast', ability: 'emergency_repair', at: 'tower' } },
-  { enabled: true, conditions: [{ kind: 'boss_tell_active' }], action: { kind: 'designate', what: 'weak_point' } },
-  { enabled: true, conditions: [{ kind: 'inner_ring_at_least', n: 5 }], action: { kind: 'cast', ability: 'repulsor_pulse', at: 'tower' } },
-  { enabled: true, conditions: [{ kind: 'group_at_least', n: 12, radius: 90 }], action: { kind: 'cast', ability: 'bombardment', at: 'largest_group' } },
+/**
+ * The Directive set the directive policy installs (Directive gap row, runner.ts automationStart): what a player builds in
+ * the editor with Directives rank 1 (3 rules) and two tactical slots (Repulsor Pulse, Bombardment). Without Autonomy
+ * no rule can read a boss tell, so the rules spend CE where it pays and leave the rest to Autocast:
+ *  1. on boss waves, designate an open weak point (the window a Counter opens);
+ *  2. Repulsor Pulse when 5+ enemies crowd the inner ring;
+ *  3. Bombardment into groups of 10+.
+ * Autocast runs every slotted ability no enabled rule casts (none here) — see AUTOMATION_SLOTS.
+ */
+export const AUTOMATION_DIRECTIVES: Directive[] = [
   { enabled: true, conditions: [{ kind: 'wave_is', which: 'boss' }], action: { kind: 'designate', what: 'weak_point' } },
-  { enabled: true, conditions: [{ kind: 'enemy_present', enemy: 'healer' }], action: { kind: 'designate', what: 'healer' } },
-  { enabled: true, conditions: [{ kind: 'enemy_present', enemy: 'warden' }], action: { kind: 'designate', what: 'warden' } },
+  { enabled: true, conditions: [{ kind: 'inner_ring_at_least', n: 5 }], action: { kind: 'cast', ability: 'repulsor_pulse', at: 'tower' } },
+  { enabled: true, conditions: [{ kind: 'group_at_least', n: 10, radius: 90 }], action: { kind: 'cast', ability: 'bombardment', at: 'largest_group' } },
 ];
+/** Tactical slots for the directive policy (two at Prestige 2: the bosses at 5 and 10 are countered by these two). */
+export const AUTOMATION_SLOTS: AbilityId[] = ['repulsor_pulse', 'bombardment'];
 
 const QBUF = new Int32Array(2048);
 
@@ -146,6 +152,7 @@ export class DirectivePolicy extends Policy {
   private nextCheck = 0;
   private mode: 'directives' | 'autocast' | 'emulated' = 'emulated';
   static readonly DELAY = Math.round(0.6 * TICK_RATE);
+  constructor(private readonly directives: Directive[] = AUTOMATION_DIRECTIVES, private readonly slots: AbilityId[] = AUTOMATION_SLOTS) { super(); }
 
   protected decide(sim: Sim): void {
     const w = sim.world, meta = w.meta;
@@ -153,12 +160,12 @@ export class DirectivePolicy extends Policy {
       this.installedFor = meta.prestigeCount;
       if ((meta.prestigeRanks['prestige.directives'] | 0) > 0) {
         this.mode = 'directives';
-        this.setSlots(sim, ['repulsor_pulse', 'bombardment', 'emergency_repair']);
-        const err = applyCommand(sim.machine, { type: 'set_directives', directives: DEFAULT_DIRECTIVES });
+        this.setSlots(sim, this.slots);
+        const err = applyCommand(sim.machine, { type: 'set_directives', directives: this.directives });
         if (err) this.noop(`set_directives:${err}`); else this.stats.directivesInstalled++;
       } else if ((meta.prestigeRanks['prestige.autocast'] | 0) > 0) {
         this.mode = 'autocast';
-        this.setSlots(sim, ['bombardment', 'repulsor_pulse']);
+        this.setSlots(sim, this.slots);
       } else {
         this.mode = 'emulated';
         this.setSlots(sim, ['bombardment', 'repulsor_pulse']);

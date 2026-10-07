@@ -5,7 +5,8 @@
  * row and returns the table plus the raw runs.
  *
  * Modes
- *  - full  (npm run sim:accept): 3 seeds × {Generalist idle/active/directive, Greedy, Survival}
+ *  - full  (npm run sim:accept): 6 seeds × {Generalist idle/active/directive, Greedy, Survival}, plus the Directive gap's
+ *          idle/active/directive climbs from Prestige 2 with Autocast + Directives owned on the 6 edge seeds,
  *          at 4 sim-hours per climb (stop at wave 100 or the 40-min wall); Elemental, Random, the
  *          five hardpoint agents (4 h) and the beam Optimizer (2 h) on seed 1; every Doctrine probe
  *          (1 h); the Optimizer-lite with every base-pool Anomaly forced (40 min, 3 seeds); a 3-Prestige
@@ -27,7 +28,12 @@
  *    hardpoint agent's deepest cleared wave ≥ 85% of F. With no finale cleared, final depths.
  *  - Active edge: attempts summed over the checkpoints both policies reached; idle "clears every
  *    boss" = in the same sim time, idle's checkpoint is at most one boss behind active's.
- *  - Directive gap: (A_idle − A_directive) / (A_idle − A_active) over common checkpoints.
+ *  - Directive gap: (A_idle − A_directive) / (A_idle − A_active) over common checkpoints, all three climbs from the
+ *    same post-Prestige start that owns Autocast and Directives (runner.ts automationStart): idle and active leave the
+ *    automation off, the directive policy installs its Directive set and leaves Autocast on, so the game's own engine
+ *    plays. Full mode only, on the edge seeds. The fresh-start `generalist-directive` climbs (no automation owned: the
+ *    policy's emulated "cast one affordable ability at the largest group every 3 s" bot) are the Lazy caster
+ *    (reference) row, which never gates.
  *  - Anomaly cap: mean depth (over the seeds) of the Optimizer with each base-pool Anomaly forced
  *    at the first draft (and never replaced) vs the same Optimizer skipping that draft (later
  *    drafts natural in both), same seeds and time. Uses `optimizer_lite` (lookahead 1) — the beam
@@ -113,6 +119,13 @@ export function plan(mode: Mode, seeds: number[], hours: number): Plan[] {
   for (const seed of edgeSeedsFor(mode, seeds).filter((x) => !seeds.includes(x))) {
     for (const policy of ['idle', 'active', 'directive'] as const) att(`generalist-${policy}-s${seed}`, { seed, agent: 'generalist', policy, maxSimSeconds: H });
   }
+  // Directive gap (full mode): idle / active / directive from the same post-Prestige start with the automation owned
+  if (!quick) {
+    for (const seed of edgeSeedsFor(mode, seeds)) for (const policy of ['idle', 'active', 'directive'] as const) {
+      const key = `automation-${policy}-s${seed}`;
+      out.push({ key, job: { kind: 'automation', cfg: { stopAtWave: 100, seed, agent: 'generalist', policy, maxSimSeconds: H, name: key } } });
+    }
+  }
   for (const seed of seeds) {
     att(`generalist-idle-s${seed}`, { seed, agent: 'generalist', policy: 'idle', maxSimSeconds: H });
     att(`generalist-active-s${seed}`, { seed, agent: 'generalist', policy: 'active', maxSimSeconds: H });
@@ -159,20 +172,20 @@ export function plan(mode: Mode, seeds: number[], hours: number): Plan[] {
   return out;
 }
 
-/** The runs the Spend efficiency row judges: every idle agent climb on the first seed (no Anomaly / Doctrine probes). */
+/** The runs the Spend efficiency row judges: every idle agent climb on the first seed (no Anomaly / Doctrine probes, no post-Prestige automation climbs). */
 function isSpendRun(key: string, s0: number): boolean {
-  return key.endsWith(`-idle-s${s0}`) && !key.startsWith('anomaly-') && !key.startsWith('doctrine-');
+  return key.endsWith(`-idle-s${s0}`) && !key.startsWith('anomaly-') && !key.startsWith('doctrine-') && !key.startsWith('automation-');
 }
 
 export async function gather(opts: AcceptOptions): Promise<AcceptData> {
   const mode = opts.mode;
-  const seeds = opts.seeds ?? (mode === 'quick' ? [1] : [1, 2, 3]);
+  const seeds = opts.seeds ?? (mode === 'quick' ? [1] : [1, 2, 3, 4, 5, 6]);   // 6 full seeds: several rows flip on 3 (2026-10-07)
   const hours = opts.hours ?? (mode === 'quick' ? 0.5 : 4);
   const log = opts.log ?? (() => {});
   const p = plan(mode, seeds, hours);
   if (opts.noBoons) for (const x of p) if ('cfg' in x.job && !x.key.startsWith('boon-')) (x.job.cfg as RunConfig).noBoons = true;
   // Longest jobs first so the pool drains evenly.
-  const weight = (x: Plan): number => (x.job.kind === 'chain' ? 4 : x.job.kind === 'diffclimb' ? 3 : x.key.startsWith('optimizer') ? 5 : x.key.startsWith('anomaly') ? 2 : 1);
+  const weight = (x: Plan): number => (x.job.kind === 'chain' ? 4 : x.job.kind === 'diffclimb' ? 3 : x.key.startsWith('optimizer') ? 5 : x.key.startsWith('anomaly') || x.job.kind === 'automation' ? 2 : 1);
   const order = p.map((_, i) => i).sort((a, b) => weight(p[b]) - weight(p[a]) || a - b);
   const t0 = performance.now();
   log(`acceptance ${mode}: ${p.length} jobs, seeds ${seeds.join(',')}, ${hours} sim-h per climb, ${opts.parallel ?? 'auto'} parallel`);
@@ -184,7 +197,7 @@ export async function gather(opts: AcceptOptions): Promise<AcceptData> {
   const runs: Record<string, RunResult> = {};
   const snaps: ArchetypeSnapshots[] = [];
   for (const x of p) {
-    if (x.job.kind === 'attempt') runs[x.key] = byKey[x.key] as RunResult;
+    if (x.job.kind === 'attempt' || x.job.kind === 'automation') runs[x.key] = byKey[x.key] as RunResult;
     else if (x.job.kind === 'diffclimb') snaps.push(byKey[x.key] as ArchetypeSnapshots);
   }
   const chains = p.filter((x) => x.job.kind === 'chain').map((x) => byKey[x.key] as PrestigeChainResult).filter(Boolean);
@@ -349,7 +362,7 @@ export function testForecast(d: AcceptData): AcceptRow {
 
 export function testBuildHealth(d: AcceptData): AcceptRow {
   const s0 = d.seeds[0];
-  const all = Object.entries(d.runs).filter(([k]) => k.endsWith(`-idle-s${s0}`) && !k.startsWith('doctrine-') && !k.startsWith('anomaly-')).map(([, r]) => r);
+  const all = Object.entries(d.runs).filter(([k]) => k.endsWith(`-idle-s${s0}`) && !k.startsWith('doctrine-') && !k.startsWith('anomaly-') && !k.startsWith('automation-')).map(([, r]) => r);
   const hp = HARDPOINT_AGENTS.map((a) => d.runs[`${a}-idle-s${s0}`]).filter(Boolean);
   if (!hp.length || !all.length) return { name: 'Build health', pass: false, skipped: 'no runs', value: '—', target: '≥ 85%', notes: '' };
   const best = all.reduce((a, b) => (b.deepestCleared > a.deepestCleared ? b : a));
@@ -440,17 +453,47 @@ export function testActiveEdge(d: AcceptData): AcceptRow {
     notes: `${behind.length ? `idle behind: ${behind.join(', ')}` : 'idle keeps up with every boss'}; active casts ${casts}, tells ${tells}, counters ${counters} (${pct(tells ? counters / tells : NaN)}); rejected: ${JSON.stringify(act[0]?.noops ?? {})}` };
 }
 
-export function testDirectiveGap(d: AcceptData): AcceptRow {
-  const idle = edgeSeries(d, 'generalist-idle'), act = edgeSeries(d, 'generalist-active'), dir = edgeSeries(d, 'generalist-directive');
+/** Attempts over the checkpoints every run of each seed reached: idle, active, directive (summed over seeds). */
+function gapAttempts(idle: RunResult[], act: RunResult[], dir: RunResult[]): { ai: number; aa: number; ad: number; n: number } {
   let ai = 0, aa = 0, ad = 0;
-  for (let i = 0; i < Math.min(idle.length, act.length, dir.length); i++) {
+  const n = Math.min(idle.length, act.length, dir.length);
+  for (let i = 0; i < n; i++) {
     const c = commonCp([idle[i], act[i], dir[i]]);
     ai += attemptsUpTo(idle[i], c); aa += attemptsUpTo(act[i], c); ad += attemptsUpTo(dir[i], c);
   }
+  return { ai, aa, ad, n };
+}
+
+function sumOf(rs: RunResult[], k: 'casts' | 'counters' | 'tells'): number { return rs.reduce((s, r) => s + r[k], 0); }
+
+/**
+ * Directive gap: the real automation (Autocast + Directives owned, the game's engine plays) from the start of Prestige 2,
+ * against idle and active from the same start (runner.ts automationStart). Needs the full run's `automation-*` climbs.
+ */
+export function testDirectiveGap(d: AcceptData): AcceptRow {
+  const idle = edgeSeries(d, 'automation-idle'), act = edgeSeries(d, 'automation-active'), dir = edgeSeries(d, 'automation-directive');
+  const target = 'Directives + Autocast close 40–70% of the idle→active gap (from Prestige 2, automation owned)';
+  if (!idle.length || !act.length || !dir.length) return { name: 'Directive gap', pass: false, skipped: 'needs full run: the post-Prestige automation climbs run in full mode only', value: '—', target, notes: '' };
+  const { ai, aa, ad, n } = gapAttempts(idle, act, dir);
   const gap = ai - aa;
   const closed = gap > 0 ? (ai - ad) / gap : NaN;
-  return { name: 'Directive gap', pass: inRange(closed, 0.4, 0.7), value: gap > 0 ? `closes ${pct(closed)}` : `no idle→active gap (idle ${ai}, active ${aa}, directive ${ad})`,
-    target: 'Directive policy closes 40–70% of the idle→active gap', notes: `${idle.length} seeds; attempts idle ${ai}, directive ${ad}, active ${aa}; directive casts ${dir.reduce((s, r) => s + r.casts, 0)}` };
+  // the engine played when the directive climbs cast (idle and active have the automation off); Counters are reported, not
+  // required: without Autonomy no rule can read a tell, so automation only Counters by chance (measured 0 on seeds 1-2)
+  const engineOn = sumOf(dir, 'casts') > 0;
+  return { name: 'Directive gap', pass: inRange(closed, 0.4, 0.7) && engineOn, value: gap > 0 ? `closes ${pct(closed)}` : `no idle→active gap (idle ${ai}, active ${aa}, directive ${ad})`,
+    target,
+    notes: `${n} seeds from Prestige 2 (autocast 1, directives 1); attempts idle ${ai}, directive ${ad}, active ${aa}; directive casts ${sumOf(dir, 'casts')}, counters ${sumOf(dir, 'counters')}/${sumOf(dir, 'tells')} tells; active casts ${sumOf(act, 'casts')}, counters ${sumOf(act, 'counters')}; idle casts ${sumOf(idle, 'casts')}${engineOn ? '' : '; ENGINE DID NOT PLAY (no casts)'}` };
+}
+
+/** Lazy caster (reference, never gates): the fresh-start directive policy without automation owned (an emulated caster). */
+export function testLazyCaster(d: AcceptData): AcceptRow {
+  const idle = edgeSeries(d, 'generalist-idle'), act = edgeSeries(d, 'generalist-active'), dir = edgeSeries(d, 'generalist-directive');
+  const { ai, aa, ad, n } = gapAttempts(idle, act, dir);
+  const gap = ai - aa;
+  const closed = gap > 0 ? (ai - ad) / gap : NaN;
+  return { name: 'Lazy caster (reference)', pass: false, reference: true, value: gap > 0 ? `closes ${pct(closed)}` : `no idle→active gap (idle ${ai}, active ${aa}, directive ${ad})`,
+    target: 'reference only: a fresh-start bot casting one affordable ability at the largest group every 3 s (no Autocast, no Directives)',
+    notes: `${n} seeds; attempts idle ${ai}, lazy ${ad}, active ${aa}; lazy casts ${sumOf(dir, 'casts')}, counters ${sumOf(dir, 'counters')}` };
 }
 
 export function testFormationFairness(d: AcceptData): AcceptRow {
@@ -565,6 +608,7 @@ const QUICK_SKIPS: Record<string, string> = {
   'Checkpoint time': 'needs full run: quick climbs end before the first Prestige',
   'Active edge': 'needs full run: one seed and a handful of attempts is too few to judge',
   'Directive gap': 'needs full run: one seed and a handful of attempts is too few to judge',
+  'Lazy caster (reference)': 'needs full run: one seed and a handful of attempts is too few to judge',
 };
 
 export function evaluate(d: AcceptData): AcceptRow[] {
@@ -576,7 +620,7 @@ export function evaluate(d: AcceptData): AcceptRow[] {
 function evaluateAll(d: AcceptData): AcceptRow[] {
   return [
     testCheckpointOdds(d), testCheckpointTime(d), testFirstWall(d), testReclimb(d), testPush(d), testForecast(d),
-    testBuildHealth(d), testDoctrineHealth(d), testSpendEfficiency(d), testDefense(d), testActiveEdge(d), testDirectiveGap(d),
+    testBuildHealth(d), testDoctrineHealth(d), testSpendEfficiency(d), testDefense(d), testActiveEdge(d), testDirectiveGap(d), testLazyCaster(d),
     testFormationFairness(d), testAnomalyCap(d), testBoonCap(d), testOffline(d), testDeterminism(d),
   ];
 }

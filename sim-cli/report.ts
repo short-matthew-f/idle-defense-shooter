@@ -76,5 +76,5 @@ export function summaryMarkdown(title: string, runs: RunResult[]): string {
 }
 
 export function acceptMarkdown(rows: AcceptRow[]): string {
-  return table(['Test', 'Result', 'Value', 'Target', 'Notes'], rows.map((r) => [r.name, r.skipped ? `SKIPPED (${r.skipped})` : r.pass ? 'PASS' : 'FAIL', r.value, r.target, r.notes.replace(/\|/g, '/')]));
+  return table(['Test', 'Result', 'Value', 'Target', 'Notes'], rows.map((r) => [r.name, r.reference ? 'REFERENCE' : r.skipped ? `SKIPPED (${r.skipped})` : r.pass ? 'PASS' : 'FAIL', r.value, r.target, r.notes.replace(/\|/g, '/')]));
 }

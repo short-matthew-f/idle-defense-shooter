@@ -189,6 +189,8 @@ export interface AcceptRow {
   name: string;
   pass: boolean;
   skipped?: string;
+  /** Reported for reference only: never PASS / FAIL, never gates. */
+  reference?: boolean;
   value: string;
   target: string;
   notes: string;
