@@ -193,6 +193,7 @@ export class GameUi {
       battleVisible: () => this.shell.battleVisible, changed: () => { this.lanes.schedule(); this.hints.refresh(); } });
     // a death card is planned (death first: the coach and the offer step aside) and placed in the same task it shows in:
     // waiting for the next UiState / animation frame let it draw for a frame or more at its CSS default, over the tower
+    this.draft.onDecision = () => this.shell.armDecision();
     this.death.onShow = () => { if (this.latest) this.attn.update(this.latest); this.lanes.apply(true); };
     setArenaSource(() => host.arena?.() ?? null);
     // UX Phase 2 item 10 (decision-hold.ts): a tab opened from the fight holds the run until Battle is back (≤ 30 s)
@@ -322,6 +323,8 @@ export class GameUi {
   onEvents(events: readonly SimEvent[]): void {
     this.inspector.ring.push(events);
     this.feed.onEvents(events);
+    // a boss clear: the CLEAR_COACH_MS hold (coach line, pointer ring) applies in this task, not on the next UiState
+    if (this.latest && events.some((e) => e.type === Ev.BossKilled)) { this.attn.update(this.latest); this.lanes.apply(true); }
     this.active.onEvents(events);
     this.shop.notePurchases(events);   // bulk-buy summary toast
     for (const e of events) {

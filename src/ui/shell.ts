@@ -421,7 +421,10 @@ export class Shell {
     const head = bar.querySelector('.boss-head')?.getBoundingClientRect();
     if (!head || !(head.height > 0)) return 0;
     const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-    return Math.ceil(head.bottom + TELL_ROOM * (rem / 16) + DOCK_GAP);
+    // the run-controls row (Push, restart, mute) sits under the boss bar in the arena strip: its room is reserved too
+    const strip = this.parts.battle.querySelector<HTMLElement>('.arena-strip');
+    const stripH = strip && !strip.hidden && !strip.closest('[hidden]') ? Math.ceil(strip.getBoundingClientRect().height) : 0;
+    return Math.ceil(head.bottom + TELL_ROOM * (rem / 16) + (stripH > 0 ? stripH + 8 : 0) + DOCK_GAP);
   }
 
   /**

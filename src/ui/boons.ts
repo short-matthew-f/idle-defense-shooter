@@ -65,6 +65,14 @@ export function needRevealed(id: string | undefined, f: Pick<Features, 'elements
   return true;
 }
 
+/** Progressive reveal: while Cores are not shown yet (progression.ts 'cores') boon text does not name them. BoonOffer.update keeps it current. */
+let coresShown = true;
+export function setBoonCoresShown(on: boolean): void { coresShown = on; }
+/** Boon text without Cores, for before they are revealed (the effect itself is unchanged). */
+const NO_CORE_TEXT: Partial<Record<string, { short: string; desc: string }>> = {
+  windfall: { short: 'Next boss kill: a bonus drop', desc: 'The next boss you kill drops an extra bonus. Then it is used up and frees its slot.' },
+};
+
 /** Everything a card or row shows for one boon. */
 export function boonView(id: BoonId, build: NeedsBuild | null): BoonView {
   const d = BOON_BY_ID.get(id);
@@ -72,6 +80,7 @@ export function boonView(id: BoonId, build: NeedsBuild | null): BoonView {
   return {
     id, name: d?.name ?? titleCase(id), category, categoryLabel: CATEGORY_LABEL[category], rarity, rarityLabel: RARITY_LABEL[rarity],
     short: d?.short ?? '', desc: plainDesc(d?.desc ?? ''), needs: boonNeeds(id, build),
+    ...(coresShown ? null : NO_CORE_TEXT[id] ?? null),
   };
 }
 
@@ -310,6 +319,7 @@ export class BoonOffer {
 
   update(ui: UiState): void {
     const r = ui.run;
+    setBoonCoresShown(this.ctx.features().cores);
     const offer = r.boonOffer && r.boonOffer.length ? r.boonOffer : [];
     const seq = r.boonOfferSeq ?? 0;
     if (seq !== this.seq || offer.join() !== this.offer.join()) {

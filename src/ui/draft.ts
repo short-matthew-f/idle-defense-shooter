@@ -49,6 +49,8 @@ export class DraftModal {
   /** Held by the attention plan (attention.ts): the dialog waits (a death card, the boss-clear beat, a boss fight). */
   private held = false;
   private holdEl: HTMLElement | null = null;
+  /** A tap landed on the draft (its dialog, or its entry on the Build screen): a decision source for the run hold (decision-hold.ts; index.ts wires it to Shell.armDecision). */
+  onDecision: (() => void) | null = null;
   constructor(private readonly ctx: UiCtx) {}
 
   update(ui: UiState): void {
@@ -87,6 +89,7 @@ export class DraftModal {
 
   /** Bring a set-aside draft back (Build screen, tab badge). */
   open(): void {
+    this.onDecision?.();
     this.laterKey = '';
     this.key = '';
     const ui = this.ctx.state();
@@ -116,11 +119,13 @@ export class DraftModal {
       button('Continue', () => { this.laterKey = this.offers; this.close(); this.releaseHold(); }, { class: 'btn small ghost', label: 'Continue: start the next wave now (the draft waits on the Build tab)' }));
     hold.hidden = (ui.run.holdTicksLeft ?? 0) <= 0;
     this.holdEl = hold;
+    const footer = h('div', { class: 'draft-foot' }, later, reroll, skip);
     const body = h('div', { class: 'draft' }, hold,
       h('p', { class: 'dim', text: `Anomalies bend the rules for this Prestige. Sockets: ${ui.build.anomalies.length}/${ui.build.anomalySockets}${full ? ' (full: picking replaces one)' : ''}.` }),
       cards, this.note);
-    this.modal = openModal({ title: 'Anomaly draft', body, footer: h('div', { class: 'draft-foot' }, later, reroll, skip), variant: 'wide', className: 'draft-modal', wallet: cores ? walletChip(['cores'], ui) : undefined,
+    this.modal = openModal({ title: 'Anomaly draft', body, footer, variant: 'wide', className: 'draft-modal', wallet: cores ? walletChip(['cores'], ui) : undefined,
       onClose: () => { if (this.modal) { this.modal = null; this.laterKey = this.offers; this.releaseHold(); } } });
+    for (const el of [body, footer]) el.addEventListener('click', () => this.onDecision?.(), true);
   }
 
   private pick(id: AnomalyId, replace?: number): void {

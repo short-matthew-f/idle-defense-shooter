@@ -49,6 +49,7 @@ export const INFO: Readonly<Record<string, InfoEntry>> = {
   attunements: { title: 'Attunements', feature: 'elements', text: 'An attunement slot binds one element to the tower. Attuning it opens that element\'s upgrade tree in Upgrades → Elements.' },
   abilities: { title: 'Abilities', feature: 'abilities', text: 'Abilities are slotted powers you cast from the Battle bar. Each costs Command Energy and then cools down.' },
   doctrines: { title: 'Doctrines', feature: 'buildTab', text: 'A Doctrine is a path you choose for a tree once enough of its core upgrades are owned. It sets how that tree plays.' },
+  salvage: { title: 'Salvage crates', feature: 'salvage', text: 'Glowing crates drift toward the tower: tap one for bonus Scrap (missed ones still pay half). Every boss kill spills 3 to 5, so tap them fast to chain a bigger bonus.' },
   quartermaster: { title: 'Quartermaster', feature: 'quartermaster', text: 'An optional helper that buys stat upgrades for you with a share of your income. It never picks Boons, elements or weapons.' },
 };
 

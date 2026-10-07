@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { BoonId } from '../../src/sim/core/ids';
 import { BOONS } from '../../src/sim/data/boons';
 import {
-  activeSummary, arrivesAsChip, attemptKey, boonName, needRevealed, boonNeeds, boonView, offerHeading, pickCommand, replacedBy, rerollState, CATEGORY_LABEL,
+  activeSummary, arrivesAsChip, attemptKey, boonName, needRevealed, boonNeeds, boonView, offerHeading, pickCommand, replacedBy, rerollState, setBoonCoresShown, CATEGORY_LABEL,
 } from '../../src/ui/boons';
 import { plainDesc } from '../../src/ui/format';
 import { tabBadges, type BadgeState } from '../../src/ui/shell-logic';
@@ -21,6 +21,15 @@ describe('boon UI helpers', () => {
       expect(v.desc).toBe(plainDesc(b.desc));
     }
     expect(boonView('nope' as BoonId, null).name).toBe('Nope');
+  });
+
+  it('no boon text names Cores before they are revealed (Windfall)', () => {
+    try {
+      setBoonCoresShown(false);
+      for (const b of BOONS) { const v = boonView(b.id, null); expect(`${v.short} ${v.desc}`).not.toMatch(/\bCores?\b/); }
+      setBoonCoresShown(true);
+      expect(boonView('windfall' as BoonId, null).short).toMatch(/Core/);
+    } finally { setBoonCoresShown(true); }
   });
 
   it('needs: met by a mounted hardpoint or attuned element; a Fusion needs a ranked fusion with both elements', () => {
