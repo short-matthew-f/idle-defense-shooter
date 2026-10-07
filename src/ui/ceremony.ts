@@ -20,6 +20,7 @@ import { prefs, setPref } from './prefs';
 import type { UiCtx } from './ctx';
 import type { CoachExtra } from './coach';
 import { echoesAfter, walletChip } from './wallet';
+import { setRebuildBeat } from './attention';
 
 export const CEREMONY_TITLE = 'Your first Prestige';
 export const CEREMONY_RESETS = 'Scrap, upgrades and the wave reset (this run\'s Cores and Anomalies too): you start again at wave 1.';
@@ -190,12 +191,14 @@ export function playRebuildBeat(ctx: UiCtx, ms: number, then: () => void): void 
     clearTimeout(timer);
     document.removeEventListener('keydown', onKey, true);
     skip.remove();
+    setRebuildBeat(false);
     ctx.host.endRebuildBeat?.();
     then();
   };
   skip.addEventListener('click', finish);
   document.addEventListener('keydown', onKey, true);
   document.body.appendChild(skip);
+  setRebuildBeat(true);
   const timer = window.setTimeout(finish, ms + 120);
 }
 

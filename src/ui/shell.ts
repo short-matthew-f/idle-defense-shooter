@@ -32,6 +32,9 @@ import type { UiHost } from './host';
 import type { StatusStrip } from './hud';
 import { DecisionHold, LowHpAlert, buzz } from './decision-hold';
 
+/** Phone: the room (px at a 16 px root) under the boss bar's head row for a two-line tell card and the bar's padding. */
+const TELL_ROOM = 62;
+
 export type ScreenId = Exclude<TabId, 'battle'>;
 
 export interface ScreenSpec {
@@ -383,13 +386,33 @@ export class Shell {
     const abilities = layout === 'desktop' ? (ab.height ? Math.ceil(ab.height) + 24 : 0) : layout === 'rail' ? (ab.width ? Math.ceil(ab.width) + 16 : 0) : 0;
     const dock = layout === 'phone' ? this.dockPx(tabH) : 0;
     this.lastDock = dock;
-    const i = battleInsets(layout, { top: topH, tabBar: tabH, rail: railW, abilities, panel: layout === 'desktop' && this.deskOpen ? PANEL_WIDTH : 0, dock });
+    // phone, boss wave: the arena fits below the boss bar and room for its tell card, so the boss and its in-world tell
+    // marker are never under the card (the room is kept for the whole fight: a tell coming and going never moves the arena)
+    const bossTop = layout === 'phone' ? this.bossBarPx() : 0;
+    this.lastBossTop = bossTop;
+    const i = battleInsets(layout, { top: Math.max(topH, bossTop), tabBar: tabH, rail: railW, abilities, panel: layout === 'desktop' && this.deskOpen ? PANEL_WIDTH : 0, dock });
     this.host.setInsets(i.top, i.right, i.bottom, i.left, layout === 'phone' ? PHONE_ARENA_BIAS : 0.5);
     this.onLayout?.();
   }
 
   /** Dock height seen by the last relayout (the arena refits when the floating controls grow or shrink). */
   private lastDock = 0;
+  /** The boss bar's reserved bottom seen by the last relayout (0: no boss bar). */
+  private lastBossTop = 0;
+
+  /**
+   * Phone: how far down from the top of the viewport the boss bar reaches with room for a two-line tell card (whether
+   * one is up or not), plus a gap; 0 when no boss bar shows on Battle.
+   */
+  private bossBarPx(): number {
+    if (this.view.tab !== 'battle') return 0;
+    const bar = this.parts.battle.querySelector<HTMLElement>('.boss-bar');
+    if (!bar || bar.hidden || bar.closest('[hidden]')) return 0;
+    const head = bar.querySelector('.boss-head')?.getBoundingClientRect();
+    if (!head || !(head.height > 0)) return 0;
+    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    return Math.ceil(head.bottom + TELL_ROOM * (rem / 16) + DOCK_GAP);
+  }
 
   /**
    * Phone: how far up from the bottom of the canvas the controls floating over the arena reach (beyond the tab bar): the
@@ -431,7 +454,8 @@ export class Shell {
     const t = ui.tower, off = !this.battleVisible;
     if (this.lowHp.update(performance.now(), t.maxHp > 0 ? t.hp / t.maxHp : 1, off, ui.run.phase === 'combat')) buzz();
     this.tabBtns.get('battle')?.b.classList.toggle('hp-alert', this.lowHp.low);
-    if (this.layout === 'phone' && this.view.tab === 'battle' && Math.abs(this.dockPx(Math.ceil(this.tabbar.getBoundingClientRect().height) * (this.feats.tabbar ? 1 : 0)) - this.lastDock) > 2) this.relayout();
+    if (this.layout === 'phone' && Math.abs(this.bossBarPx() - this.lastBossTop) > 2) this.relayout();
+    else if (this.layout === 'phone' && this.view.tab === 'battle' && Math.abs(this.dockPx(Math.ceil(this.tabbar.getBoundingClientRect().height) * (this.feats.tabbar ? 1 : 0)) - this.lastDock) > 2) this.relayout();
     const shown = tabsShown(this.feats), visited = new Set(prefs().tabsVisited);
     const fresh = new Set(TABS.filter((t) => t.id !== 'battle' && shown[t.id] && !visited.has(t.id)).map((t) => t.id));
     const badges = tabBadges(ui, fresh);

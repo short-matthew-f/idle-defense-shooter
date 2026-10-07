@@ -93,4 +93,13 @@ describe('boss-clear summary, Frontier, stalemate', () => {
     expect(later.coachHeld).toBe(false);
     expect(later.hintsHeld).toBe(false);
   });
+
+  it('the first-Prestige rebuild beat holds everything: coach (even an explainer), hints, the offer and the draft', () => {
+    const p = planAttention({ ...base, rebuilding: true, offerPending: true, draftWaiting: true });
+    expect(p.beat).toBe(true);
+    expect(p.decision).toBe(null);
+    expect(p.offerHeld && p.draftHeld && p.coachHeld && p.hintsHeld).toBe(true);
+    expect(coachHeld(p, 'boons')).toBe(true);
+    expect(planAttention({ ...base, rebuilding: false }).beat).toBe(false);
+  });
 });

@@ -24,6 +24,7 @@
 import type { ArenaGeom } from './host';
 import type { ShellLayout } from './shell-logic';
 import type { CoachBanner } from './coach';
+import { rebuildBeatPlaying } from './attention';
 import type { DeathCard } from './death';
 import { FEED_MAX_SHOWN, type Feed } from './feed';
 import { attr, h, styleVar } from './dom';
@@ -165,7 +166,7 @@ export class OverlayLanes {
   private signature(): string {
     const P = this.p, r = (el: Element): string => { const b = el.getBoundingClientRect(); return `${Math.round(b.left)},${Math.round(b.top)},${Math.round(b.width)},${Math.round(b.height)}`; };
     const a = this.src.arena();
-    return [this.src.layout(), this.src.battleVisible(), innerWidth, innerHeight, r(P.battle), a ? `${Math.round(a.cx)},${Math.round(a.cy)},${Math.round(a.r)}` : '-',
+    return [this.src.layout(), this.src.battleVisible(), rebuildBeatPlaying(), innerWidth, innerHeight, r(P.battle), a ? `${Math.round(a.cx)},${Math.round(a.cy)},${Math.round(a.r)}` : '-',
       P.offer.hidden ? '-' : P.offer.scrollHeight, P.coach.el.hidden ? '-' : `${P.coach.el.dataset.coach}|${P.coach.shrunk}|${P.coach.el.textContent?.length}`,
       P.death.el.hidden ? '-' : `${P.death.folded}|${P.death.wantFull}|${P.death.first}|${P.death.el.scrollHeight}`, P.feed.el.childElementCount,
       r(P.row), (this.quickBuy() ? r(this.quickBuy()!) : '-'), r(P.starter), r(P.oc), r(P.armHint), ...[...P.arenaTop.children].map(r)].join(';');
@@ -397,7 +398,8 @@ export class OverlayLanes {
       de.classList.toggle('lane-folded', !!d?.compact && !D.folded);
       if (d) { de.classList.toggle('dc-narrow', width(slot(d.slot)!) < NARROW); styleVar(de, 'max-height', px(d.h)); place(de, d.slot, d.h, battleBox); }
     }
-    const t = plan.toasts;
+    // the first-Prestige rebuild beat holds attention: the toasts wait their turn in the Feed (attention.ts)
+    const t = rebuildBeatPlaying() ? null : plan.toasts;
     P.feed.fit(t ? t.count : 0);
     if (t && t.count) place(P.feed.el, t.slot, t.h, null);
   }

@@ -45,12 +45,16 @@ export interface AttnInput {
   offerPending: boolean;
   /** A boss fight is live (a boss wave in combat with the boss alive). */
   liveBoss: boolean;
+  /** The first-Prestige rebuild beat is playing (ceremony.ts playRebuildBeat): nothing else asks for attention. */
+  rebuilding?: boolean;
 }
 
 export interface AttnPlan {
   deathFirst: boolean;
   celebrate: boolean;
   bossMode: boolean;
+  /** The rebuild beat: coach, toasts, hints and decisions all wait. */
+  beat: boolean;
   /** The decision on screen now (null: none, or held). */
   decision: 'draft' | 'boon' | null;
   /** The boon offer shows only as its chip. */
@@ -67,11 +71,12 @@ export function planAttention(i: AttnInput): AttnPlan {
   const deathFirst = i.deathShownAt !== null && (i.deathWantFull || i.now - i.deathShownAt < DEATH_FIRST_MS);
   const celebrate = i.now - i.bossClearAt < CELEBRATE_MS;
   const bossMode = i.liveBoss;
-  const quiet = deathFirst || celebrate || bossMode;
+  const beat = !!i.rebuilding;
+  const quiet = deathFirst || celebrate || bossMode || beat;
   const decision = quiet ? null : i.draftWaiting ? 'draft' : i.offerPending ? 'boon' : null;
   const afterClear = i.now - i.bossClearAt < CLEAR_COACH_MS;
   return {
-    deathFirst, celebrate, bossMode, decision,
+    deathFirst, celebrate, bossMode, beat, decision,
     offerHeld: quiet || decision === 'draft',
     draftHeld: quiet,
     coachHeld: quiet || afterClear || decision !== null,
@@ -82,6 +87,7 @@ export function planAttention(i: AttnInput): AttnPlan {
 /** Is the coach line `id` held under `p`? An explainer of the decision on screen stays beside it. */
 export function coachHeld(p: AttnPlan, id: string | null): boolean {
   if (!p.coachHeld) return false;
+  if (p.beat) return true;
   if (p.decision === 'boon' && id === 'boons') return false;
   if (p.decision === 'draft' && id === 'anomalies') return false;
   return true;
@@ -110,6 +116,11 @@ export interface AttnParts {
   /** Something changed that the overlay lanes and pointer hints should re-fit to. */
   changed(): void;
 }
+
+/** The rebuild beat is playing (set by ceremony.ts playRebuildBeat; read by Attention.update). */
+let rebuildBeatOn = false;
+export function setRebuildBeat(on: boolean): void { rebuildBeatOn = on; }
+export function rebuildBeatPlaying(): boolean { return rebuildBeatOn; }
 
 export class Attention {
   plan: AttnPlan = planAttention({ now: 0, deathShownAt: null, deathWantFull: false, bossClearAt: -Infinity, draftWaiting: false, offerPending: false, liveBoss: false });
@@ -150,6 +161,7 @@ export class Attention {
       draftWaiting: P.draft.waiting,
       offerPending: !!ui.run.boonOffer?.length,
       liveBoss: liveBoss(ui),
+      rebuilding: rebuildBeatOn,
     });
     this.plan = plan;
     d.first = plan.deathFirst;
@@ -162,7 +174,8 @@ export class Attention {
     const b = document.body.classList;
     b.toggle('attn-boss', plan.bossMode);
     b.toggle('attn-quiet', plan.hintsHeld);
-    const key = `${plan.deathFirst}|${plan.celebrate}|${plan.bossMode}|${plan.decision}`;
+    b.toggle('attn-beat', plan.beat);
+    const key = `${plan.deathFirst}|${plan.celebrate}|${plan.bossMode}|${plan.beat}|${plan.decision}`;
     if (key !== this.key) { this.key = key; P.changed(); }
   }
 }

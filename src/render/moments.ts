@@ -41,6 +41,10 @@ const ASSEMBLE_S = 1.2;
 export const TOWER_ZONE = TOWER_RADIUS * 3.6;
 /** Pips up to this many Prestiges, a numeral beyond. */
 export const HULL_MARK_CAP = 10;
+/** Hull-mark pip half-size, pip spacing and the arc's radius, in CSS px (moments.ts writeHullMark). */
+export const HULL_PIP_PX = 2.8;
+export const HULL_PIP_GAP_PX = 7.4;
+export const HULL_ARC_PX = 20;
 /** Player effects near a live tell keep this share of their alpha (Spectacle); Clarity lowers it further. */
 export const TELL_FADE = 0.2;
 const MAX = 640;
@@ -210,10 +214,13 @@ export class Moments {
     if (n <= 0) return;
     const a = this.assemble(0.45);
     if (a <= 0) return;
-    const R = TOWER_RADIUS * 1.32;
-    const pr = Math.max(1.9, 2.4 * px);
+    // sized in CSS px (px = world units per CSS px), so a pip reads on a phone at any zoom: ~5.6 px across, 7.4 px apart,
+    // on an arc 20–25 px from the tower's centre (inside its 34 px hold zone, outside the hull) spanning ≤ ~150°
+    const pr = HULL_PIP_PX * px;
+    const shown = Math.min(n, HULL_MARK_CAP);
+    const R = Math.max(TOWER_RADIUS * 1.32, HULL_ARC_PX * px, (HULL_PIP_GAP_PX * px * (shown - 1)) / 2.6);
     if (n <= HULL_MARK_CAP) {
-      const step = 0.32;
+      const step = (HULL_PIP_GAP_PX * px) / R;
       const a0 = -Math.PI / 2 - ((n - 1) * step) / 2;
       for (let k = 0; k < n; k++) {
         const ang = a0 + k * step;

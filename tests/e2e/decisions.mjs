@@ -70,10 +70,13 @@ export async function decisions({ browser, BASE, OUT, check, attachLogs }) {
     await page.waitForFunction(() => (window.__citadel.game.latestUi()?.meta.prestigeCount | 0) >= 1, null, { timeout: 8000 }).catch(() => {});
     // UX Phase 4 (C-19): the rebuild beat plays on Battle first; a tap skips it
     const beat = await page.evaluate(() => ({ skip: !!document.querySelector('.rebuild-skip'), battle: window.__citadel.game.ui.shell.battleVisible, t: window.__citadel.app.renderer.moments.beatTime }));
+    // the beat is ~2.5 s of wall time; under software GL the wait + screenshot can outlast it, so tap first (short
+    // timeout) and tolerate the beat having ended on its own, which is also a valid outcome
+    if (beat.skip) beat.tapped = await page.locator('.rebuild-skip').tap({ timeout: 2500 }).then(() => true, () => 'ended-before-tap');
     await page.screenshot({ path: `${OUT}/decide-${vp.id}-rebuild-beat.png` });
-    if (beat.skip) await page.locator('.rebuild-skip').tap();
     await page.waitForTimeout(700);
-    check(`decide ${vp.id}: the first Prestige plays the rebuild beat on Battle (skippable with a tap)`, beat.skip && beat.battle && beat.t >= 0, beat);
+    beat.gone = await page.evaluate(() => !document.querySelector('.rebuild-skip'));
+    check(`decide ${vp.id}: the first Prestige plays the rebuild beat on Battle (skippable with a tap)`, beat.skip && beat.battle && beat.t >= 0 && beat.gone, beat);
     const guide = await page.evaluate(() => ({ tab: window.__citadel.game.ui.shell.tab, seg: window.__citadel.game.ui.prestigeScreen.segment,
       view: document.querySelector('.screen.s-prestige .crumb-page .crumb-label')?.textContent ?? null, tier: document.querySelector('.screen.s-prestige .crumb-tree .crumb-label')?.textContent ?? null,
       banner: (() => { const b = document.querySelector('.screen.s-prestige .ps-guide'); return !!b && !b.hidden && b.getBoundingClientRect().height > 0; })(),
