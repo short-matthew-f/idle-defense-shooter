@@ -17,7 +17,7 @@ describe('Fusions', () => {
     w.applyStatus(a, 'burn', 1, 180, 'fire', -1, 1);
     const f = fusionEvents(sim, 'fusion.toxic_combustion');
     expect(f.length).toBe(1);
-    expect(f[0].b).toBeCloseTo(pending * w.stats.get('fusion.toxic_combustion'), 3);   // rank 1: ×0.5 (balance pass)
+    expect(f[0].b).toBeCloseTo(pending * w.stats.get('fusion.toxic_combustion'), 3);   // rank 1: ×2 (balance pass 2026-10-07)
     expect(w.enemies.poison[a]).toBe(0);
     const hpB = w.enemies.hp[b];
     ticks(sim, 1);

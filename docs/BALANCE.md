@@ -434,7 +434,7 @@ and ×1.36, both kamikaze_ring band 1 laser); synchronized_burst b2 gravitics fe
   ordnance: 58%, its most valuable tree (cleared); Elemental poison: 2.4% (confirmed).
 - *Poison under Toxic Combustion is a real weakness.* With Toxic Combustion off, Poison gives 12.1% of the
   Elemental agent's damage; with it, 7.5%. Burn applied to 5+ stacks consumes them for ×0.5 of their remaining damage
-  at rank 1, so the Fusion destroys half the Poison it touches. **Proposed (owner approval needed):**
+  at rank 1, so the Fusion destroys half the Poison it touches. **Applied (owner, 2026-10-07: "Definitely make poison feel like a valid choice"):**
   `data/base-stats.ts 'fusion.toxic_combustion'` 0.25 → 1.75 (rank 1 ×0.5 → ×2.0, +0.25 per rank; the 15% max-HP cap
   per target is unchanged, so bosses still take at most 15% per explosion). Elemental poison 7.5% → 12.2%; depth 29 in
   every variant tried (×1.0: 9.5%, ×1.5: 10.1%, ×2.0: 12.2%).

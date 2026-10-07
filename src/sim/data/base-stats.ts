@@ -374,7 +374,7 @@ export const BASE_STATS: Record<string, number> = {
   'gravitics.tidal.orbit_lock.seconds': 2,
 
   // --- Fusions and Triads (node id = magnitude key) ---------------------------
-  'fusion.toxic_combustion': 0.25,                // × remaining poison (rank 1 → 0.5, +0.25 per rank)
+  'fusion.toxic_combustion': 1.75,                // × remaining poison (rank 1 → 2.0, +0.25 per rank)
   'fusion.toxic_combustion.target_cap': 0.15,     // one explosion deals ≤ this × each target's max HP
   'fusion.toxic_combustion.min_stacks': 5,
   'fusion.toxic_combustion.radius': 60,
