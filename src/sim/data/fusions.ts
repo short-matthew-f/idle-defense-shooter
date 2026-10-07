@@ -21,7 +21,7 @@ export const FUSIONS: FusionDef[] = [
     id: 'toxic_combustion', name: 'Toxic Combustion', elements: ['fire', 'poison'],
     desc: 'Burning a heavily poisoned enemy consumes its poison in an explosion.',
     node: fusionNode('toxic_combustion', 'Toxic Combustion',
-      'Applying Burn to an enemy with 5+ Poison stacks consumes them: a 60-unit explosion deals their remaining poison damage ×0.5, +0.25 per rank after the first (falling off with distance; at most 15% of each target\'s max HP).', 0.25),
+      'Applying Burn to an enemy with 5+ Poison stacks consumes them: a 60-unit explosion deals their remaining poison damage ×2, +0.25 per rank after the first (falling off with distance; at most 15% of each target\'s max HP).', 0.25),
   },
   {
     id: 'superconductivity', name: 'Superconductivity', elements: ['lightning', 'frost'],
