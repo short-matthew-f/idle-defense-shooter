@@ -133,6 +133,19 @@ The barrel housing recoils and flashes when a primary round leaves it. Ornament 
 wave: bare at 1; a foundation ring at 5; ticks at 20; rotating arcs at 40; a crown star at 60; an outer
 ring of studs at 80; a gold filigree ring with orbiting motes at 100.
 
+**Prestige mark and rebuild beat (UX Phase 4, `src/render/moments.ts`, renderer-side only).** One amber pip per
+Prestige done sits on an arc above the hull; past 10 it is one pip and the count as a seven-segment numeral. On the
+first Prestige the old tower dissolves and the new hull assembles (see docs/ONBOARDING.md, "The first Prestige").
+
+**Telegraphs survive spectacle (UX Phase 4, C-18).** While a boss tell is live (UiState.wave.tellActive), player
+effects on layers 1–3 within ~2.2 boss radii + 70 units of the boss keep 20 % of their alpha (10 % at full Clarity), so
+blast cores and their bloom no longer bury the tell, and one amber marker with a dark under-stroke is drawn on layer 7,
+picked by the tell's Counter: a closing ring (Repulsor Pulse, Missile Storm, Singularity Bomb), a wedge toward the
+tower (Time Field), a beam line toward the tower (EMP), a ring with crosshair ticks (Bombardment, designate), or a ring
+on every boss-sized body (Hunter Mark: the clones, never giving the true one away). The boss is the largest enemy body
+in the snapshot. Reduced motion holds the marker still. Known limit: layer 3 also holds enemy shots, which fade near the
+boss too.
+
 ## E. Visible chains
 
 When an event's cause is a *new link* (its chain depth is ≥ 2 and deeper than its parent's: another

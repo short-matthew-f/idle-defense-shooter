@@ -104,17 +104,23 @@ names the wall.
 
    Unlock everything, or a save that somehow already has choices, gets the normal modal. Second and later Prestiges
    use the normal modal and its confirm, unchanged.
-2. **Guided first Echo spend.** After the Prestige, the Prestige tab opens on Upgrades (Layer I). An inline line reads
+   **Rebuild beat (UX Phase 4, C-19).** The ceremony's button first cuts to Battle for ~2.5 s: the camera pushes in, the
+   old tower (copied from the last pre-Prestige snapshot) dissolves from the ornament inward, and the new hull assembles
+   from the core outward (`render/moments.ts`; `ceremony.ts playRebuildBeat`). Reduced motion: a 0.7 s crossfade, no
+   push-in. A tap anywhere (or Esc / Enter) skips it. Later Prestiges keep the normal flow. The hull then wears one pip
+   per Prestige done above it (a pip and a numeral past 10).
+2. **Guided first Echo spend.** After the Prestige (and the rebuild beat), the Prestige tab opens on Upgrades (Layer I). An inline line reads
    "Spend your Echoes: these make every run stronger." The affordable Layer I picks are highlighted (the class `guide`
    only). **Nothing is ever bought for the player.** The guide ends on "Got it", or once nothing in Layer I is
    affordable. While the guide runs, ONE affordable pick (`echoGuideSuggested`: a mechanic before stat ranks, then the
    cheapest, normally Accelerated Clearing) also carries a small "Suggested" tag (class `suggested`) and is named in the
    guide line ("Suggested: Accelerated Clearing"). Every affordable pick stays buyable.
-3. **Coach lines, in order, on Battle:**
-   - "A new machine: every tab stays open. New weapons and elements arrive with later Prestiges; Automation and
-     Trials unlock in More." This line is held back while the Echo guide runs.
-   - The "New" line for the content the Prestige added (Frost).
-   - The Quartermaster line, with a **Turn on** button.
+3. **One coach card on Battle (UX Phase 4, `coach.ts postPrestigeDigest`):** after a Prestige, the unread lines a
+   Prestige reveals (stage 7: Cores, Frame, Exotics, the Echo tiers) and the post-Prestige extras (the "New" content
+   line, the Quartermaster) come as ONE card, "A new machine. Open now:" with a short list, instead of one banner per wave
+   clear. It is held while the Echo guide runs. The Quartermaster's button rides on it as **Turn on Quartermaster**;
+   "Got it" reads every listed line. With fewer than two lines due, the single line shows as before. Help keeps the
+   full sentences.
 
 ## Quartermaster
 
