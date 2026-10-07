@@ -44,7 +44,7 @@ export const COACH: readonly CoachMsg[] = [
   { id: 'exotics', feature: 'exotics', icon: 'cores', text: 'Exotics: one Core-priced upgrade per tree, once its Doctrine fork opens (Upgrades → Cores).' },
   { id: 'machine', feature: 'quartermaster', icon: 'more', text: 'A new machine: every tab stays open. Spend your Echoes under Prestige → Echo tiers; Trials and Automation are bought there too, deeper down.' },
   // active edge (docs/ACTIVE.md): shown only while their subject is on screen (LIVE_COACH)
-  { id: 'salvage', feature: 'salvage', icon: 'scrap', text: 'Glowing crates: tap them for bonus Scrap. Quick taps chain.' },
+  { id: 'salvage', feature: 'salvage', icon: 'scrap', text: 'Glowing crates: tap for bonus Scrap. Bosses spill several: tap fast to chain.' },
   { id: 'overcharge', feature: 'overcharge', icon: 'bolt', text: 'Overcharge is full: hold the glowing button, let go in the bright band.' },
 ];
 

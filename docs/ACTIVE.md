@@ -12,7 +12,7 @@ active policy's use of them).
 | Piece | Available | What the player does | What happens | If the player does nothing |
 | --- | --- | --- | --- | --- |
 | **Tap-to-assist** | from the first second, in combat | tap an enemy | the tower fires a free bonus shot at it (tracer, muzzle flash, hit sparks, a crack); the same tap still designates it | the gun fires as always |
-| **Salvage crates** | from wave 2 | tap a glowing crate drifting to the tower | Scrap burst worth 4–8× the kill's Scrap; quick collects chain ×1 → ×1.5 → … → ×3; a "+Scrap ×chain" floater and a pluck whose pitch climbs along the chain | the passive collector takes the crate at the tower for 50% of its value |
+| **Salvage crates** | from wave 2 | tap a glowing crate drifting to the tower | Scrap burst worth 4–8× the kill's Scrap (a boss spills 3–5 crates of 0.2–0.4× its Scrap each); quick collects chain ×1 → ×1.5 → … → ×3; a "+Scrap ×chain" floater and a pluck whose pitch climbs along the chain | the passive collector takes the crate at the tower for 50% of its value |
 | **Overcharge** | unlocks at wave 12 (progression feature `overcharge`) | when the ring glows: press and hold the button (or the tower), release as the arc crosses the bright band | a beam along the designated enemy's line (else the nearest enemy): 3 primary shots of damage to every enemy on it and a 1 s stagger; outside the window 1.5 shots and a 0.4 s stagger (never a fail state) | the meter waits, full, forever |
 
 Details the sim enforces (`systems/active.ts`):
@@ -25,10 +25,15 @@ Details the sim enforces (`systems/active.ts`):
   for why). Damage = 1.0 × `ballistics.damage` (the primary's current shot), crit at `ballistics.crit_chance` + 10%
   (like manual aim) × `ballistics.crit_damage`. The enemy nearest the tap within max(32, radius + 12) world units. Not in the Blackout Trial (it disables
   active input).
-- **Salvage**: drop chance per kill 0.6% (ordinary), 4% (elite), 20% (boss), rolled on the system's own PRNG stream
+- **Salvage**: drop chance per kill 0.6% (ordinary), 4% (elite), rolled on the system's own PRNG stream
   (reseeded per attempt from the Prestige seed and the attempt number), so the combat stream is untouched and runs stay
-  reproducible. At most 6 live crates (further drops are skipped). Every crate lives exactly 5 s, drifting in a
-  straight line from the kill to the tower. A tap takes the crate nearest the point within 56 world units (the app
+  reproducible. A boss kill always spills 3–5 crates (count, values and positions on a separate spill stream, so a spill never shifts later drops), each worth
+  0.2–0.4× the boss's kill Scrap, scattered up to 48 world units around the kill, so a chain can happen (HANDBOOK-EVAL
+  C-11; it replaced a 20% chance of one 4–8× crate). At most 8 live crates (further drops are skipped). A crate lives
+  5 s, drifting in a straight line from the kill to the tower; the first crate of an attempt from wave 5 (the salvage
+  reveal) takes 15 s instead while nothing has been tap-collected this attempt, so the coach line can be read before it
+  arrives. This is sim-only (no UI state reaches the sim), so replays and the simulator see it too; the crate still
+  pays at the tower when nobody taps. A tap takes the crate nearest the point within 56 world units (the app
   snaps taps to the drawn crate with a ≥ 44 CSS px reach). Chain: a collect within 1.5 s (real time) of the previous
   one adds a link; multiplier 1 + 0.5 × (links − 1), max ×3; the chain lapses after the window. A crate reaching the
   tower pays 50% (no chain; it does not break one). Crates keep drifting and paying between waves; on death the
@@ -62,10 +67,12 @@ Details the sim enforces (`systems/active.ts`):
 | `assist.reach`, `pad` | 32, +12 | world units (sim-side) |
 | `assist.meterPerTap` | 2 | Overcharge meter per assist hit |
 | `salvage.fromWave` | 2 | |
-| `salvage.chance` / `eliteChance` / `bossChance` | 0.6% / 4% / 20% | own PRNG stream (was 1.2% / 8% / 40%) |
+| `salvage.chance` / `eliteChance` | 0.6% / 4% | own PRNG stream (was 1.2% / 8%) |
+| `salvage.bossCratesMin`–`Max`, `bossValueMin`–`Max`, `bossSpillRadius` | 3–5 crates, 0.2–0.4× each, 48 | every boss kill (replaced `bossChance` 20%, C-11) |
+| `salvage.slowFromWave`, `firstLifeSeconds` | 5, 15 s | the first crate of an attempt, until a tap collect |
 | `salvage.valueMin`–`valueMax` | 4–8× | the kill's Scrap |
 | `salvage.lifeSeconds` | 5 s | kill → tower |
-| `salvage.maxLive` | 6 | |
+| `salvage.maxLive` | 8 | was 6; room for a boss spill |
 | `salvage.tapReach` | 56 | world units; the UI reach is ≥ 44 CSS px |
 | `salvage.chainWindow` | 1.5 s | real time |
 | `salvage.chainStep`, `chainMax` | +0.5, ×3 | |
@@ -107,7 +114,7 @@ extrapolated at most 0.15 s between updates), so on a slow device where the sim 
 in-world ring and the sim's timing agree. The `Ev.Overcharge` event carries `data.hold` (s) for the Inspector and tests. Coach lines (src/ui/coach.ts, live
 explainers: shown only while their subject is on screen, after any unread stage message, and kept up until "Got it"
 or until the player does it: a tap collect retires `salvage`, an Overcharge release retires `overcharge`):
-`salvage` "Glowing crates: tap them for bonus Scrap. Quick taps chain." while a crate is on the field (from the wave-5
+`salvage` "Glowing crates: tap for bonus Scrap. Bosses spill several: tap fast to chain." while a crate is on the field (from the wave-5
 reveal), `overcharge` "Overcharge is full: hold the glowing button, let go in the bright band." when the meter is first
 ready. The assist needs none: the stage-0 line already has the player tapping.
 

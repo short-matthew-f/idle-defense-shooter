@@ -29,14 +29,27 @@ export const ACTIVE = {
   salvage: {
     /** First wave that drops crates. */
     fromWave: 2,
-    /** Drop chance per kill: ordinary, elite, boss (a clump rolls as ordinary but carries its merged Scrap). */
-    chance: 0.006, eliteChance: 0.04, bossChance: 0.2,
+    /** Drop chance per kill: ordinary, elite (a clump rolls as ordinary but carries its merged Scrap). */
+    chance: 0.006, eliteChance: 0.04,
     /** A crate is worth this many times its kill's Scrap (uniform, own PRNG stream). */
     valueMin: 4, valueMax: 8,
-    /** Seconds a crate drifts from the kill to the tower (every crate lives exactly this long). */
+    /**
+     * Boss kills always spill bossCratesMin..bossCratesMax crates (uniform, own PRNG stream), so a chain can happen;
+     * each is worth bossValueMin..bossValueMax × the boss's kill Scrap, scattered bossSpillRadius around the kill.
+     */
+    bossCratesMin: 3, bossCratesMax: 5,
+    bossValueMin: 0.2, bossValueMax: 0.4,
+    bossSpillRadius: 48,
+    /** Seconds a crate drifts from the kill to the tower. */
     lifeSeconds: 5,
+    /**
+     * The first crate of an attempt dropped from wave `slowFromWave` (the salvage reveal, progression feature `salvage`)
+     * drifts for `firstLifeSeconds` instead while no crate has been tap-collected this attempt, so the coach line that
+     * explains it can be read before it is gone (HANDBOOK-EVAL C-11). Sim-only: no UI state reaches the sim.
+     */
+    slowFromWave: 5, firstLifeSeconds: 15,
     /** Live crates at most; drops beyond the cap are skipped. */
-    maxLive: 6,
+    maxLive: 8,
     /** Sim-side tap reach around a crate (world units). The UI reach is at least 44 CSS px (app/pick.ts). */
     tapReach: 56,
     /** Collects within this many seconds of the previous one build the chain. */

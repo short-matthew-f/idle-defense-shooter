@@ -8,10 +8,14 @@
  *                  the primary's shots/s)) s: taps inside
  *                  the cooldown do nothing (no queue, no error). Combat only; not in the Blackout Trial.
  *                  Ev.Assist (src 'assist') is the cause of the Hit (srcTag 'assist', source 'ability').
- *  Salvage         from wave `fromWave`, a kill drops a crate with chance `chance` / `eliteChance` / `bossChance`
- *                  (own PRNG stream, reseeded per attempt), worth valueMin..valueMax × the kill's Scrap (World.killScrap:
- *                  first-clear ×3, economy.scrap_mul, Boss Scavenging and clump merges already included). At most
- *                  `maxLive` crates; each drifts from the kill to the tower in `lifeSeconds`. `collect_salvage {x, y}`
+ *  Salvage         from wave `fromWave`, a kill drops a crate with chance `chance` / `eliteChance` (own PRNG stream,
+ *                  reseeded per attempt), worth valueMin..valueMax × the kill's Scrap (World.killScrap: first-clear ×3,
+ *                  economy.scrap_mul, Boss Scavenging and clump merges already included). A boss kill always spills
+ *                  bossCratesMin..bossCratesMax crates, each bossValueMin..bossValueMax × its Scrap, scattered up to
+ *                  `bossSpillRadius` around the kill (rolled on a separate spill stream), so chains can happen. At most
+ *                  `maxLive` crates; each drifts from the kill to the tower in `lifeSeconds`, except the first crate of an
+ *                  attempt from wave `slowFromWave` while nothing was tap-collected this attempt: it takes
+ *                  `firstLifeSeconds` (time to read the coach line, C-11). `collect_salvage {x, y}`
  *                  takes the crate nearest (x, y) within `tapReach`: value × chain multiplier, where collects within
  *                  `chainWindow` s of the previous one add a link (1 + chainStep × (links − 1), max chainMax); the chain
  *                  lapses after the window. A crate that reaches the tower is taken by the passive collector at
@@ -45,6 +49,7 @@ const A = ACTIVE.assist, S = ACTIVE.salvage, O = ACTIVE.overcharge;
 const MAX_CRATES = S.maxLive;
 const ASSIST_CD_TICKS = Math.round(A.cooldown * TICK_RATE);
 const CRATE_LIFE = Math.round(S.lifeSeconds * TICK_RATE);
+const FIRST_LIFE = Math.round(S.firstLifeSeconds * TICK_RATE);
 const CHAIN_TICKS = S.chainWindow * TICK_RATE;
 const BARREL = TOWER_RADIUS * 1.45;
 const INTANGIBLE = EnemyFlag.Phased | EnemyFlag.Burrowed | EnemyFlag.Dead | EnemyFlag.Ally;
@@ -69,6 +74,8 @@ export class ActiveSystem implements System {
   readonly id = 'active';
   /** Own PRNG stream (salvage rolls, assist crits): never perturbs the combat stream. Reseeded per attempt. */
   private readonly rng = new Prng(1);
+  /** Boss spills roll on their own stream, so a spill never shifts ordinary drops or Assist crits. */
+  private readonly spillRng = new Prng(1);
   private scratch = new Int32Array(4);
 
   // assist
@@ -84,6 +91,10 @@ export class ActiveSystem implements System {
   private readonly crateVx = new Float64Array(MAX_CRATES); private readonly crateVy = new Float64Array(MAX_CRATES);
   readonly crateValue = new Float64Array(MAX_CRATES);
   readonly crateLife = new Int32Array(MAX_CRATES);
+  /** Each crate's whole fuse (ticks): CRATE_LIFE, or FIRST_LIFE for the slow first crate. */
+  private readonly crateLife0 = new Int32Array(MAX_CRATES);
+  /** The slow first crate of this attempt was handed out, or a crate was tap-collected (C-11). */
+  private slowUsed = false;
   /** Tick each crate dropped (the sim-cli active policy reacts after a human delay). */
   readonly crateBorn = new Int32Array(MAX_CRATES);
   private readonly crateEv = new Int32Array(MAX_CRATES); private readonly crateKind = new Uint8Array(MAX_CRATES);
@@ -113,8 +124,9 @@ export class ActiveSystem implements System {
 
   private reset(w: World): void {
     this.rng.reseed((Math.imul(w.run.prestigeSeed | 0, 0x2545f491) ^ Math.imul(w.run.attempts | 0, 0x9e3779b1) ^ 0x5a17a6e) >>> 0);
+    this.spillRng.reseed((Math.imul(w.run.prestigeSeed | 0, 0x68e31da5) ^ Math.imul(w.run.attempts | 0, 0x9e3779b1) ^ 0x5b055911) >>> 0);
     this.assistCd = 0; this.tapN = 0; this.collectN = 0;
-    this.crateLive.fill(0); this.chain = 0; this.chainLeft = 0;
+    this.crateLive.fill(0); this.slowUsed = false; this.chain = 0; this.chainLeft = 0;
     this.meter = 0; this.bucket = O.shotCapPerSecond; this.charging = false; this.hold = 0; this.release = false; this.cancel = false;
     this.crateSeed = w.run.prestigeSeed;
   }
@@ -219,11 +231,27 @@ export class ActiveSystem implements System {
     const e = w.enemies, i = hit.enemy;
     if (i < 0 || i >= e.count || (e.flags[i] & EnemyFlag.Ally)) return;
     const boss = (e.flags[i] & EnemyFlag.Boss) !== 0, elite = (e.flags[i] & EnemyFlag.Elite) !== 0;
-    const p = boss ? S.bossChance : elite ? S.eliteChance : S.chance;
-    if (!this.rng.chance(p)) return;
     const base = (w as WorldImpl).killScrap[i];
+    if (boss) { this.spill(w, e.x[i], e.y[i], base, hit.eventId); return; }
+    if (!this.rng.chance(elite ? S.eliteChance : S.chance)) return;
     if (!(base > 0) || this.liveCrates() >= MAX_CRATES) return;   // capped: the drop is skipped (no roll spent on value)
     this.addCrate(w, e.x[i], e.y[i], base * this.rng.range(S.valueMin, S.valueMax), boss ? 2 : elite ? 1 : 0, hit.eventId);
+  }
+
+  /**
+   * A boss spill: bossCratesMin..bossCratesMax crates (as many as fit under maxLive) around (x, y), evenly spread in angle
+   * with a jitter, each worth bossValueMin..bossValueMax × `base`. Every crate's Ev.SalvageDrop has the Kill as its cause.
+   */
+  private spill(w: World, x: number, y: number, base: number, cause: number): void {
+    if (!(base > 0)) return;
+    const n = this.spillRng.int(S.bossCratesMin, S.bossCratesMax);
+    const a0 = this.spillRng.range(0, 6.283185307179586);
+    for (let j = 0; j < n; j++) {
+      const a = a0 + (j + this.spillRng.range(-0.3, 0.3)) * (6.283185307179586 / n);
+      const r = S.bossSpillRadius * this.spillRng.range(0.6, 1);
+      const v = base * this.spillRng.range(S.bossValueMin, S.bossValueMax);
+      if (this.addCrate(w, x + cos(a) * r, y + sin(a) * r, v, 2, cause) < 0) return;
+    }
   }
 
   liveCrates(): number { let n = 0; for (let k = 0; k < MAX_CRATES; k++) n += this.crateLive[k]; return n; }
@@ -240,11 +268,13 @@ export class ActiveSystem implements System {
     if (d0 > lim) { x *= lim / d0; y *= lim / d0; }
     const ev = w.emit(Ev.SalvageDrop, 'salvage', value, kind, x, y, cause);
     const k = slot, tick = w.tick;
+    let life = CRATE_LIFE;
+    if (!this.slowUsed && w.run.wave >= S.slowFromWave) { this.slowUsed = true; life = FIRST_LIFE; }
     const d = Math.sqrt(x * x + y * y);
     const travel = Math.max(0, d - (TOWER_RADIUS + 6));
-    const v = d > 1e-6 ? travel / CRATE_LIFE / d : 0;
+    const v = d > 1e-6 ? travel / life / d : 0;
     this.crateLive[k] = 1; this.crateX[k] = x; this.crateY[k] = y; this.crateVx[k] = -x * v; this.crateVy[k] = -y * v;
-    this.crateValue[k] = value; this.crateLife[k] = CRATE_LIFE; this.crateEv[k] = ev; this.crateKind[k] = kind; this.crateBorn[k] = tick;
+    this.crateValue[k] = value; this.crateLife[k] = life; this.crateLife0[k] = life; this.crateEv[k] = ev; this.crateKind[k] = kind; this.crateBorn[k] = tick;
     return slot;
   }
 
@@ -268,6 +298,7 @@ export class ActiveSystem implements System {
       if (d2 <= bestD2) { best = k; bestD2 = d2; }
     }
     if (best < 0) return;
+    this.slowUsed = true;
     const links = this.chain > 0 ? this.chain + 1 : 1;
     this.chain = links;
     this.chainLeft = CHAIN_TICKS;
@@ -347,7 +378,7 @@ export class ActiveSystem implements System {
       const x = this.crateX[k], y = this.crateY[k];
       const big = this.crateKind[k] === 2 ? 1.5 : this.crateKind[k] === 1 ? 1.2 : 1;
       const pulse = 1 + 0.1 * sin((now + k * 17) * 0.13);   // ~1.2 Hz, well under the 3 Hz flash rule
-      const left = this.crateLife[k] / CRATE_LIFE;
+      const left = this.crateLife[k] / Math.max(1, this.crateLife0[k]);
       out.push(x, y, 17 * big * pulse, 0, Shape.Circle, 1, 0.78, 0.3, 0.42, 2 + INST_FLAG_SCALE * InstFlag.Soft);
       out.push(x, y, 7.5 * big, now * 0.04, Shape.Diamond, 1, 0.86, 0.42, 1, 7, 0, SALVAGE_MARK);
       out.push(x, y, 11 * big, 0, Shape.Ring, 1, 0.9, 0.55, 0.35 + 0.5 * left, 7, 0.1, 0);

@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { Sim } from '../../src/sim/index';
-import { Ev, TICK_RATE } from '../../src/sim/core/types';
+import { EnemyFlag, Ev, TICK_RATE } from '../../src/sim/core/types';
 import type { Command } from '../../src/sim/core/types';
 import { ACTIVE } from '../../src/sim/data/active';
 import { chainMultiplier, findActive, overchargePower, overchargeUnlocked, type ActiveSystem } from '../../src/sim/systems/active';
@@ -130,6 +130,76 @@ describe('salvage', () => {
     const perKill = sim.world.killScrap[kill.a];
     expect(d.a / perKill).toBeGreaterThanOrEqual(S.valueMin);
     expect(d.a / perKill).toBeLessThan(S.valueMax);
+  });
+  function killBoss(sim: Sim, x = 220, y = 40): number {
+    const w = sim.world;
+    const i = dummy(sim, x, y, 'grunt', 1);
+    w.enemies.flags[i] |= EnemyFlag.Boss;
+    w.killEnemy(i, -1, 'ballistics');
+    return i;
+  }
+  it('a boss kill spills bossCratesMin..bossCratesMax crates, each bossValue × its Scrap, all caused by the Kill (C-11)', () => {
+    const counts = new Set<number>();
+    for (let seed = 1; seed <= 12; seed++) {
+      const sim = arena(seed); sim.world.run.wave = 5;
+      const i = killBoss(sim);
+      const d = events(sim, Ev.SalvageDrop);
+      counts.add(d.length);
+      expect(d.length).toBeGreaterThanOrEqual(S.bossCratesMin);
+      expect(d.length).toBeLessThanOrEqual(S.bossCratesMax);
+      const base = sim.world.killScrap[i];
+      for (const e of d) {
+        expect(sim.world.events.byId(e.cause)!.type).toBe(Ev.Kill);
+        expect(e.b).toBe(2);
+        expect(e.a / base).toBeGreaterThanOrEqual(S.bossValueMin);
+        expect(e.a / base).toBeLessThan(S.bossValueMax);
+        expect(Math.hypot(e.x - 220, e.y - 40)).toBeLessThanOrEqual(S.bossSpillRadius + 1e-6);
+      }
+    }
+    expect(counts.size).toBeGreaterThan(1);
+    // same seed, same spill
+    const a = arena(4), b = arena(4); a.world.run.wave = 5; b.world.run.wave = 5;
+    killBoss(a); killBoss(b);
+    expect(drops(a)).toBe(drops(b));
+  });
+  it('a boss spill can be chained by quick taps', () => {
+    const sim = arena(2); sim.world.run.wave = 5;
+    const s = act(sim);
+    killBoss(sim);
+    tick(sim);
+    const n = s.liveCrates();
+    for (let j = 0; j < n; j++) {
+      const k = [...s.crateLive].findIndex((v) => v === 1);
+      cmd(sim, { type: 'collect_salvage', x: s.crateX[k], y: s.crateY[k] }); tick(sim, 20);
+    }
+    expect(s.chain).toBe(n);
+    expect(events(sim, Ev.SalvageCollect, 'salvage.tap').map((e) => e.b)).toEqual(Array.from({ length: n }, (_, j) => j + 1));
+  });
+  it('the first crate of an attempt from slowFromWave drifts firstLifeSeconds; later ones and post-collect ones lifeSeconds', () => {
+    const sim = arena(13); const w = sim.world, s = act(sim);
+    w.run.wave = S.slowFromWave - 1;
+    const early = s.addCrate(w, 300, 0, 10);
+    expect(s.crateLife[early]).toBe(S.lifeSeconds * TICK_RATE);
+    w.run.wave = S.slowFromWave;
+    const first = s.addCrate(w, 0, 300, 10), second = s.addCrate(w, 0, -300, 10);
+    expect(s.crateLife[first]).toBe(S.firstLifeSeconds * TICK_RATE);
+    expect(s.crateLife[second]).toBe(S.lifeSeconds * TICK_RATE);
+    // the slow crate still pays passively (absence is never punished)
+    tick(sim, S.firstLifeSeconds * TICK_RATE);
+    expect(s.crateLive[first]).toBe(0);
+    expect(events(sim, Ev.SalvageCollect, 'salvage.passive')).toHaveLength(3);
+    // one slow crate per attempt (kind does not matter); a tap collect before any slow crate uses it up
+    const t = arena(14); const tw = t.world, ts = act(t);
+    tw.run.wave = S.slowFromWave;
+    ts.addCrate(tw, 0, 300, 10, 0);
+    const k = ts.addCrate(tw, 300, 0, 10);
+    expect(ts.crateLife[k]).toBe(S.lifeSeconds * TICK_RATE);
+    const u = arena(15); const uw = u.world, us = act(u);
+    uw.run.wave = 2;
+    const c0 = us.addCrate(uw, 0, 300, 10);
+    cmd(u, { type: 'collect_salvage', x: us.crateX[c0], y: us.crateY[c0] }); tick(u);
+    uw.run.wave = S.slowFromWave;
+    expect(us.crateLife[us.addCrate(uw, 300, 0, 10)]).toBe(S.lifeSeconds * TICK_RATE);
   });
   it('live crates are capped at maxLive', () => {
     const sim = arena(9); sim.world.run.wave = 4;
