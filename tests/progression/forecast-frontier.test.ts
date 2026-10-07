@@ -27,6 +27,9 @@ describe('Forecast: the Frontier rule', () => {
     for (let i = 0; i < 60 * 60 * 10 && !died; i++) { sim.step(); died = sim.world.run.phase === 'dead'; }
     expect(died).toBe(true);
     expect(sim.world.run.deepestDeath).toBeGreaterThanOrEqual(28);
+    // a death ON the Frontier recommends once the Echo rate has dropped (the rate rule): within seconds of the death
+    // (2026-10-07: with Poison 0.16 the save dies ~3 s sooner and the rate crosses ~4 s after the death)
+    for (let i = 0; i < 60 * 30 && !sim.uiState().forecast!.recommended; i++) sim.step();
     expect(sim.uiState().forecast!.recommended).toBe(true);
     expect(forecastRecommends(sim.world)).toBe(true);
     // a death strictly past the Frontier alone is enough (whatever the rate does)

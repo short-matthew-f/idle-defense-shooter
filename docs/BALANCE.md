@@ -489,3 +489,31 @@ and 7–12 (simulator): Poison takes 21–28% of spend everywhere; its damage sh
 and its counterfactual share 3.2–11.3% (under 10% on 7 of 9 seeds). Not a measurement bug and not a one-seed fluke:
 Poison ranks are still weak for their cost after the Toxic Combustion change; seed 1 (the default gate) sits just above
 the line. Toxic Bloom boon damage (a % of max HP, not scaled by Poison ranks) is not credited to Poison, correctly.
+## Poison, second pass (2026-10-07)
+
+Owner: "Definitely make poison feel like a valid choice please." After the Toxic Combustion change above, Poison still
+took 21–28% of the Elemental agent's spend for a counterfactual contribution median 9.2% (≥ 10% on 3/12 seeds 1–12).
+Poison's own ticks are only 1–4% of damage: Toxic Combustion consumes the stacks, so Poison's ranks pay off mostly
+through the explosion, which scales with the per-stack damage.
+
+Variants (simulator, Elemental idle, seeds 1–12, 4 sim-h; counterfactual share = Poison's part of the summed
+`sim-cli/counterfactual.ts` contributions, 6 waves; median / seeds ≥ 10%):
+
+| variant | Poison cf | Fire cf | Toxic Combustion dmg | median depth |
+| --- | --- | --- | --- | --- |
+| master (`poison.damage` 0.08) | 9.2 / 3 | 16.9 | 5–32% | 29 |
+| `poison.damage` 0.12 | 9.4 / 5 | 16.1 | 5–53% | 29 |
+| **`poison.damage` 0.16 (applied)** | **10.7 / 8** | 15.7 | 5–57% | 30 |
+| `poison.damage` 0.20 | 8.7 / 5 | 14.1 | 5–64% | 29 |
+| Neurotoxin +12%/rank (was +6%) | 6.5 / 4 | 17.2 | 6–36% | 29 |
+| `poison.application` 0.5 | 8.7 / 4 | 17.4 | 7–36% | 29 |
+| Toxic Combustion target cap 0.3 | 6.7 / 2 | 15.8 | 9–35% | 29 |
+| 0.12 + Poison stat nodes 40% cheaper | 8.7 / 4 | 16.3 | 5–53% | 29 |
+
+**Applied:** `data/base-stats.ts 'poison.damage'` 0.08 → 0.16 (Neurotoxin text: 8% → 16% of primary damage per
+stack per second). Poison is never the top counterfactual tree (Ballistics on 11/12 seeds). The counterfactual is
+noisy (±5 points seed to seed), and the median 12% target was not reached by any variant.
+
+Full `sim:accept --seeds 1,2,3,4,5,6` vs master: every row identical except Build health (best agent is now
+Elemental at 31; worst 100% → 115%), Doctrine health (Plague 28 → 30; worst 93.5% → 93.3%, poison.venom), Defense
+96.6% → 98.3%, Formation fairness worst ×1.438 → ×1.458 (still PASS). Reclimb fails on both (38.7% / 47.1%).

@@ -96,7 +96,7 @@ export const POISON: TreeDef = {
   shared: [
     stat('poison.application', 'Toxin Glands', 'Primary hits apply 0.3 Poison stacks on average (the fraction is a chance for one more); +0.03 per rank.', 'add', 0.03, 20, 1.18, 30, 0, { tags: ['status'] }),
     stat('poison.stack_cap', 'Saturation', 'Poison stacks up to 10 times per enemy; +1 per rank.', 'add', 1, 30, 1.2, 15, 0, { tags: ['status'] }),
-    stat('poison.damage', 'Neurotoxin', 'Each Poison stack deals 8% of primary damage per second; +6% per rank.', 'mul', 0.06, 25, 1.18, 35, 0, { tags: ['damage'] }),
+    stat('poison.damage', 'Neurotoxin', 'Each Poison stack deals 16% of primary damage per second; +6% per rank.', 'mul', 0.06, 25, 1.18, 35, 0, { tags: ['damage'] }),
     stat('poison.duration', 'Lingering Dose', 'Poison stacks last 5 s; +0.25 s per rank.', 'add', 0.25, 20, 1.17, 25, 0, { tags: ['status'] }),
   ],
   doctrines: [

@@ -219,7 +219,7 @@ export const BASE_STATS: Record<string, number> = {
   // --- Poison -----------------------------------------------------------------
   'poison.application': 0.3,                      // stacks per hit (fraction = chance of one more)
   'poison.stack_cap': 10,
-  'poison.damage': 0.08,                          // × primary damage per stack per second
+  'poison.damage': 0.16,                          // × primary damage per stack per second
   'poison.duration': 5,
   'poison.tick_interval': 1,                      // s (Heavy Water ×1.25)
   'poison.plague.contagion': 0,                   // fraction of stacks passed on death

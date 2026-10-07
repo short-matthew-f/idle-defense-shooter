@@ -63,7 +63,7 @@ describe('Elements: base procs on primary hits', () => {
     const i = grunt(sim, 100, 0);
     ticks(sim, 50);
     expect(w.enemies.poison[i]).toBeGreaterThanOrEqual(2);
-    expect(w.enemies.poisonDps[i]).toBeCloseTo(0.08 * w.stats.get('ballistics.damage'), 4);
+    expect(w.enemies.poisonDps[i]).toBeCloseTo(0.16 * w.stats.get('ballistics.damage'), 4);
     expect(w.statusCap('poison')).toBe(10);
   });
 
