@@ -67,6 +67,8 @@ export class DeathCard {
   wantFull = false;
   /** Called when the card opens, folds or unfolds (the overlay lanes re-fit). */
   onChange: (() => void) | null = null;
+  /** Right after show(): the owner plans attention and places the card at once (index.ts), so it never draws unplaced. */
+  onShow: (() => void) | null = null;
 
   constructor(private readonly ctx: UiCtx, private readonly rate: () => number) {
     const close = button(icon('close'), () => this.hide(), { class: 'btn icon-btn ghost dc-close', label: 'Dismiss' });
@@ -128,6 +130,7 @@ export class DeathCard {
     this.wantFull = false;
     this.setFolded(false);
     this.update(ui);
+    this.onShow?.();
   }
 
   hide(): void { this.el.hidden = true; clearTimeout(this.foldTimer); this.wantFull = false; this.onChange?.(); }

@@ -1044,11 +1044,9 @@ async function overlays() {
       const states = [['combo', null], ['death', () => page.evaluate(() => { const G = window.__citadel.game; G.ui.death.show(G.latestUi().run.wave, G.latestUi(), {}); })]];
       for (const [label, act] of states) {
         if (act) { await act(); await page.waitForTimeout(600); }
-        if (process.env.E2E_DBG) console.log('DBG', vp.id, c.id, label, 'pre', JSON.stringify(await page.evaluate(() => { const g = window.__citadel.game.ui, l = g.lanes, d = document.querySelector('.death-card'); const b = d?.getBoundingClientRect(); return { plan: l.plan, dcls: d?.className, dhid: d?.hidden, dstyle: d?.getAttribute('style'), dbox: b && [b.top, b.bottom], coach: g.coach.el.hidden ? null : g.coach.el.className, first: g.death.first, attn: g.attn?.plan, bv: g.shell?.battleVisible, t: performance.now() }; })));
         const r = await page.evaluate(auditOverlays, {});
         const hard = r.findings.filter((f) => HARD.has(f.kind));
         await page.screenshot({ path: `${OUT}/phone-overlays-${vp.id}-${c.id}-${label}.png` });
-        if (process.env.E2E_DBG) { const dbg = async (tag) => console.log('DBG', vp.id, c.id, label, tag, JSON.stringify(await page.evaluate(() => { const g = window.__citadel.game.ui, l = g.lanes, d = document.querySelector('.death-card'); const b = d?.getBoundingClientRect(); return { plan: l.plan, rooms: l.rooms, dcls: d?.className, dbox: b && [b.top, b.bottom], first: g.death.first, attn: g.attn?.plan, t: performance.now() }; }))); await dbg('after-shot'); await page.waitForTimeout(1500); await dbg('later'); }
         const names = r.overlays.map((o) => o.name);
         check(`overlays ${vp.id} ${c.id} ${label}: nothing major is covered (tower, dock, HUD, tab bar, each other, safe area, dead taps)`, hard.length === 0 && names.length >= (label === 'death' ? 2 : 3),   // a fresh death holds the offer as its chip (attention.ts)
           hard.length ? hard : { overlays: names, arena: r.arena, ...(process.env.E2E_OV_DEBUG ? { boxes: r.overlays, plan: await page.evaluate(() => { const l = window.__citadel.game.ui.lanes; return { plan: l.plan, rooms: l.rooms, offerNat: document.querySelector(".boon-offer")?.scrollHeight }; }) } : {}) });

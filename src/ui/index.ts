@@ -191,6 +191,9 @@ export class GameUi {
     }, { arena: () => host.arena?.() ?? null, layout: () => this.shell.layout, battleVisible: () => this.shell.battleVisible });
     this.attn = new Attention({ host, death: this.death, feed: this.feed, offer: this.boonOffer, draft: this.draft, coach: this.coach,
       battleVisible: () => this.shell.battleVisible, changed: () => { this.lanes.schedule(); this.hints.refresh(); } });
+    // a death card is planned (death first: the coach and the offer step aside) and placed in the same task it shows in:
+    // waiting for the next UiState / animation frame let it draw for a frame or more at its CSS default, over the tower
+    this.death.onShow = () => { if (this.latest) this.attn.update(this.latest); this.lanes.apply(true); };
     setArenaSource(() => host.arena?.() ?? null);
     // UX Phase 2 item 10 (decision-hold.ts): a tab opened from the fight holds the run until Battle is back (≤ 30 s)
     for (const el of [this.death.el, this.coach.el, this.boonOffer.el, this.boonOffer.chip]) el.addEventListener('click', () => this.shell.armDecision(), true);

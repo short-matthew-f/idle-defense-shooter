@@ -34,6 +34,8 @@ import { DecisionHold, LowHpAlert, buzz } from './decision-hold';
 
 /** Phone: the room (px at a 16 px root) under the boss bar's head row for a two-line tell card and the bar's padding. */
 const TELL_ROOM = 62;
+/** Phone: the most the boss bar's room may shrink the arena (a share of its diameter). */
+const BOSS_FIT_SHRINK = 0.08;
 
 export type ScreenId = Exclude<TabId, 'battle'>;
 
@@ -388,9 +390,16 @@ export class Shell {
     this.lastDock = dock;
     // phone, boss wave: the arena fits below the boss bar and room for its tell card, so the boss and its in-world tell
     // marker are never under the card (the room is kept for the whole fight: a tell coming and going never moves the arena)
+    // On a short phone that room is capped where it would shrink the arena by more than BOSS_FIT_SHRINK.
     const bossTop = layout === 'phone' ? this.bossBarPx() : 0;
     this.lastBossTop = bossTop;
-    const i = battleInsets(layout, { top: Math.max(topH, bossTop), tabBar: tabH, rail: railW, abilities, panel: layout === 'desktop' && this.deskOpen ? PANEL_WIDTH : 0, dock });
+    let top = topH;
+    if (bossTop > topH) {
+      const cv = this.parts.battle.getBoundingClientRect();
+      const availW = cv.width > 0 ? cv.width : window.innerWidth, availH = window.innerHeight - topH - tabH - dock;
+      top = topH + Math.max(0, Math.min(bossTop - topH, availH - (1 - BOSS_FIT_SHRINK) * Math.min(availW, availH)));
+    }
+    const i = battleInsets(layout, { top, tabBar: tabH, rail: railW, abilities, panel: layout === 'desktop' && this.deskOpen ? PANEL_WIDTH : 0, dock });
     this.host.setInsets(i.top, i.right, i.bottom, i.left, layout === 'phone' ? PHONE_ARENA_BIAS : 0.5);
     this.onLayout?.();
   }
@@ -401,11 +410,12 @@ export class Shell {
   private lastBossTop = 0;
 
   /**
-   * Phone: how far down from the top of the viewport the boss bar reaches with room for a two-line tell card (whether
+   * Phone, live boss fight: how far down from the top of the viewport the boss bar reaches with room for a two-line tell card (whether
    * one is up or not), plus a gap; 0 when no boss bar shows on Battle.
    */
   private bossBarPx(): number {
-    if (this.view.tab !== 'battle') return 0;
+    // only during a live boss fight (attention.ts boss mode: the offer and the coach are held then, so their room is free)
+    if (this.view.tab !== 'battle' || !document.body.classList.contains('attn-boss')) return 0;
     const bar = this.parts.battle.querySelector<HTMLElement>('.boss-bar');
     if (!bar || bar.hidden || bar.closest('[hidden]')) return 0;
     const head = bar.querySelector('.boss-head')?.getBoundingClientRect();

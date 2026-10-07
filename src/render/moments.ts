@@ -44,7 +44,9 @@ export const HULL_MARK_CAP = 10;
 /** Hull-mark pip half-size, pip spacing and the arc's radius, in CSS px (moments.ts writeHullMark). */
 export const HULL_PIP_PX = 2.8;
 export const HULL_PIP_GAP_PX = 7.4;
-export const HULL_ARC_PX = 20;
+export const HULL_ARC_PX = 17.5;
+/** The widest the pip arc gets (radians, ten pips). */
+export const HULL_ARC_SPAN = 3.1;
 /** Player effects near a live tell keep this share of their alpha (Spectacle); Clarity lowers it further. */
 export const TELL_FADE = 0.2;
 const MAX = 640;
@@ -214,13 +216,13 @@ export class Moments {
     if (n <= 0) return;
     const a = this.assemble(0.45);
     if (a <= 0) return;
-    // sized in CSS px (px = world units per CSS px), so a pip reads on a phone at any zoom: ~5.6 px across, 7.4 px apart,
-    // on an arc 20–25 px from the tower's centre (inside its 34 px hold zone, outside the hull) spanning ≤ ~150°
+    // sized in CSS px (px = world units per CSS px), so a pip reads on a phone at any zoom: ~5.6 px across, up to 7.4 px
+    // apart, on an arc ~17.5 px from the tower's centre: between the hull's ornament and its outer ring, well inside the
+    // 34 px hold zone (app/active-tap.ts), spanning at most ~180° (ten pips) so it stays above the hull
     const pr = HULL_PIP_PX * px;
-    const shown = Math.min(n, HULL_MARK_CAP);
-    const R = Math.max(TOWER_RADIUS * 1.32, HULL_ARC_PX * px, (HULL_PIP_GAP_PX * px * (shown - 1)) / 2.6);
+    const R = Math.max(TOWER_RADIUS * 1.32, HULL_ARC_PX * px);
     if (n <= HULL_MARK_CAP) {
-      const step = (HULL_PIP_GAP_PX * px) / R;
+      const step = n > 1 ? Math.min((HULL_PIP_GAP_PX * px) / R, HULL_ARC_SPAN / (n - 1)) : 0;
       const a0 = -Math.PI / 2 - ((n - 1) * step) / 2;
       for (let k = 0; k < n; k++) {
         const ang = a0 + k * step;
